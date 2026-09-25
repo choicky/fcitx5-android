@@ -37,6 +37,18 @@ jobs:
           grep -q "AuxiliaryFilter" im/pinyin/pinyin.h
           grep -q "AuxiliaryFilter" test/testpinyin.cpp
 
+      - name: Stage the MoQi table as Android prebuilt assets
+        # The app only installs the prebuilt-assets / config / translation
+        # CMake components, so the table that fcitx5-chinese-addons installs
+        # for desktop builds never reaches the APK. Put the pinned table
+        # where app/src/main/cpp/CMakeLists.txt picks up pinyinhelper data.
+        run: |
+          set -euo pipefail
+          target="lib/fcitx5/src/main/cpp/prebuilt/chinese-addons-data/pinyinhelper/moqima_gb18030.txt"
+          curl -fsSL "https://raw.githubusercontent.com/gaboolic/moqima-tables/6d8ba8f1c57466f358e682baefe11bbd0fe389ab/moqima_gb18030.txt" -o "$target"
+          echo "66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923  $target" | sha256sum -c -
+          ls -l "$target"
+
       - name: Give the debug build its own package id
         run: |
           python3 - <<'PY'
@@ -84,6 +96,30 @@ jobs:
 
       - name: Report APK
         run: ls -l app/build/outputs/apk/debug/
+
+      - name: Verify the APK packs the MoQi table and the filter code
+        run: |
+          python3 - <<'PY'
+          import glob
+          import zipfile
+
+          apks = glob.glob("app/build/outputs/apk/debug/*.apk")
+          assert apks, "no APK found"
+          with zipfile.ZipFile(apks[0]) as zf:
+              names = zf.namelist()
+              table = [n for n in names if "moqima" in n]
+              print("MoQi table entries:", table)
+              assert table, "MoQi table missing from APK assets"
+              pinyin = zf.read("lib/arm64-v8a/libpinyin.so")
+              assert b"AuxiliaryFilter" in pinyin or b"A\x00u\x00x\x00i\x00l\x00i\x00a\x00r\x00y" in pinyin, (
+                  "libpinyin.so does not look like the auxiliary filter build"
+              )
+              manifest = zf.read("AndroidManifest.xml")
+              assert "org.fcitx.fcitx5.android.debug".encode("utf-16-le") in manifest, (
+                  "APK does not carry the .debug package id"
+              )
+          print("APK content checks passed")
+          PY
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
