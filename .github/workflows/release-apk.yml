@@ -16,6 +16,12 @@ on:
     tags:
       - "v*"
 
+# Pinned for reproducibility: rebuilding a tag must use exactly this commit of
+# fcitx5-chinese-addons, not whatever the branch points at by then. The commit
+# and the MoQi table hash are recorded in the release notes by this workflow.
+env:
+  ADDON_COMMIT: c0b58de90b04d517ae96ee98f3c2bd2182acb0a3
+
 permissions:
   contents: write
 
@@ -30,12 +36,17 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Use the MoQi auxiliary filter branch
+      - name: Check out the pinned MoQi auxiliary filter commit
         run: |
           cd lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
-          git fetch --depth 1 https://github.com/choicky/fcitx5-chinese-addons.git feature/moqi-filter
-          git checkout --detach FETCH_HEAD
-          git log --oneline -1
+          url=https://github.com/choicky/fcitx5-chinese-addons.git
+          if ! git fetch --depth 1 "$url" "$ADDON_COMMIT"; then
+            echo "single commit fetch refused, falling back to the branch"
+            git fetch "$url" feature/moqi-filter
+          fi
+          git checkout --detach "$ADDON_COMMIT"
+          test "$(git rev-parse HEAD)" = "$ADDON_COMMIT"
+          echo "addon commit checked out: $(git rev-parse HEAD)"
           grep -q "AuxiliaryFilter" im/pinyin/pinyin.h
 
       - name: Setup Java
@@ -67,12 +78,16 @@ jobs:
 
       - name: Verify the release APK is signed, .moqi and packs the MoQi table
         run: |
-          python3 - <<'PY'
+          pin_file=lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons/modules/pinyinhelper/moqima-gb18030.cmake
+          pinned=$(grep -oE '[0-9a-f]{64}' "$pin_file")
+          echo "pinned table sha256 (from the addon pin file): $pinned"
+          python3 - "$pinned" <<'PY'
           import glob
           import hashlib
+          import sys
           import zipfile
 
-          PINNED = "66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923"
+          PINNED = sys.argv[1]
           TABLE = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
           apks = glob.glob("app/build/outputs/apk/release/*.apk")
           assert apks, "no release APK found"
@@ -92,6 +107,23 @@ jobs:
               )
           print("release APK checks passed")
           PY
+
+      - name: Record the pinned commits and table hash in the release notes
+        run: |
+          addon=$(git -C lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons rev-parse HEAD)
+          pin_file=lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons/modules/pinyinhelper/moqima-gb18030.cmake
+          table=$(grep -oE '[0-9a-f]{64}' "$pin_file")
+          {
+            echo ""
+            echo "## 可追溯性"
+            echo ""
+            echo "- fcitx5-chinese-addons：\`$addon\`"
+            echo "- MoQi 码表 SHA256：\`$table\`"
+            echo "- fcitx5-android：\`$GITHUB_SHA\`（tag \`$GITHUB_REF_NAME\`）"
+            echo ""
+            echo "本构建固定 addon commit，因此同一个 tag 可复现。"
+          } >> .github/moqi-release-notes.md
+          tail -8 .github/moqi-release-notes.md
 
       - name: Publish GitHub release
         env:
