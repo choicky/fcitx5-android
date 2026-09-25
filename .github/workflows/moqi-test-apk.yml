@@ -37,28 +37,6 @@ jobs:
           grep -q "AuxiliaryFilter" im/pinyin/pinyin.h
           grep -q "AuxiliaryFilter" test/testpinyin.cpp
 
-      - name: Give the debug build its own package id
-        run: |
-          python3 - <<'PY'
-          import pathlib
-          import sys
-
-          path = pathlib.Path("app/build.gradle.kts")
-          source = path.read_text()
-          if "applicationIdSuffix" in source:
-              print("already patched")
-              sys.exit(0)
-          anchor = "        debug {\n"
-          if anchor not in source:
-              sys.exit("debug build type not found in app/build.gradle.kts")
-          source = source.replace(
-              anchor, anchor + '            applicationIdSuffix = ".debug"\n', 1
-          )
-          path.write_text(source)
-          print("patched applicationIdSuffix")
-          PY
-          grep -n "applicationIdSuffix" app/build.gradle.kts
-
       - name: Setup Java
         uses: actions/setup-java@v5
         with:

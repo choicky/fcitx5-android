@@ -1,0 +1,105 @@
+name: Release APK
+
+# Builds a signed release APK against the MoQi auxiliary filter branch and
+# publishes it as a GitHub release. Triggered by pushing a version tag.
+#
+# Signing comes from the repo secrets SIGN_KEY_BASE64 / SIGN_KEY_PWD /
+# SIGN_KEY_ALIAS: the build-logic convention plugin turns SIGN_KEY_BASE64 into
+# a keystore file and creates the "release" signing config from it, so no
+# signing code lives in this fork.
+#
+# The release variant carries applicationIdSuffix ".moqi", so these builds can
+# be installed next to the official Fcitx5 and updated in place.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Fetch source code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Use the MoQi auxiliary filter branch
+        run: |
+          cd lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
+          git fetch --depth 1 https://github.com/choicky/fcitx5-chinese-addons.git feature/moqi-filter
+          git checkout --detach FETCH_HEAD
+          git log --oneline -1
+          grep -q "AuxiliaryFilter" im/pinyin/pinyin.h
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android environment
+        uses: android-actions/setup-android@v4
+
+      - name: Install CMake
+        run: sdkmanager --install "cmake;3.31.6"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y extra-cmake-modules gettext
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build signed release APK (arm64-v8a)
+        env:
+          SIGN_KEY_BASE64: ${{ secrets.SIGN_KEY_BASE64 }}
+          SIGN_KEY_PWD: ${{ secrets.SIGN_KEY_PWD }}
+          SIGN_KEY_ALIAS: ${{ secrets.SIGN_KEY_ALIAS }}
+        run: BUILD_ABI=arm64-v8a ./gradlew :app:assembleRelease
+
+      - name: Verify the release APK is signed, .moqi and packs the MoQi table
+        run: |
+          python3 - <<'PY'
+          import glob
+          import hashlib
+          import zipfile
+
+          PINNED = "66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923"
+          TABLE = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
+          apks = glob.glob("app/build/outputs/apk/release/*.apk")
+          assert apks, "no release APK found"
+          print("release APK:", apks[0])
+          with zipfile.ZipFile(apks[0]) as zf:
+              names = zf.namelist()
+              assert TABLE in names, f"MoQi table missing: {TABLE}"
+              digest = hashlib.sha256(zf.read(TABLE)).hexdigest()
+              print("packed table sha256:", digest)
+              assert digest == PINNED, "packed table does not match the pinned hash"
+              sigs = [n for n in names if n.startswith("META-INF/") and n.endswith((".RSA", ".EC", ".DSA"))]
+              print("v1 signature entries:", sigs)
+              assert sigs, "APK does not look signed"
+              manifest = zf.read("AndroidManifest.xml")
+              assert "org.fcitx.fcitx5.android.moqi".encode("utf-16-le") in manifest, (
+                  "release APK does not carry the .moqi package id"
+              )
+          print("release APK checks passed")
+          PY
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release create "$tag" app/build/outputs/apk/release/*.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "MoQi Auxiliary Filter $tag" \
+            --notes-file .github/moqi-release-notes.md \
+            --verify-tag

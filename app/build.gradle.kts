@@ -40,12 +40,19 @@ android {
 
     buildTypes {
         release {
+            // MoQi fork: ship under its own application id so it can be
+            // installed next to the official Fcitx5 and updated in place
+            // across our own releases.
+            applicationIdSuffix = ".moqi"
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round")
             resValue("string", "app_name", "@string/app_name_release")
             proguardFile("proguard-rules.pro")
         }
         debug {
+            // MoQi fork: keep test builds separate from both the official app
+            // and the release line above.
+            applicationIdSuffix = ".debug"
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher_debug")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round_debug")
             resValue("string", "app_name", "@string/app_name_debug")
