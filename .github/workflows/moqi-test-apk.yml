@@ -95,14 +95,14 @@ jobs:
           import zipfile
 
           PINNED = "66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923"
+          EXPECTED = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
           apks = glob.glob("app/build/outputs/apk/debug/*.apk")
           assert apks, "no APK found"
           with zipfile.ZipFile(apks[0]) as zf:
               names = zf.namelist()
-              table = [n for n in names if "moqima" in n]
-              print("MoQi table entries:", table)
-              assert table, "MoQi table missing from APK assets"
-              digest = hashlib.sha256(zf.read(table[0])).hexdigest()
+              print("MoQi table present:", EXPECTED in names)
+              assert EXPECTED in names, f"MoQi table missing from APK assets: {EXPECTED}"
+              digest = hashlib.sha256(zf.read(EXPECTED)).hexdigest()
               print("packed table sha256:", digest)
               assert digest == PINNED, "packed table does not match the pinned hash"
               pinyin = zf.read("lib/arm64-v8a/libpinyin.so")
