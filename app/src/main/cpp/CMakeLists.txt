@@ -88,3 +88,26 @@ install(DIRECTORY "${PREBUILT_DIR}/chinese-addons-data/pinyinhelper" DESTINATION
 install(DIRECTORY "${PREBUILT_DIR}/libime/table" DESTINATION "${FCITX_INSTALL_PKGDATADIR}" COMPONENT prebuilt-assets)
 install(DIRECTORY "${PREBUILT_DIR}/libime/data/" DESTINATION "${FCITX_INSTALL_DATADIR}/libime" COMPONENT prebuilt-assets)
 install(DIRECTORY "${PREBUILT_DIR}/opencc/data/" DESTINATION "${FCITX_INSTALL_DATADIR}/opencc" COMPONENT prebuilt-assets)
+
+# MoQi auxiliary filter table for fcitx5-chinese-addons. The table is pinned by
+# upstream commit and verified by SHA256. It is fetched here at configure time
+# on purpose: the addon only produces its own copy during its native build,
+# which runs after this module's prebuilt-assets install.
+set(MOQI_TABLE_URL "https://raw.githubusercontent.com/gaboolic/moqima-tables/6d8ba8f1c57466f358e682baefe11bbd0fe389ab/moqima_gb18030.txt")
+set(MOQI_TABLE_SHA256 "66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923")
+set(MOQI_TABLE_FILE "${CMAKE_CURRENT_BINARY_DIR}/moqima_gb18030.txt")
+if(EXISTS "${MOQI_TABLE_FILE}")
+    file(SHA256 "${MOQI_TABLE_FILE}" moqi_table_hash)
+else()
+    set(moqi_table_hash "")
+endif()
+if(NOT moqi_table_hash STREQUAL MOQI_TABLE_SHA256)
+    file(DOWNLOAD "${MOQI_TABLE_URL}" "${MOQI_TABLE_FILE}"
+        EXPECTED_HASH SHA256=${MOQI_TABLE_SHA256} STATUS moqi_table_status)
+    list(GET moqi_table_status 0 moqi_table_code)
+    list(GET moqi_table_status 1 moqi_table_message)
+    if(NOT moqi_table_code EQUAL 0)
+        message(FATAL_ERROR "Failed to download the MoQi table (${moqi_table_code}): ${moqi_table_message}")
+    endif()
+endif()
+install(FILES "${MOQI_TABLE_FILE}" DESTINATION "${FCITX_INSTALL_PKGDATADIR}/pinyinhelper" COMPONENT prebuilt-assets)
