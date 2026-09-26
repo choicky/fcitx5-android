@@ -291,6 +291,10 @@
     <string name="expand_candidates_list">展开候选词列表</string>
     <string name="hide_candidates_list">隐藏</string>
     <string name="switch_to_voice_input">切换到语音输入</string>
+    <string name="start_voice_input">开始语音输入</string>
+    <string name="stop_voice_input">停止语音输入</string>
+    <string name="voice_input_unavailable">没有可用的语音识别服务</string>
+    <string name="voice_input_error">语音输入失败（错误 %1$d）</string>
     <string name="hide_keyboard">隐藏键盘</string>
     <string name="private_mode">隐私模式（点击以切换工具栏）</string>
     <string name="hide_toolbar">隐藏工具栏</string>
