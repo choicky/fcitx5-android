@@ -56,6 +56,9 @@ class IdleUi(
     var currentState = State.Empty
         private set
 
+    private var voiceInputButton = false
+    private var voiceInputActive = false
+
     private val disableAnimation by AppPrefs.getInstance().advanced.disableAnimation
 
     private var inPrivate = false
@@ -172,14 +175,30 @@ class IdleUi(
     }
 
     fun setHideKeyboardIsVoiceInput(isVoiceInput: Boolean, callback: View.OnClickListener) {
+        voiceInputButton = isVoiceInput
         if (isVoiceInput) {
-            hideKeyboardButton.setIcon(R.drawable.ic_baseline_keyboard_voice_24)
-            hideKeyboardButton.contentDescription = ctx.getString(R.string.switch_to_voice_input)
+            updateVoiceInputButton()
         } else {
             hideKeyboardButton.setIcon(R.drawable.ic_baseline_arrow_drop_down_24)
             hideKeyboardButton.contentDescription = ctx.getString(R.string.hide_keyboard)
         }
         hideKeyboardButton.setOnClickListener(callback)
+    }
+
+    fun setVoiceInputActive(active: Boolean) {
+        voiceInputActive = active
+        if (voiceInputButton) updateVoiceInputButton()
+    }
+
+    private fun updateVoiceInputButton() {
+        hideKeyboardButton.setIcon(
+            if (voiceInputActive) R.drawable.ic_baseline_stop_24
+            else R.drawable.ic_baseline_keyboard_voice_24
+        )
+        hideKeyboardButton.contentDescription = ctx.getString(
+            if (voiceInputActive) R.string.stop_voice_input
+            else R.string.start_voice_input
+        )
     }
 
     private fun clearAnimation() {

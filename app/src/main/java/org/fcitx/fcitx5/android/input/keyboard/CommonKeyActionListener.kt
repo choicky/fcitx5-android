@@ -34,6 +34,7 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SymAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.UnicodeAction
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
+import org.fcitx.fcitx5.android.input.voice.VoiceInputComponent
 import org.fcitx.fcitx5.android.utils.switchToNextIME
 import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
@@ -54,6 +55,7 @@ class CommonKeyActionListener :
     private val preeditState: PreeditEmptyStateComponent by manager.must()
     private val horizontalCandidate: HorizontalCandidateComponent by manager.must()
     private val windowManager: InputWindowManager by manager.must()
+    private val voiceInput: VoiceInputComponent by manager.must()
 
     private var lastPickerType by AppPrefs.getInstance().internal.lastPickerType
 
@@ -89,6 +91,7 @@ class CommonKeyActionListener :
 
     val listener by lazy {
         KeyActionListener { action, _ ->
+            voiceInput.cancel()
             when (action) {
                 is FcitxKeyAction -> service.postFcitxJob {
                     sendKey(action.act, action.states.states, action.code)
