@@ -55,6 +55,7 @@ import org.fcitx.fcitx5.android.core.KeyStates
 import org.fcitx.fcitx5.android.core.KeySym
 import org.fcitx.fcitx5.android.core.ScancodeMapping
 import org.fcitx.fcitx5.android.core.SubtypeManager
+import org.fcitx.fcitx5.android.core.TextFormatFlag
 import org.fcitx.fcitx5.android.daemon.FcitxConnection
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
 import org.fcitx.fcitx5.android.data.InputFeedbacks
@@ -201,6 +202,8 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         jobs.trySend(job)
         return job
     }
+
+    fun prepareForVoiceInput(): Job = postFcitxJob { reset() }
 
     override fun onCreate() {
         fcitx = FcitxDaemon.connect(javaClass.name)
@@ -453,6 +456,16 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         }
     }
 
+    fun updateVoiceComposingText(text: String) {
+        updateComposingText(
+            FormattedText(arrayOf(text), intArrayOf(TextFormatFlag.Underline.flag), -1)
+        )
+    }
+
+    fun clearVoiceComposingText() {
+        updateComposingText(FormattedText.Empty)
+    }
+
     private fun sendDownKeyEvent(eventTime: Long, keyEventCode: Int, metaState: Int = 0) {
         currentInputConnection?.sendKeyEvent(
             KeyEvent(
@@ -643,6 +656,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        inputView?.cancelVoiceInput()
         // request to show floating CandidatesView when pressing physical keyboard
         if (inputDeviceMgr.evaluateOnKeyDown(event, this)) {
             postFcitxJob {
@@ -1051,6 +1065,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         Timber.d("onFinishInputView: finishingInput=$finishingInput")
         decorLocationUpdated = false
         inputDeviceMgr.onFinishInputView()
+        inputView?.cancelVoiceInput()
         currentInputConnection?.apply {
             finishComposingText()
             monitorCursorAnchor(false)
@@ -1084,6 +1099,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     }
 
     override fun onDestroy() {
+        inputView?.finishVoiceInput()
         recreateInputViewPrefs.forEach {
             it.unregisterOnChangeListener(recreateInputViewListener)
         }

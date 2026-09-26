@@ -74,7 +74,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         processIntent(intent)
-        checkNotificationPermission()
+        if (intent.action != ACTION_REQUEST_RECORD_AUDIO_PERMISSION) {
+            checkNotificationPermission()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -98,6 +100,7 @@ class MainActivity : AppCompatActivity() {
             Intent.ACTION_MAIN -> if (SetupActivity.shouldShowUp()) {
                 startActivity<SetupActivity>()
             }
+            ACTION_REQUEST_RECORD_AUDIO_PERMISSION -> requestRecordAudioPermission()
             Intent.ACTION_VIEW -> intent.data?.let {
                 AlertDialog.Builder(this)
                     .setTitle(R.string.pinyin_dict)
@@ -119,6 +122,16 @@ class MainActivity : AppCompatActivity() {
 
     private var needNotifications by AppPrefs.getInstance().internal.needNotifications
 
+    private fun requestRecordAudioPermission() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            finish()
+            return
+        }
+        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_CODE_RECORD_AUDIO)
+    }
+
     private fun checkNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
@@ -138,7 +151,10 @@ class MainActivity : AppCompatActivity() {
                     needNotifications = false
                 }
                 .setPositiveButton(R.string.grant_permission) { _, _ ->
-                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
+                    requestPermissions(
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                        REQUEST_CODE_NOTIFICATIONS
+                    )
                 }
                 .show()
         }
@@ -150,9 +166,13 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != 0) return
-        // do not ask again if user denied the request
-        needNotifications = grantResults.getOrNull(0) == PackageManager.PERMISSION_GRANTED
+        when (requestCode) {
+            REQUEST_CODE_NOTIFICATIONS -> {
+                // do not ask again if user denied the request
+                needNotifications = grantResults.getOrNull(0) == PackageManager.PERMISSION_GRANTED
+            }
+            REQUEST_CODE_RECORD_AUDIO -> finish()
+        }
     }
 
     override fun onStop() {
@@ -163,6 +183,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val REQUEST_CODE_NOTIFICATIONS = 0
+        private const val REQUEST_CODE_RECORD_AUDIO = 1
+
+        const val ACTION_REQUEST_RECORD_AUDIO_PERMISSION =
+            "org.fcitx.fcitx5.android.action.REQUEST_RECORD_AUDIO_PERMISSION"
         const val EXTRA_SETTINGS_ROUTE = "${BuildConfig.APPLICATION_ID}.EXTRA_SETTINGS_ROUTE"
     }
 
