@@ -300,6 +300,10 @@
     <string name="voice_capture_probe">Voice input: microphone capture probe (debug)</string>
     <string name="voice_doubao_asr">Voice input: Doubao cloud ASR (debug)</string>
     <string name="voice_asr_error">Speech recognition failed: %1$s</string>
+    <string name="voice_hint_listening">Listening…</string>
+    <string name="voice_hint_release_to_finish">Release to finish · Swipe up to cancel</string>
+    <string name="voice_hint_release_to_cancel">Release to cancel</string>
+    <string name="voice_hint_processing">Recognizing…</string>
     <string name="hide_keyboard">Hide keyboard</string>
     <string name="private_mode">Private mode (tap to toggle toolbar)</string>
     <string name="hide_toolbar">Hide toolbar</string>

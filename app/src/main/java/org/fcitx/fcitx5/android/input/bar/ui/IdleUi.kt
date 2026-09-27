@@ -25,6 +25,7 @@ import org.fcitx.fcitx5.android.input.bar.ui.idle.InlineSuggestionsUi
 import org.fcitx.fcitx5.android.input.bar.ui.idle.NumberRow
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
+import org.fcitx.fcitx5.android.input.voice.VoiceInputSession
 import splitties.dimensions.dp
 import splitties.views.dsl.constraintlayout.after
 import splitties.views.dsl.constraintlayout.before
@@ -57,7 +58,7 @@ class IdleUi(
         private set
 
     private var voiceInputButton = false
-    private var voiceInputActive = false
+    private var voiceInputState = VoiceInputSession.State.Idle
 
     private val disableAnimation by AppPrefs.getInstance().advanced.disableAnimation
 
@@ -181,23 +182,31 @@ class IdleUi(
         } else {
             hideKeyboardButton.setIcon(R.drawable.ic_baseline_arrow_drop_down_24)
             hideKeyboardButton.contentDescription = ctx.getString(R.string.hide_keyboard)
+            hideKeyboardButton.alpha = 1f
         }
         hideKeyboardButton.setOnClickListener(callback)
     }
 
-    fun setVoiceInputActive(active: Boolean) {
-        voiceInputActive = active
+    internal fun setVoiceInputState(state: VoiceInputSession.State) {
+        voiceInputState = state
         if (voiceInputButton) updateVoiceInputButton()
     }
 
     private fun updateVoiceInputButton() {
+        val active = voiceInputState != VoiceInputSession.State.Idle
+        // stopped and waiting for the final result: keep the stop icon, dimmed
+        val processing = voiceInputState == VoiceInputSession.State.Stopping
         hideKeyboardButton.setIcon(
-            if (voiceInputActive) R.drawable.ic_baseline_stop_24
+            if (active) R.drawable.ic_baseline_stop_24
             else R.drawable.ic_baseline_keyboard_voice_24
         )
+        hideKeyboardButton.alpha = if (processing) 0.4f else 1f
         hideKeyboardButton.contentDescription = ctx.getString(
-            if (voiceInputActive) R.string.stop_voice_input
-            else R.string.start_voice_input
+            when {
+                processing -> R.string.voice_hint_processing
+                active -> R.string.stop_voice_input
+                else -> R.string.start_voice_input
+            }
         )
     }
 

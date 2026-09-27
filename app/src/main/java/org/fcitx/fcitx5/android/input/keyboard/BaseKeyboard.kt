@@ -24,6 +24,7 @@ import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView.GestureType
 import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView.OnGestureListener
 import org.fcitx.fcitx5.android.input.popup.PopupAction
 import org.fcitx.fcitx5.android.input.popup.PopupActionListener
+import org.fcitx.fcitx5.android.input.voice.VoiceInputSession
 import splitties.dimensions.dp
 import splitties.views.dsl.constraintlayout.above
 import splitties.views.dsl.constraintlayout.below
@@ -159,6 +160,7 @@ abstract class BaseKeyboard(
                 swipeThresholdY = disabledSwipeThreshold
                 // swiping up by the same distance as swipe-up symbol input cancels voice input
                 val longPress = SpaceLongPressTracker(inputSwipeThreshold)
+                moveAfterLongPress = true
                 onGestureListener = OnGestureListener { view, event ->
                     when (event.type) {
                         GestureType.Down -> {
@@ -170,7 +172,10 @@ abstract class BaseKeyboard(
                                 ?.let { onAction(KeyAction.SpaceLongPressReleaseAction(it)) }
                             false
                         }
-                        GestureType.Move -> when (val count = event.countX) {
+                        GestureType.Move -> if ((view as CustomGestureView).longPressTriggered) {
+                            longPress.onMove(event.y)?.let { onSpaceVoiceGesture(held = true, cancelArmed = it) }
+                            false
+                        } else when (val count = event.countX) {
                             0 -> false
                             else -> {
                                 val sym =
@@ -470,6 +475,12 @@ abstract class BaseKeyboard(
         action: KeyAction,
         source: KeyActionListener.Source = KeyActionListener.Source.Keyboard
     ) {
+        when (action) {
+            KeyAction.SpaceLongPressAction -> onSpaceVoiceGesture(held = true, cancelArmed = false)
+            is KeyAction.SpaceLongPressReleaseAction ->
+                onSpaceVoiceGesture(held = false, cancelArmed = false)
+            else -> {}
+        }
         keyActionListener?.onKeyAction(action, source)
     }
 
@@ -507,6 +518,15 @@ abstract class BaseKeyboard(
     }
 
     open fun onInputMethodUpdate(ime: InputMethodEntry) {
+        // do nothing by default
+    }
+
+    /** Space held after its long press, and whether releasing now would cancel voice input. */
+    protected open fun onSpaceVoiceGesture(held: Boolean, cancelArmed: Boolean) {
+        // do nothing by default
+    }
+
+    internal open fun onVoiceStateUpdate(state: VoiceInputSession.State) {
         // do nothing by default
     }
 

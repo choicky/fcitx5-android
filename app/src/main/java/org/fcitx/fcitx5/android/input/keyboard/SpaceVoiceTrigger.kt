@@ -4,6 +4,8 @@
  */
 package org.fcitx.fcitx5.android.input.keyboard
 
+import org.fcitx.fcitx5.android.input.voice.VoiceInputSession
+
 /**
  * Tracks one Space press for [KeyAction.SpaceLongPressReleaseAction]: releasing after the
  * long press fired either ends the gesture normally, or, if the finger moved up by at least
@@ -12,9 +14,19 @@ package org.fcitx.fcitx5.android.input.keyboard
 internal class SpaceLongPressTracker(private val cancelThreshold: Float) {
 
     private var downY = 0f
+    private var cancelArmed = false
 
     fun onDown(y: Float) {
         downY = y
+        cancelArmed = false
+    }
+
+    /** While held after the long press: the new cancel-armed state, or `null` if unchanged. */
+    fun onMove(y: Float): Boolean? {
+        val armed = downY - y >= cancelThreshold
+        if (armed == cancelArmed) return null
+        cancelArmed = armed
+        return armed
     }
 
     /** `null` when the long press never fired, so the press stays a normal Space key. */
@@ -34,3 +46,21 @@ internal fun spaceVoiceCommand(behavior: SpaceLongPressBehavior, action: KeyActi
             if (action.swipedUp) SpaceVoiceCommand.Cancel else SpaceVoiceCommand.Stop
         else -> SpaceVoiceCommand.None
     }
+
+internal enum class SpaceVoiceHint { None, Listening, ReleaseToFinish, ReleaseToCancel, Processing }
+
+/** What the Space key shows for the shared voice session and the held Space gesture. */
+internal fun spaceVoiceHint(
+    state: VoiceInputSession.State,
+    spaceHeld: Boolean,
+    cancelArmed: Boolean
+) = when (state) {
+    VoiceInputSession.State.Idle -> SpaceVoiceHint.None
+    VoiceInputSession.State.Starting,
+    VoiceInputSession.State.Listening -> when {
+        !spaceHeld -> SpaceVoiceHint.Listening
+        cancelArmed -> SpaceVoiceHint.ReleaseToCancel
+        else -> SpaceVoiceHint.ReleaseToFinish
+    }
+    VoiceInputSession.State.Stopping -> SpaceVoiceHint.Processing
+}

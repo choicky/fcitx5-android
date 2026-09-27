@@ -64,7 +64,6 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyboardWindow
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
 import org.fcitx.fcitx5.android.input.status.StatusAreaWindow
 import org.fcitx.fcitx5.android.input.voice.VoiceInputComponent
-import org.fcitx.fcitx5.android.input.voice.VoiceInputSession
 import org.fcitx.fcitx5.android.input.wm.InputWindow
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.fcitx.fcitx5.android.utils.AppUtil
@@ -421,9 +420,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
         ClipboardManager.addOnUpdateListener(onClipboardUpdateListener)
         clipboardSuggestion.registerOnChangeListener(onClipboardSuggestionUpdateListener)
         clipboardItemTimeout.registerOnChangeListener(onClipboardTimeoutUpdateListener)
-        voiceInput.setStateListener { state ->
-            idleUi.setVoiceInputActive(state != VoiceInputSession.State.Idle)
-        }
+        voiceInput.addStateListener { state -> idleUi.setVoiceInputState(state) }
     }
 
     override fun onStartInput(info: EditorInfo, capFlags: CapabilityFlags) {

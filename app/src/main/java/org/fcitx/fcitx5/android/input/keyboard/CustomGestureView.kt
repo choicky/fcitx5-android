@@ -56,6 +56,9 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
     var longPressTriggered = false
         private set
     var longPressEnabled = false
+
+    /** Keep dispatching [GestureType.Move] (without swipe counts) after a consumed long press. */
+    var moveAfterLongPress = false
     private var longPressJob: Job? = null
 
     @Volatile
@@ -231,6 +234,10 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
                     if (repeatStarted || !swipeEnabled) {
                         isPressed = false
                     }
+                }
+                if (longPressTriggered && moveAfterLongPress) {
+                    dispatchGestureEvent(GestureType.Move, x, y)
+                    return true
                 }
                 if (!swipeEnabled || longPressTriggered || repeatStarted) return true
                 val countX = consumeSwipe(x, SwipeAxis.X)

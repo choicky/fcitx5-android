@@ -13,4 +13,9 @@ enum class SpaceLongPressBehavior(override val stringRes: Int) : ManagedPreferen
     ToggleActivate(R.string.space_behavior_activate),
     ShowPicker(R.string.space_behavior_picker),
     VoiceInput(R.string.space_behavior_voice_input);
+
+    companion object {
+        /** MoQi: voice input by default when the preference was never set. */
+        val Default = VoiceInput
+    }
 }
