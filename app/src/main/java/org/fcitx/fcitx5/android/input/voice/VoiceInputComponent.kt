@@ -60,6 +60,11 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             levelListeners.forEach { it(level) }
         }
 
+        override fun fellBack(error: VoiceError) {
+            selectionStore.lastUsedService = AsrServiceId.Local.key
+            service.toast(R.string.voice_fell_back_to_local)
+        }
+
         override fun reportError(error: VoiceError) {
             when (error) {
                 VoiceError.Silent -> Unit
@@ -218,14 +223,20 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 return
             }
         }
-        selectionStore.lastUsedService = (resolved as? AsrResolution.Ready)?.service?.key ?: ""
+        val selected = (resolved as? AsrResolution.Ready)?.service
+        selectionStore.lastUsedService = selected?.key ?: ""
+        // D035: a selected external service may fall back to a production Local model only
+        val fallbackKind = fallbackTarget(selected, selectionStore.load(), localStatus())
         val token = inputFlow.begin() ?: return
         service.lifecycleScope.launch {
             // Fcitx InputContext::reset dispatches the engine ResetEvent. The pinned Pinyin
             // implementation clears its context and updates preedit without committing it.
             service.prepareForVoiceInput().join()
             yield()
-            inputFlow.launch(token, languageCode, backend.create())
+            inputFlow.launch(
+                token, languageCode, backend.create(),
+                fallbackKind?.let { kind -> { kind.create() } }
+            )
         }
     }
 

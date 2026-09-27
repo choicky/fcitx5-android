@@ -346,6 +346,7 @@
     <string name="voice_current_disabled">当前语音识别服务已停用</string>
     <string name="voice_local_no_runtime">此版本不含本地语音识别</string>
     <string name="voice_local_no_model">未选择本地语音识别模型</string>
+    <string name="voice_fell_back_to_local">所选服务无法启动，已改用本地识别，请重新说一遍。</string>
     <string name="hide_keyboard">隐藏键盘</string>
     <string name="private_mode">隐私模式（点击以切换工具栏）</string>
     <string name="hide_toolbar">隐藏工具栏</string>

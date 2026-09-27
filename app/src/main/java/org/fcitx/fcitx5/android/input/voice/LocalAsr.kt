@@ -15,7 +15,9 @@ import java.util.Locale
 internal enum class LocalAsrModel(
     val dirName: String,
     val streaming: Boolean,
-    val requiredFiles: List<String>
+    val requiredFiles: List<String>,
+    /** A formal Local model (D034/D035); research models A and B are not (D036/D037). */
+    val production: Boolean = false
 ) {
     /** A: sherpa-onnx OnlineRecognizer, true streaming. Research only: weights license unresolved. */
     ZipformerZh(

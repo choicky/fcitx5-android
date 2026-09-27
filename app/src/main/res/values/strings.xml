@@ -346,6 +346,7 @@
     <string name="voice_current_disabled">The selected speech recognition service is turned off</string>
     <string name="voice_local_no_runtime">This build does not include on-device speech recognition</string>
     <string name="voice_local_no_model">No on-device speech recognition model is selected</string>
+    <string name="voice_fell_back_to_local">The selected service could not start, so on-device recognition is used instead. Please say it again.</string>
     <string name="hide_keyboard">Hide keyboard</string>
     <string name="private_mode">Private mode (tap to toggle toolbar)</string>
     <string name="hide_toolbar">Hide toolbar</string>

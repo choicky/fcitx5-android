@@ -150,6 +150,8 @@ internal class LocalAsrBackend(
             val lease = holder.ready() ?: return null
             return lease.recognizer.newSession().also { created ->
                 current.session = created
+                // the model is loaded: failures from here on are no longer "early" (D035)
+                post { events.onSessionEstablished(token) }
                 pending.forEach { feed(created, it) }
                 pending.clear()
             }

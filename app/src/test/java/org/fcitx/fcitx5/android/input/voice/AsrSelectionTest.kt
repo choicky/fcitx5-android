@@ -196,4 +196,13 @@ class AsrSelectionTest {
         AsrServiceId.entries.forEach { assertEquals(it, AsrServiceId.parse(it.key)) }
         assertNull(AsrServiceId.parse("auto"))
     }
+
+    @Test
+    fun onlyExternalServicesFallBackAndNeverToResearchModels() {
+        // selected Local or System report their own failure (D035)
+        AsrServiceId.entries.forEach { assertNull(fallbackTarget(it, selection(it), localReady)) }
+        assertNull(fallbackTarget(null, selection(null), localReady))
+        // A and B are research models (D037), never fallback targets
+        LocalAsrModel.entries.forEach { assertFalse(it.production) }
+    }
 }
