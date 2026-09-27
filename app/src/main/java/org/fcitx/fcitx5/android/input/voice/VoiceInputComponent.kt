@@ -128,6 +128,12 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 QwenAsrClient(NetworkAsrBackend.http, config, listener)
             }
         }
+        VoiceBackendKind.Tencent -> {
+            val config = TencentAsrConfig.fromStore(credentials.read(TencentAsrConfig.PROVIDER))
+            NetworkAsrBackend(service.lifecycleScope, "Tencent ${config.engine}") { listener ->
+                TencentAsrClient(NetworkAsrBackend.http, config, listener)
+            }
+        }
         is VoiceBackendKind.SelfHosted -> when (instance.protocol) {
             SelfHostedProtocol.SherpaOnnx -> {
                 val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)

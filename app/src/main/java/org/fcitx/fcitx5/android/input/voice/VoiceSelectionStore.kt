@@ -79,6 +79,7 @@ internal class VoiceSelectionStore(private val prefs: AppPrefs) {
             override fun configured(service: AsrServiceId) = when (service) {
                 AsrServiceId.Doubao -> credentials.has(DoubaoCredentials.PROVIDER)
                 AsrServiceId.Qwen -> credentials.has(QwenAsrConfig.PROVIDER)
+                AsrServiceId.Tencent -> credentials.has(TencentAsrConfig.PROVIDER)
                 else -> false
             }
 

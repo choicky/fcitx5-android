@@ -38,6 +38,12 @@ internal sealed interface AsrServiceId {
         override val external = true
     }
 
+    /** Managed Cloud: Tencent Cloud real-time ASR with the user's own keys. */
+    data object Tencent : AsrServiceId {
+        override val key = "tencent"
+        override val external = true
+    }
+
     /** A user-defined self-hosted server instance. */
     data class SelfHosted(val instanceId: String) : AsrServiceId {
         override val key get() = PREFIX + instanceId
@@ -48,7 +54,7 @@ internal sealed interface AsrServiceId {
         private const val PREFIX = "selfhosted:"
 
         /** The fixed services; self-hosted instances are listed by their store. */
-        val entries: List<AsrServiceId> = listOf(System, Local, Doubao, Qwen)
+        val entries: List<AsrServiceId> = listOf(System, Local, Doubao, Qwen, Tencent)
 
         fun parse(key: String): AsrServiceId? =
             if (key.startsWith(PREFIX)) {
@@ -71,6 +77,9 @@ internal sealed interface VoiceBackendKind {
 
     /** Model Studio real-time ASR with the user's stored key. */
     data object Qwen : VoiceBackendKind
+
+    /** Tencent Cloud real-time ASR with the user's stored keys. */
+    data object Tencent : VoiceBackendKind
 
     /** A self-hosted server; its token is read from the credential store when starting. */
     data class SelfHosted(val instance: SelfHostedInstance) : VoiceBackendKind
@@ -212,13 +221,17 @@ internal fun resolveCurrentService(
                 else -> AsrResolution.Ready(current, VoiceBackendKind.LocalAsr(model))
             }
         }
-        AsrServiceId.Doubao, AsrServiceId.Qwen ->
+        AsrServiceId.Doubao, AsrServiceId.Qwen, AsrServiceId.Tencent ->
             if (!external.configured(current)) {
                 AsrResolution.CurrentUnavailable(current, UnavailableReason.MissingCredentials)
             } else {
                 AsrResolution.Ready(
                     current,
-                    if (current == AsrServiceId.Qwen) VoiceBackendKind.Qwen else VoiceBackendKind.Doubao
+                    when (current) {
+                        AsrServiceId.Qwen -> VoiceBackendKind.Qwen
+                        AsrServiceId.Tencent -> VoiceBackendKind.Tencent
+                        else -> VoiceBackendKind.Doubao
+                    }
                 )
             }
         is AsrServiceId.SelfHosted -> {

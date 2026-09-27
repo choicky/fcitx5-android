@@ -328,4 +328,17 @@ class AsrSelectionTest {
         // no external-to-external fallback: Qwen falls back only to a production Local model
         assertNull(fallbackTarget(AsrServiceId.Qwen, qwen, localReady))
     }
+
+    @Test
+    fun tencentIsAnIndependentManagedCloudService() {
+        val tencent = VoiceSelection(AsrServiceId.Tencent, setOf(AsrServiceId.Tencent), true)
+        assertEquals(
+            AsrResolution.CurrentUnavailable(AsrServiceId.Tencent, UnavailableReason.MissingCredentials),
+            resolveCurrentService(tencent, localReady, Allowed, systemNotQueried, configured(AsrServiceId.Qwen, AsrServiceId.Doubao))
+        )
+        assertEquals(
+            AsrResolution.Ready(AsrServiceId.Tencent, VoiceBackendKind.Tencent),
+            resolveCurrentService(tencent, localReady, Allowed, systemNotQueried, configured(AsrServiceId.Tencent))
+        )
+    }
 }
