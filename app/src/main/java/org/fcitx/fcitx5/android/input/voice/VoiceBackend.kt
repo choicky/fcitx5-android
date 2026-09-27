@@ -26,6 +26,13 @@ internal interface VoiceBackend {
     /** Delivered on the main thread, tagged with the session token. */
     interface Events {
         fun onStarted(token: Long)
+
+        /**
+         * The backend can now recognize speech: the service accepted the session, or the model
+         * is loaded. Earlier failures are "early" for D035 fallback. `onStarted` is not enough:
+         * it can come before a connection or model load.
+         */
+        fun onSessionEstablished(token: Long) {}
         fun onEndOfSpeech(token: Long)
         fun onPartial(token: Long, text: String)
 

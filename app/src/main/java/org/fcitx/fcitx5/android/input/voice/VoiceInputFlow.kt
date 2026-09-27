@@ -18,10 +18,18 @@ internal class VoiceInputFlow(private val output: Output) : VoiceBackend.Events 
         fun stateChanged(state: VoiceInputSession.State)
         fun reportError(error: VoiceError)
         fun audioLevel(level: Float) {}
+
+        /** The session moved to the fallback backend after [error]; speech may need repeating. */
+        fun fellBack(error: VoiceError) {}
     }
 
     private val session = VoiceInputSession()
     private var backend: VoiceBackend? = null
+    private var languageTag = ""
+    private var established = false
+
+    /** At most one D035 fallback per session, consumed when used. */
+    private var fallback: (() -> VoiceBackend)? = null
 
     val state: VoiceInputSession.State
         get() = session.state
@@ -34,14 +42,30 @@ internal class VoiceInputFlow(private val output: Output) : VoiceBackend.Events 
     }
 
     /** Returns false if the session was stopped or cancelled while it was being prepared. */
-    fun launch(token: Long, languageTag: String, backend: VoiceBackend): Boolean {
+    /**
+     * [fallback] creates the backend used if this one fails before its session is established
+     * (D035); the caller decides whether one is allowed at all.
+     */
+    fun launch(
+        token: Long,
+        languageTag: String,
+        backend: VoiceBackend,
+        fallback: (() -> VoiceBackend)? = null
+    ): Boolean {
         if (!session.accepts(token) || session.state != VoiceInputSession.State.Starting) {
             return false
         }
         output.clearComposing()
+        this.languageTag = languageTag
+        this.fallback = fallback
+        start(token, backend)
+        return true
+    }
+
+    private fun start(token: Long, backend: VoiceBackend) {
+        established = false
         this.backend = backend
         backend.start(token, languageTag, this)
-        return true
     }
 
     fun stop() {
@@ -78,6 +102,10 @@ internal class VoiceInputFlow(private val output: Output) : VoiceBackend.Events 
         if (session.onBackendStarted(token)) notifyState()
     }
 
+    override fun onSessionEstablished(token: Long) {
+        if (session.accepts(token)) established = true
+    }
+
     override fun onEndOfSpeech(token: Long) {
         if (session.onEndOfSpeech(token)) notifyState()
     }
@@ -98,6 +126,7 @@ internal class VoiceInputFlow(private val output: Output) : VoiceBackend.Events 
     }
 
     override fun onError(token: Long, error: VoiceError) {
+        if (tryFallback(token, error)) return
         if (!session.complete(token)) return
         releaseBackend()
         output.clearComposing()
@@ -107,6 +136,21 @@ internal class VoiceInputFlow(private val output: Output) : VoiceBackend.Events 
 
     override fun onAudioLevel(token: Long, level: Float) {
         if (session.accepts(token)) output.audioLevel(level)
+    }
+
+    /**
+     * D035: only a technical service failure before the session was established, while the
+     * gesture is still active, moves to the fallback backend. Nothing captured is replayed.
+     */
+    private fun tryFallback(token: Long, error: VoiceError): Boolean {
+        val next = fallback ?: return false
+        if (established || error !is VoiceError.Service) return false
+        val newToken = session.rebind(token) ?: return false
+        fallback = null
+        releaseBackend()
+        output.fellBack(error)
+        start(newToken, next())
+        return true
     }
 
     private fun releaseBackend() {

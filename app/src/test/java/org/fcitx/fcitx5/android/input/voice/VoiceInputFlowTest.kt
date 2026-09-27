@@ -69,6 +69,12 @@ class VoiceInputFlowTest {
         override fun audioLevel(level: Float) {
             levels += level
         }
+
+        val fallbacks = mutableListOf<VoiceError>()
+
+        override fun fellBack(error: VoiceError) {
+            fallbacks += error
+        }
     }
 
     private val output = FakeOutput()
@@ -316,5 +322,132 @@ class VoiceInputFlowTest {
         assertEquals(VoiceInputSession.State.Idle, flow.state)
         flow.close()
         assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    // ---- D035 fallback: selected external service -> eligible Local -> failure ----
+
+    private val early = VoiceError.Service("connect failed")
+
+    /** Starts a session whose backend may fall back to [local]; returns the primary's token. */
+    private fun startWithFallback(primary: FakeBackend, local: FakeBackend): Long {
+        val token = flow.begin()!!
+        assertTrue(flow.launch(token, "zh-CN", primary) { local })
+        flow.onStarted(token)
+        return token
+    }
+
+    @Test
+    fun earlyServiceFailureFallsBackOnceWithANewToken() {
+        val primary = FakeBackend()
+        val local = FakeBackend()
+        val token = startWithFallback(primary, local)
+        flow.onError(token, early)
+
+        assertEquals(listOf<VoiceError>(early), output.fallbacks)
+        assertEquals(1, primary.cancels)
+        val localToken = local.startedToken!!
+        assertTrue(localToken != token)
+        assertEquals("zh-CN", local.startedLanguage)
+        assertEquals(VoiceInputSession.State.Listening, flow.state)
+        assertTrue(output.errors.isEmpty())
+
+        // late events of the failed backend are stale
+        flow.onFinal(token, "late")
+        flow.onError(token, early)
+        assertTrue(output.commits.isEmpty())
+        assertEquals(1, output.fallbacks.size)
+
+        flow.onSessionEstablished(localToken)
+        flow.stop()
+        assertEquals(1, local.stops)
+        flow.onFinal(localToken, "本地")
+        assertEquals(listOf("本地"), output.commits)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    @Test
+    fun establishedSessionFailureIsReportedNotMigrated() {
+        val local = FakeBackend()
+        val token = startWithFallback(FakeBackend(), local)
+        flow.onSessionEstablished(token)
+        flow.onError(token, early)
+        assertNull(local.startedToken)
+        assertEquals(listOf<VoiceError>(early), output.errors)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    @Test
+    fun stopBeforeTheEarlyFailureDoesNotStartAnotherBackend() {
+        val local = FakeBackend()
+        val token = startWithFallback(FakeBackend(), local)
+        flow.stop()
+        flow.onError(token, early)
+        assertNull(local.startedToken)
+        assertEquals(listOf<VoiceError>(early), output.errors)
+    }
+
+    @Test
+    fun cancelBeforeTheEarlyFailureDoesNotStartAnotherBackend() {
+        val local = FakeBackend()
+        val token = startWithFallback(FakeBackend(), local)
+        flow.cancel()
+        flow.onError(token, early)
+        assertNull(local.startedToken)
+        assertTrue(output.errors.isEmpty())
+    }
+
+    @Test
+    fun onlyTechnicalServiceFailuresFallBack() {
+        listOf(VoiceError.Silent, VoiceError.PermissionDenied, VoiceError.System(9), VoiceError.Capture("busy")).forEach { error ->
+            val local = FakeBackend()
+            val token = startWithFallback(FakeBackend(), local)
+            flow.onError(token, error)
+            assertNull(local.startedToken)
+            assertEquals(VoiceInputSession.State.Idle, flow.state)
+        }
+    }
+
+    @Test
+    fun fallbackIsExhaustedAfterOneUse() {
+        val local = FakeBackend()
+        val token = startWithFallback(FakeBackend(), local)
+        flow.onError(token, early)
+        val localToken = local.startedToken!!
+        val second = VoiceError.Service("model load failed")
+        flow.onError(localToken, second)
+        assertEquals(listOf<VoiceError>(second), output.errors)
+        assertEquals(1, local.cancels)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    @Test
+    fun noFallbackWithoutAnEligibleLocal() {
+        val (token, _) = startListening()
+        flow.onError(token, early)
+        assertEquals(listOf<VoiceError>(early), output.errors)
+        assertTrue(output.fallbacks.isEmpty())
+    }
+
+    @Test
+    fun cancelAfterFallbackReachesTheNewBackend() {
+        val local = FakeBackend()
+        val token = startWithFallback(FakeBackend(), local)
+        flow.onError(token, early)
+        assertTrue(flow.cancel())
+        assertEquals(1, local.cancels)
+        flow.onFinal(local.startedToken!!, "late")
+        assertTrue(output.commits.isEmpty())
+    }
+
+    @Test
+    fun fallbackIsNotCarriedIntoTheNextSession() {
+        val token = startWithFallback(FakeBackend(), FakeBackend())
+        flow.onFinal(token, "done")
+        val next = FakeBackend()
+        val nextToken = flow.begin()!!
+        assertTrue(flow.launch(nextToken, "", next))
+        flow.onError(nextToken, early)
+        assertEquals(listOf<VoiceError>(early), output.errors)
+        assertTrue(output.fallbacks.isEmpty())
     }
 }

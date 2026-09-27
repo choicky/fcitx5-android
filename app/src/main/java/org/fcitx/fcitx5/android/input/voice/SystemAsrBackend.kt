@@ -47,7 +47,8 @@ internal class SystemAsrBackend(private val context: Context) : VoiceBackend {
     }
 
     private fun listenerFor(token: Long, events: VoiceBackend.Events) = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) = Unit
+        // the recognition service accepted the session (startListening alone does not mean that)
+        override fun onReadyForSpeech(params: Bundle?) = events.onSessionEstablished(token)
 
         override fun onBeginningOfSpeech() = Unit
 

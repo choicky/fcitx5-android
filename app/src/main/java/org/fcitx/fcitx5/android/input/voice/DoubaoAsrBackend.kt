@@ -72,6 +72,9 @@ internal class DoubaoAsrBackend(
     @Volatile
     private var stopRequested = false
 
+    // main thread only
+    private var established = false
+
     /** Set once the session is finished or cancelled: capture stops and events are dropped. */
     @Volatile
     private var closed = false
@@ -195,7 +198,14 @@ internal class DoubaoAsrBackend(
     }
 
     private fun handle(response: DoubaoAsrProtocol.Response) {
-        when (val outcome = tracker.accept(response)) {
+        val outcome = tracker.accept(response)
+        // the first accepted server response means the service took the session; a handshake
+        // or auth failure arrives before it (D035)
+        if (!established && outcome !is DoubaoResultTracker.Outcome.Failed) {
+            established = true
+            events?.onSessionEstablished(token)
+        }
+        when (outcome) {
             // observe only: neither provisional nor stable text reaches preedit or the editor
             is DoubaoResultTracker.Outcome.Provisional -> Timber.d(
                 "Doubao ASR provisional #${tracker.provisionalCount}: ${outcome.text}"

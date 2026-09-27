@@ -13,12 +13,17 @@ package org.fcitx.fcitx5.android.input.voice
 internal sealed interface AsrServiceId {
     val key: String
 
+    /** Managed Cloud and Self-hosted services send audio to an outside recipient. */
+    val external: Boolean
+
     data object System : AsrServiceId {
         override val key = "system"
+        override val external = false
     }
 
     data object Local : AsrServiceId {
         override val key = "local"
+        override val external = false
     }
 
     companion object {
@@ -171,6 +176,22 @@ internal fun resolveCurrentService(
             }
         }
     }
+}
+
+/**
+ * D035: only a selected external (Managed Cloud / Self-hosted) service falls back, and only to
+ * an enabled, installed production Local model. Research models (D037) and System ASR never
+ * are fallback targets, so there is no target until a production Local model exists.
+ */
+internal fun fallbackTarget(
+    selected: AsrServiceId?,
+    selection: VoiceSelection,
+    local: LocalStatus
+): VoiceBackendKind? {
+    if (selected == null || !selected.external) return null
+    val model = local.model ?: return null
+    if (!selection.localEnabled || !local.runtimeAvailable || !local.filesPresent) return null
+    return if (model.production) VoiceBackendKind.LocalAsr(model) else null
 }
 
 /**

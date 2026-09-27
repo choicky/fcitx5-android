@@ -59,6 +59,16 @@ internal class VoiceInputSession {
 
     fun accepts(token: Long): Boolean = token == generation && state != State.Idle
 
+    /**
+     * A replacement backend takes over the same gesture: the state is kept, and a new token
+     * makes every late event of the failed backend stale. Not while stopping.
+     */
+    fun rebind(token: Long): Long? {
+        if (!accepts(token) || state == State.Stopping) return null
+        generation += 1
+        return generation
+    }
+
     fun complete(token: Long): Boolean {
         if (!accepts(token)) return false
         invalidate()
