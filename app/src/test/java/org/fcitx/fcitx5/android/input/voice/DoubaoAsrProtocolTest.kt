@@ -87,7 +87,7 @@ class DoubaoAsrProtocolTest {
         val response = DoubaoAsrProtocol.parse(serverResponse(0b0001, 3, json))
                 as DoubaoAsrProtocol.Response.Result
         assertEquals(3, response.sequence)
-        assertFalse(response.last)
+        assertFalse(response.lastPackage)
         assertEquals("你好", response.text)
         assertEquals(0, response.definiteUtterances)
     }
@@ -98,10 +98,28 @@ class DoubaoAsrProtocolTest {
                 """{"text":"你好。","definite":true},{"text":"世界。","definite":true}]}}"""
         val response = DoubaoAsrProtocol.parse(serverResponse(0b0011, -4, json))
                 as DoubaoAsrProtocol.Response.Result
-        assertTrue(response.last)
+        assertTrue(response.lastPackage)
         assertEquals(-4, response.sequence)
         assertEquals("你好。世界。", response.text)
+        assertEquals(
+            listOf(
+                DoubaoAsrProtocol.Utterance("你好。", true),
+                DoubaoAsrProtocol.Utterance("世界。", true)
+            ),
+            response.utterances
+        )
         assertEquals(2, response.definiteUtterances)
+    }
+
+    @Test
+    fun definiteUtteranceBeforeLastPackage() {
+        // second pass finished one utterance, but the request is not complete
+        val json = """{"result":{"text":"你好。世界","utterances":[""" +
+                """{"text":"你好。","definite":true},{"text":"世界","definite":false}]}}"""
+        val response = DoubaoAsrProtocol.parse(serverResponse(0b0001, 5, json))
+                as DoubaoAsrProtocol.Response.Result
+        assertFalse(response.lastPackage)
+        assertEquals(1, response.definiteUtterances)
     }
 
     @Test
