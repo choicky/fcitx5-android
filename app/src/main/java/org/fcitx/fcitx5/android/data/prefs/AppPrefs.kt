@@ -10,6 +10,7 @@ import androidx.annotation.Keep
 import androidx.annotation.RequiresApi
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
+import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.InputFeedbacks.InputFeedbackMode
 import org.fcitx.fcitx5.android.input.candidates.expanded.ExpandedCandidateStyle
@@ -137,8 +138,10 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         }
         val focusChangeResetKeyboard =
             switch(R.string.reset_keyboard_on_focus_change, "reset_keyboard_on_focus_change", true)
-        val expandToolbarByDefault =
-            switch(R.string.expand_toolbar_by_default, "expand_toolbar_by_default", false)
+        // MoQi fork: on by default in debug (voice test) builds only
+        val expandToolbarByDefault = switch(
+            R.string.expand_toolbar_by_default, "expand_toolbar_by_default", BuildConfig.DEBUG
+        )
         val inlineSuggestions = switch(R.string.inline_suggestions, "inline_suggestions", true)
         val toolbarNumRowOnPassword =
             switch(R.string.toolbar_num_row_on_password, "toolbar_num_row_on_password", true)
@@ -149,8 +152,10 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             false
         )
 
-        val showVoiceInputButton =
-            switch(R.string.show_voice_input_button, "show_voice_input_button", false)
+        // MoQi fork: on by default in debug (voice test) builds only
+        val showVoiceInputButton = switch(
+            R.string.show_voice_input_button, "show_voice_input_button", BuildConfig.DEBUG
+        )
         val preferredVoiceInput = voiceInputPreference(
             R.string.preferred_voice_input, "preferred_voice_input", ""
         ) { showVoiceInputButton.getValue() }
