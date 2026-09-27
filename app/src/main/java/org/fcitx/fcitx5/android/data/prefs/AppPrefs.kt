@@ -23,6 +23,7 @@ import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SwipeSymbolDirection
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.popup.EmojiModifier
+import org.fcitx.fcitx5.android.input.voice.AsrProvider
 import org.fcitx.fcitx5.android.utils.DeviceUtil
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.vibrator
@@ -42,6 +43,23 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         // Phase 4B.3b-1: "Off", or a LocalAsrModel name; threads "1".."4"
         val voiceLocalAsr = string("voice_local_asr", "Off")
         val voiceLocalAsrThreads = string("voice_local_asr_threads", "2")
+        // set once the user answered the System ASR disclosure, so a decline is remembered
+        val voiceSystemAsrAnswered = bool("voice_system_asr_answered", false)
+    }
+
+    inner class Voice : ManagedPreferenceCategory(R.string.voice_input, sharedPreferences) {
+        val asrProvider = enumList(R.string.asr_provider, "voice_asr_provider", AsrProvider.Auto)
+        val systemAsrAllowed = switch(
+            R.string.allow_system_asr,
+            "voice_system_asr_allowed",
+            false,
+            R.string.allow_system_asr_summary
+        )
+
+        // MoQi fork: on by default in debug (voice test) builds only
+        val showVoiceInputButton = switch(
+            R.string.show_voice_input_button, "show_voice_input_button", BuildConfig.DEBUG
+        )
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {
@@ -156,13 +174,9 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             false
         )
 
-        // MoQi fork: on by default in debug (voice test) builds only
-        val showVoiceInputButton = switch(
-            R.string.show_voice_input_button, "show_voice_input_button", BuildConfig.DEBUG
-        )
         val preferredVoiceInput = voiceInputPreference(
             R.string.preferred_voice_input, "preferred_voice_input", ""
-        ) { showVoiceInputButton.getValue() }
+        ) { voice.showVoiceInputButton.getValue() }
 
         val expandKeypressArea =
             switch(R.string.expand_keypress_area, "expand_keypress_area", false)
@@ -401,6 +415,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
     val clipboard = Clipboard().register()
     val symbols = Symbols().register()
     val advanced = Advanced().register()
+    val voice = Voice().register()
 
     @Keep
     private val onSharedPreferenceChangeListener =
@@ -428,7 +443,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             listOf(
                 keyboard,
                 candidates,
-                clipboard
+                clipboard,
+                voice
             ).forEach { category ->
                 category.managedPreferences.forEach {
                     it.value.putValueTo(this@edit)

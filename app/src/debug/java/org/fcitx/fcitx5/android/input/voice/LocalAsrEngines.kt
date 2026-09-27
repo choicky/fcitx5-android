@@ -18,6 +18,8 @@ import java.io.File
 /** Debug builds: sherpa-onnx v1.13.8 (official AAR, its own JNI and Kotlin API). */
 internal object LocalAsrEngines {
 
+    const val AVAILABLE = true
+
     fun load(model: LocalAsrModel, modelDir: File, threads: Int): LocalAsrRecognizer =
         when (model) {
             LocalAsrModel.ZipformerZh -> zipformer(modelDir, threads)

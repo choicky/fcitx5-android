@@ -74,7 +74,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         processIntent(intent)
-        if (intent.action != ACTION_REQUEST_RECORD_AUDIO_PERMISSION) {
+        if (intent.action != ACTION_REQUEST_RECORD_AUDIO_PERMISSION &&
+            intent.action != ACTION_AUTHORIZE_SYSTEM_ASR
+        ) {
             checkNotificationPermission()
         }
     }
@@ -101,6 +103,7 @@ class MainActivity : AppCompatActivity() {
                 startActivity<SetupActivity>()
             }
             ACTION_REQUEST_RECORD_AUDIO_PERMISSION -> requestRecordAudioPermission()
+            ACTION_AUTHORIZE_SYSTEM_ASR -> authorizeSystemAsr()
             Intent.ACTION_VIEW -> intent.data?.let {
                 AlertDialog.Builder(this)
                     .setTitle(R.string.pinyin_dict)
@@ -130,6 +133,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
         requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_CODE_RECORD_AUDIO)
+    }
+
+    /** One-time disclosure before voice input first uses Android system speech recognition. */
+    private fun authorizeSystemAsr() {
+        val prefs = AppPrefs.getInstance()
+        fun answer(allowed: Boolean) {
+            prefs.voice.systemAsrAllowed.setValue(allowed)
+            prefs.internal.voiceSystemAsrAnswered.setValue(true)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.system_asr_disclosure_title)
+            .setMessage(R.string.system_asr_disclosure_message)
+            .setNegativeButton(R.string.system_asr_decline) { _, _ -> answer(false) }
+            .setPositiveButton(R.string.system_asr_allow) { _, _ -> answer(true) }
+            // dismissing without an answer asks again next time
+            .setOnDismissListener { finish() }
+            .show()
     }
 
     private fun checkNotificationPermission() {
@@ -188,6 +208,8 @@ class MainActivity : AppCompatActivity() {
 
         const val ACTION_REQUEST_RECORD_AUDIO_PERMISSION =
             "org.fcitx.fcitx5.android.action.REQUEST_RECORD_AUDIO_PERMISSION"
+        const val ACTION_AUTHORIZE_SYSTEM_ASR =
+            "org.fcitx.fcitx5.android.action.AUTHORIZE_SYSTEM_ASR"
         const val EXTRA_SETTINGS_ROUTE = "${BuildConfig.APPLICATION_ID}.EXTRA_SETTINGS_ROUTE"
     }
 
