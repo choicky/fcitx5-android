@@ -53,7 +53,8 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
     private var touchMovedOutside = false
 
     @Volatile
-    private var longPressTriggered = false
+    var longPressTriggered = false
+        private set
     var longPressEnabled = false
     private var longPressJob: Job? = null
 

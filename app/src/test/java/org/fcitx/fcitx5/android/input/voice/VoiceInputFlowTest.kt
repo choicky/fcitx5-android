@@ -224,6 +224,20 @@ class VoiceInputFlowTest {
     }
 
     @Test
+    fun stopAfterCancelIsNoOp() {
+        // Space swipe-up cancels; even a stray stop afterwards must not reach the backend
+        val (token, backend) = startListening()
+        flow.onPartial(token, "partial")
+        assertTrue(flow.cancel())
+        flow.stop()
+        assertEquals(0, backend.stops)
+        assertEquals(1, backend.cancels)
+        flow.onFinal(token, "late")
+        assertTrue(output.commits.isEmpty())
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    @Test
     fun endOfSpeechMovesToStopping() {
         val (token, _) = startListening()
         flow.onEndOfSpeech(token)

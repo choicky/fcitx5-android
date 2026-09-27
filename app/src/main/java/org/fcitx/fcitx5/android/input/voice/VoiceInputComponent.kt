@@ -107,6 +107,16 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         inputFlow.cancel()
     }
 
+    /** Long-press Space: start a session unless one is already running. */
+    fun startVoiceInput() {
+        if (inputFlow.state == VoiceInputSession.State.Idle) start()
+    }
+
+    /** Space released: stop normally, letting the backend deliver its final result. */
+    fun stopVoiceInput() {
+        inputFlow.stop()
+    }
+
     fun close() {
         inputFlow.close()
         stateListener = null

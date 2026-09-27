@@ -40,4 +40,7 @@ sealed class KeyAction {
     data class PickerSwitchAction(val key: PickerWindow.Key? = null) : KeyAction()
 
     data object SpaceLongPressAction : KeyAction()
+
+    /** Space released after [SpaceLongPressAction] fired; [swipedUp] if moved up beyond threshold. */
+    data class SpaceLongPressReleaseAction(val swipedUp: Boolean) : KeyAction()
 }
