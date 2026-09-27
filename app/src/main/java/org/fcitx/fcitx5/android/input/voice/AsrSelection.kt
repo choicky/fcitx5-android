@@ -237,7 +237,7 @@ internal fun resolveCurrentService(
         is AsrServiceId.SelfHosted -> {
             val instance = external.instance(current.instanceId)
                 ?: return AsrResolution.CurrentUnavailable(current, UnavailableReason.InstanceMissing)
-            when (endpointProblem(instance.url, external.allowCleartext)) {
+            when (endpointProblem(instance.url, external.allowCleartext, instance.protocol)) {
                 null -> AsrResolution.Ready(current, VoiceBackendKind.SelfHosted(instance))
                 EndpointProblem.Invalid ->
                     AsrResolution.CurrentUnavailable(current, UnavailableReason.InvalidEndpoint)

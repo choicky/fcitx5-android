@@ -88,7 +88,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         return LocalStatus(LocalAsrEngines.AVAILABLE, model, model?.let(::modelInstalled) == true)
     }
 
-
     private fun label(service: AsrServiceId): String = when (service) {
         AsrServiceId.System -> getString(R.string.asr_provider_system)
         AsrServiceId.Local -> getString(R.string.asr_provider_local)
@@ -181,7 +180,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 isSingleLineTitle = false
                 setDefaultValue(false)
                 setOnPreferenceChangeListener { _, _ ->
-                    // toggling the switch answers the disclosure, so Auto-style prompts stop
+                    // toggling the switch answers the disclosure: the recommendation stops asking
                     prefs.internal.voiceSystemAsrAnswered.setValue(true)
                     true
                 }
@@ -250,7 +249,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
         screen.addCategory(R.string.voice_section_selfhosted) {
             store.instances.forEach { instance ->
-                val problem = when (endpointProblem(instance.url, BuildConfig.DEBUG)) {
+                val problem = when (endpointProblem(instance.url, BuildConfig.DEBUG, instance.protocol)) {
                     null -> null
                     EndpointProblem.Invalid -> getString(R.string.voice_endpoint_invalid)
                     EndpointProblem.Cleartext -> getString(R.string.voice_endpoint_cleartext)
@@ -635,6 +634,10 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             setText(existing?.url.orEmpty())
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
         }
+        val model = EditText(ctx).apply {
+            setHint(R.string.voice_selfhosted_model)
+            setText(existing?.model.orEmpty())
+        }
         val token = EditText(ctx).apply {
             setHint(
                 if (storedToken.isNullOrEmpty()) R.string.voice_selfhosted_token
@@ -659,7 +662,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val form = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad / 2, pad, 0)
-            listOf(name, protocols, url, token, enabled).forEach { addView(it) }
+            listOf(name, protocols, url, model, token, enabled).forEach { addView(it) }
         }
         val builder = AlertDialog.Builder(ctx)
             .setTitle(R.string.voice_selfhosted_server)
@@ -667,14 +670,17 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             .setView(form)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 val endpoint = url.text.toString().trim()
-                when (endpointProblem(endpoint, BuildConfig.DEBUG)) {
+                val protocol = protocolIds.firstOrNull { it.first == protocols.checkedRadioButtonId }
+                    ?.second ?: SelfHostedProtocol.SherpaOnnx
+                when (endpointProblem(endpoint, BuildConfig.DEBUG, protocol)) {
                     EndpointProblem.Invalid -> ctx.toast(R.string.voice_endpoint_invalid)
                     EndpointProblem.Cleartext -> ctx.toast(R.string.voice_endpoint_cleartext)
                     null -> {
                         val id = existing?.id ?: newInstanceId()
-                        val protocol = protocolIds.firstOrNull { it.first == protocols.checkedRadioButtonId }
-                            ?.second ?: SelfHostedProtocol.SherpaOnnx
-                        val instance = SelfHostedInstance(id, name.text.toString().trim(), protocol, endpoint)
+                        val instance = SelfHostedInstance(
+                            id, name.text.toString().trim(), protocol, endpoint,
+                            model.text.toString().trim()
+                        )
                         store.instances = store.instances.filter { it.id != id } + instance
                         val newToken = token.text.toString().trim()
                         if (newToken.isNotEmpty()) {
@@ -703,6 +709,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             SelfHostedProtocol.SherpaOnnx -> R.string.voice_selfhosted_sherpa
             SelfHostedProtocol.FunAsr2Pass -> R.string.voice_selfhosted_funasr
             SelfHostedProtocol.FunAsrNano -> R.string.voice_selfhosted_nano
+            SelfHostedProtocol.OpenAiCompatible -> R.string.voice_selfhosted_openai
         }
     )
 
