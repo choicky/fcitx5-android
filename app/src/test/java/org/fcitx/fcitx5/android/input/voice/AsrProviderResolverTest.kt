@@ -139,6 +139,45 @@ class AsrProviderResolverTest {
     }
 
     @Test
+    fun disclosureComesBeforeMicrophonePermission() {
+        // first use with Auto, no Local model, nothing granted: the disclosure is shown first
+        val firstTap = voiceStartStep(resolve(Auto, authorization = NotAsked), recordAudioGranted = false)
+        assertEquals(VoiceStartStep.RequestSystemAuthorization, firstTap)
+        // once allowed, the microphone is the only thing left
+        assertEquals(
+            VoiceStartStep.RequestRecordAudio,
+            voiceStartStep(resolve(Auto, authorization = Allowed), recordAudioGranted = false)
+        )
+        assertEquals(
+            VoiceStartStep.Start(VoiceBackendKind.System),
+            voiceStartStep(resolve(Auto, authorization = Allowed), recordAudioGranted = true)
+        )
+    }
+
+    @Test
+    fun noMicrophonePromptWhenNothingIsUsable() {
+        listOf(
+            resolve(Auto, authorization = Declined),
+            resolve(Local),
+            resolve(System, authorization = Allowed, systemAvailable = false)
+        ).forEach {
+            assertEquals(VoiceStartStep.Unavailable(it), voiceStartStep(it, recordAudioGranted = false))
+        }
+    }
+
+    @Test
+    fun systemAsrNeverStartsWithoutAuthorization() {
+        for (configured in AsrProvider.entries)
+            for (auth in listOf(NotAsked, Declined))
+                for (usable in listOf(null, model))
+                    for (available in listOf(true, false))
+                        for (granted in listOf(true, false)) {
+                            val step = voiceStartStep(resolve(configured, usable, auth, available), granted)
+                            assertFalse(step == VoiceStartStep.Start(VoiceBackendKind.System))
+                        }
+    }
+
+    @Test
     fun localModelNeedsARuntime() {
         // release builds ship no Local ASR runtime
         assertNull(configuredLocalModel(runtimeAvailable = false, selection = model.name))

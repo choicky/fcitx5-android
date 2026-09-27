@@ -138,8 +138,10 @@ class MainActivity : AppCompatActivity() {
     /** One-time disclosure before voice input first uses Android system speech recognition. */
     private fun authorizeSystemAsr() {
         val prefs = AppPrefs.getInstance()
-        fun answer(allowed: Boolean) {
-            prefs.voice.systemAsrAllowed.setValue(allowed)
+        var allowed = false
+        fun answer(allow: Boolean) {
+            allowed = allow
+            prefs.voice.systemAsrAllowed.setValue(allow)
             prefs.internal.voiceSystemAsrAnswered.setValue(true)
         }
         AlertDialog.Builder(this)
@@ -147,8 +149,9 @@ class MainActivity : AppCompatActivity() {
             .setMessage(R.string.system_asr_disclosure_message)
             .setNegativeButton(R.string.system_asr_decline) { _, _ -> answer(false) }
             .setPositiveButton(R.string.system_asr_allow) { _, _ -> answer(true) }
+            // after Allow, ask for the microphone right away (it finishes when answered);
             // dismissing without an answer asks again next time
-            .setOnDismissListener { finish() }
+            .setOnDismissListener { if (allowed) requestRecordAudioPermission() else finish() }
             .show()
     }
 
