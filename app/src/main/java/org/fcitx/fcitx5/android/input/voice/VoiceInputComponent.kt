@@ -155,6 +155,15 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                     FunAsr2PassClient(NetworkAsrBackend.http, instance.url, token, listener)
                 }
             }
+            SelfHostedProtocol.OpenAiCompatible -> {
+                val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
+                // upload and transcription of up to 60 s of audio happen after stop
+                NetworkAsrBackend(
+                    service.lifecycleScope, "Self-hosted OpenAI-compatible", OPENAI_FINAL_TIMEOUT_MS
+                ) { listener ->
+                    OpenAiTranscriptionClient(NetworkAsrBackend.http, instance.url, instance.model, token, listener)
+                }
+            }
             SelfHostedProtocol.FunAsrNano -> {
                 val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
                 NetworkAsrBackend(
@@ -324,3 +333,5 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         })
     }
 }
+
+private const val OPENAI_FINAL_TIMEOUT_MS = 60_000L

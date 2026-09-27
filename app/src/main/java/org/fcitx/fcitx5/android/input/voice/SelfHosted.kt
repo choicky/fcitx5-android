@@ -19,7 +19,7 @@ import java.net.URI
  * Self-hosted server protocols (D033). Only protocols with a working client are listed; each
  * matches an upstream server, see network-asr-checkpoint.md.
  */
-internal enum class SelfHostedProtocol(val key: String) {
+internal enum class SelfHostedProtocol(val key: String, val secureScheme: String = "wss") {
     /** sherpa-onnx streaming WebSocket server (float32 samples, `Done`, JSON results). */
     SherpaOnnx("sherpa-onnx"),
 
@@ -27,7 +27,16 @@ internal enum class SelfHostedProtocol(val key: String) {
     FunAsr2Pass("funasr-2pass"),
 
     /** FunASR's Fun-ASR-Nano streaming server (`funasr-realtime-server`; START/STOP). */
-    FunAsrNano("funasr-nano");
+    FunAsrNano("funasr-nano"),
+
+    /**
+     * An OpenAI-compatible `/v1/audio/transcriptions` endpoint: whole-utterance upload after
+     * stop, no partial results. Optional adapter; not a replacement for the streaming servers.
+     */
+    OpenAiCompatible("openai-compatible", secureScheme = "https");
+
+    /** The unencrypted counterpart, only accepted where cleartext is explicitly allowed. */
+    val plainScheme get() = if (secureScheme == "https") "http" else "ws"
 
     companion object {
         fun parse(key: String) = entries.firstOrNull { it.key == key }
@@ -39,7 +48,9 @@ internal data class SelfHostedInstance(
     val id: String,
     val name: String,
     val protocol: SelfHostedProtocol,
-    val url: String
+    val url: String,
+    /** The `model` field for an OpenAI-compatible endpoint; unused by the other protocols. */
+    val model: String = ""
 ) {
     val service get() = AsrServiceId.SelfHosted(id)
 
@@ -60,6 +71,7 @@ internal data class SelfHostedInstance(
                     put("name", it.name)
                     put("protocol", it.protocol.key)
                     put("url", it.url)
+                    if (it.model.isNotEmpty()) put("model", it.model)
                 })
             }
         }.toString()
@@ -74,7 +86,9 @@ internal data class SelfHostedInstance(
                 fun field(name: String) = o[name]?.jsonPrimitive?.contentOrNull
                 val id = field("id")?.takeIf(::isValidId) ?: return@mapNotNull null
                 val protocol = field("protocol")?.let(SelfHostedProtocol::parse) ?: return@mapNotNull null
-                SelfHostedInstance(id, field("name").orEmpty(), protocol, field("url").orEmpty())
+                SelfHostedInstance(
+                    id, field("name").orEmpty(), protocol, field("url").orEmpty(), field("model").orEmpty()
+                )
             }
         }
     }
@@ -83,16 +97,21 @@ internal data class SelfHostedInstance(
 internal enum class EndpointProblem { Invalid, Cleartext }
 
 /**
- * A WebSocket endpoint must be `wss://`; plain `ws://` is only accepted where cleartext is
- * explicitly allowed (debug builds), never silently. Certificates are checked against the
- * system trust store; there is no trust-all option.
+ * An endpoint must use the protocol's encrypted scheme (`wss://`, or `https://` for the
+ * OpenAI-compatible adapter); the plain scheme is only accepted where cleartext is explicitly
+ * allowed (debug builds), never silently. Certificates are checked against the system trust
+ * store; there is no trust-all option.
  */
-internal fun endpointProblem(url: String, allowCleartext: Boolean): EndpointProblem? {
+internal fun endpointProblem(
+    url: String,
+    allowCleartext: Boolean,
+    protocol: SelfHostedProtocol = SelfHostedProtocol.SherpaOnnx
+): EndpointProblem? {
     val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return EndpointProblem.Invalid
     if (uri.host.isNullOrEmpty()) return EndpointProblem.Invalid
     return when (uri.scheme?.lowercase()) {
-        "wss" -> null
-        "ws" -> if (allowCleartext) null else EndpointProblem.Cleartext
+        protocol.secureScheme -> null
+        protocol.plainScheme -> if (allowCleartext) null else EndpointProblem.Cleartext
         else -> EndpointProblem.Invalid
     }
 }
