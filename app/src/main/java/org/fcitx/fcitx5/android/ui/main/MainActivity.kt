@@ -24,6 +24,7 @@ import androidx.navigation.fragment.NavHostFragment
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.fcitx.fcitx5.android.databinding.ActivityMainBinding
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.ui.setup.SetupActivity
@@ -137,12 +138,12 @@ class MainActivity : AppCompatActivity() {
 
     /** One-time disclosure before voice input first uses Android system speech recognition. */
     private fun authorizeSystemAsr() {
-        val prefs = AppPrefs.getInstance()
+        val store = VoiceSelectionStore(AppPrefs.getInstance())
         var allowed = false
         fun answer(allow: Boolean) {
             allowed = allow
-            prefs.voice.systemAsrAllowed.setValue(allow)
-            prefs.internal.voiceSystemAsrAnswered.setValue(true)
+            // during the first-use recommendation an allow also selects System ASR (D034)
+            store.answerSystemDisclosure(allow)
         }
         AlertDialog.Builder(this)
             .setTitle(R.string.system_asr_disclosure_title)

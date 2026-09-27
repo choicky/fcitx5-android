@@ -23,7 +23,6 @@ import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SwipeSymbolDirection
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.popup.EmojiModifier
-import org.fcitx.fcitx5.android.input.voice.AsrProvider
 import org.fcitx.fcitx5.android.utils.DeviceUtil
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.vibrator
@@ -45,10 +44,22 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val voiceLocalAsrThreads = string("voice_local_asr_threads", "2")
         // set once the user answered the System ASR disclosure, so a decline is remembered
         val voiceSystemAsrAnswered = bool("voice_system_asr_answered", false)
+        // D034 selection: the current concrete service key ("" = none), per-service enablement,
+        // and whether the one-time recommendation ran (see VoiceSelectionStore)
+        val voiceCurrentService = string("voice_current_service", "")
+        val voiceSystemEnabled = bool("voice_system_enabled", false)
+        val voiceLocalEnabled = bool("voice_local_enabled", false)
+        val voiceRecommendationDone = bool("voice_recommendation_done", false)
+        val voiceLocalModel = string("voice_local_model", "")
+        val voiceSelectionMigrated = bool("voice_selection_migrated", false)
+        // the earlier Auto/Local/System setting (fb3b0c26), read once for migration
+        val voiceLegacyAsrProvider = string("voice_asr_provider", "")
+        // the service the most recent session actually used
+        val voiceLastUsedService = string("voice_last_used_service", "")
     }
 
+    // storage for the Voice screen; its UI is built by VoiceSettingsFragment
     inner class Voice : ManagedPreferenceCategory(R.string.voice_input, sharedPreferences) {
-        val asrProvider = enumList(R.string.asr_provider, "voice_asr_provider", AsrProvider.Auto)
         val systemAsrAllowed = switch(
             R.string.allow_system_asr,
             "voice_system_asr_allowed",

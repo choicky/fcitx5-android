@@ -106,22 +106,7 @@ class DeveloperFragment : PaddingPreferenceFragment() {
                     isIconSpaceReserved = false
                     isSingleLineTitle = false
                 })
-                // Phase 4B.3b-1 research model for the Local provider (none is formally selected);
-                // the Doubao and capture probe switches above override the provider entirely
-                addPreference(ListPreference(context).apply {
-                    key = AppPrefs.getInstance().internal.voiceLocalAsr.key
-                    setTitle(R.string.voice_local_asr)
-                    entries = arrayOf<CharSequence>(
-                        getString(R.string.voice_local_asr_off),
-                        "A: streaming Zipformer zh INT8",
-                        "B: FunASR Nano INT8"
-                    )
-                    entryValues = arrayOf<CharSequence>("Off", "ZipformerZh", "FunAsrNano")
-                    setDefaultValue("Off")
-                    summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
-                    isIconSpaceReserved = false
-                    isSingleLineTitle = false
-                })
+                // the Local model is chosen in Voice input settings (D037); threads stay here
                 addPreference(ListPreference(context).apply {
                     key = AppPrefs.getInstance().internal.voiceLocalAsrThreads.key
                     setTitle(R.string.voice_local_asr_threads)
