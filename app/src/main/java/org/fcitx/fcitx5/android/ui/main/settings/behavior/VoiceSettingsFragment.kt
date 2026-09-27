@@ -139,8 +139,10 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
         screen.addCategory(R.string.voice_current_section) {
             val current = selection.current
+            val lastError = store.lastError?.takeIf { it.first == current?.key }?.second
             val summary = if (current == null) getString(R.string.voice_current_none)
-            else getString(R.string.voice_current_summary, label(current), stateText(resolution))
+            else getString(R.string.voice_current_summary, label(current), stateText(resolution)) +
+                    (lastError?.let { "\n" + getString(R.string.voice_last_error, it) } ?: "")
             addPreference(getString(R.string.asr_provider), summary) { chooseCurrent() }
             val lastUsed = AsrServiceId.parse(store.lastUsedService)
             if (lastUsed != null && lastUsed != current) {

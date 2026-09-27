@@ -89,6 +89,17 @@ internal class VoiceSelectionStore(private val prefs: AppPrefs) {
         }
     }
 
+    /**
+     * The most recent failure of a service, shown in settings so an invalid or revoked key is
+     * visible after the toast is gone. Failure details never contain credentials.
+     */
+    var lastError: Pair<String, String>?
+        get() = prefs.internal.voiceLastError.getValue().split('\n', limit = 2)
+            .takeIf { it.size == 2 && it[0].isNotEmpty() }?.let { it[0] to it[1] }
+        set(value) = prefs.internal.voiceLastError.setValue(
+            value?.let { (service, detail) -> service + "\n" + detail.take(160) } ?: ""
+        )
+
     var lastUsedService: String
         get() = prefs.internal.voiceLastUsedService.getValue()
         set(value) = prefs.internal.voiceLastUsedService.setValue(value)

@@ -325,6 +325,7 @@
     <string name="voice_state_ready">Ready</string>
     <string name="voice_state_needs_authorization">Asks for your permission before first use</string>
     <string name="voice_last_used">The most recent session used %1$s</string>
+    <string name="voice_last_error">Last failure: %1$s</string>
     <string name="voice_run_recommendation">Set up recommended service (one time)</string>
     <string name="voice_run_recommendation_summary">Chooses a service for you once. Cloud and self-hosted services are never chosen automatically.</string>
     <string name="voice_choose_current">Choose the current service</string>

@@ -74,8 +74,12 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                     service.toast(service.getString(R.string.voice_input_error, error.code))
                 is VoiceError.Capture ->
                     service.toast(service.getString(R.string.voice_capture_error, error.detail))
-                is VoiceError.Service ->
+                is VoiceError.Service -> {
+                    selectionStore.lastUsedService.takeIf { it.isNotEmpty() }?.let {
+                        selectionStore.lastError = it to error.detail
+                    }
                     service.toast(service.getString(R.string.voice_asr_error, error.detail))
+                }
             }
         }
     })
@@ -270,6 +274,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         }
         val selected = (resolved as? AsrResolution.Ready)?.service
         selectionStore.lastUsedService = selected?.key ?: ""
+        selectionStore.lastError = null
         // D035: a selected external service may fall back to a production Local model only
         val fallbackKind = fallbackTarget(selected, selectionStore.load(), localStatus())
         val token = inputFlow.begin() ?: return
