@@ -21,7 +21,10 @@ import java.net.URI
  */
 internal enum class SelfHostedProtocol(val key: String) {
     /** sherpa-onnx streaming WebSocket server (float32 samples, `Done`, JSON results). */
-    SherpaOnnx("sherpa-onnx");
+    SherpaOnnx("sherpa-onnx"),
+
+    /** FunASR real-time server in 2pass mode (online Paraformer + offline correction). */
+    FunAsr2Pass("funasr-2pass");
 
     companion object {
         fun parse(key: String) = entries.firstOrNull { it.key == key }

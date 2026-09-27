@@ -396,6 +396,7 @@
     <string name="voice_enabled">On</string>
     <string name="voice_disabled">Off</string>
     <string name="voice_selfhosted_sherpa">sherpa-onnx streaming server</string>
+    <string name="voice_selfhosted_funasr">FunASR 2-pass server</string>
     <string name="voice_selfhosted_server">Self-hosted server</string>
     <string name="voice_selfhosted_add">Add a self-hosted server</string>
     <string name="voice_selfhosted_note">Your audio is sent to the server you enter. Supported: the sherpa-onnx streaming server and the FunASR real-time server (2pass mode).</string>
