@@ -14,7 +14,10 @@ import org.junit.Test
 
 class VoiceInputFlowTest {
 
-    private class FakeBackend : VoiceBackend {
+    /** [onStart] lets a test emit events synchronously from [start], as SystemAsrBackend can. */
+    private class FakeBackend(
+        private val onStart: ((Long, VoiceBackend.Events) -> Unit)? = null
+    ) : VoiceBackend {
         var startedToken: Long? = null
         var startedLanguage: String? = null
         var stops = 0
@@ -23,6 +26,7 @@ class VoiceInputFlowTest {
         override fun start(token: Long, languageTag: String, events: VoiceBackend.Events) {
             startedToken = token
             startedLanguage = languageTag
+            onStart?.invoke(token, events)
         }
 
         override fun stop() {
@@ -170,6 +174,53 @@ class VoiceInputFlowTest {
         assertEquals(VoiceInputSession.State.Listening, flow.state)
         flow.onFinal(second, "fresh")
         assertEquals(listOf("fresh"), output.commits)
+    }
+
+    @Test
+    fun synchronousStartErrorReturnsToIdle() {
+        val token = flow.begin()!!
+        val backend = FakeBackend { t, events -> events.onError(t, VoiceError.Silent) }
+        assertTrue(flow.launch(token, "", backend))
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+        assertEquals(1, backend.cancels)
+        // Silent reaches the output as-is; VoiceInputComponent presents nothing for it
+        assertEquals(listOf<VoiceError>(VoiceError.Silent), output.errors)
+        assertTrue(output.commits.isEmpty())
+
+        val next = flow.begin()
+        assertNotNull(next)
+        assertEquals(VoiceInputSession.State.Starting, flow.state)
+    }
+
+    @Test
+    fun cancelWhileBackendIsStartingIgnoresLateEvents() {
+        val token = flow.begin()!!
+        val backend = FakeBackend()
+        assertTrue(flow.launch(token, "", backend))
+        // backend has not reported onStarted yet (asynchronous capture start)
+        assertTrue(flow.cancel())
+        assertEquals(1, backend.cancels)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+
+        flow.onStarted(token)
+        flow.onPartial(token, "late")
+        flow.onFinal(token, "late")
+        flow.onError(token, VoiceError.System(3))
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+        assertEquals(1, backend.cancels)
+        assertTrue(output.composing.isEmpty())
+        assertTrue(output.commits.isEmpty())
+        assertTrue(output.errors.isEmpty())
+    }
+
+    @Test
+    fun duplicateErrorIsReportedOnce() {
+        val (token, backend) = startListening()
+        flow.onError(token, VoiceError.System(7))
+        flow.onError(token, VoiceError.System(7))
+        assertEquals(listOf<VoiceError>(VoiceError.System(7)), output.errors)
+        assertEquals(1, backend.cancels)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
     }
 
     @Test
