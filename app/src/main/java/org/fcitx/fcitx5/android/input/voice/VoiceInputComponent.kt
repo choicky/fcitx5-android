@@ -43,7 +43,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     // loaded Local ASR models outlive single sessions; released when this component closes
     private val localAsrCache = LocalAsrRecognizerCache { model, threads ->
-        LocalAsrEngines.load(model, localAsrModelDir(model)!!, threads)
+        LocalAsrEngines.load(model, localAsrModelDir(model), threads)
     }
 
     private val inputFlow = VoiceInputFlow(object : VoiceInputFlow.Output {
@@ -108,7 +108,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     private fun localStatus(): LocalStatus {
         val model = selectionStore.localModel
         val filesPresent = model != null &&
-                localAsrModelDir(model)?.let { model.missingFiles(it).isEmpty() } == true
+                model.missingFiles(localAsrModelDir(model)).isEmpty()
         return LocalStatus(LocalAsrEngines.AVAILABLE, model, filesPresent)
     }
 
@@ -138,8 +138,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         )
     }
 
-    private fun localAsrModelDir(model: LocalAsrModel) =
-        LocalAsrBackend.modelDir(service.getExternalFilesDir(null), model)
+    private fun localAsrModelDir(model: LocalAsrModel): java.io.File = LocalModels.dir(service, model)
 
     internal val state: VoiceInputSession.State
         get() = inputFlow.state
