@@ -5,6 +5,7 @@
 
 package org.fcitx.fcitx5.android.input.voice
 
+import android.os.Debug
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -210,7 +211,9 @@ internal class LocalAsrBackend(
             partials = partials,
             decodeMillis = decodeNanos / 1_000_000,
             stopToFinalMillis = stopRequestedAt.takeIf { it > 0 }?.let { finalAt - it },
-            finalChars = text.length
+            finalChars = text.length,
+            // measured after stop-to-final, so it does not skew the latency above
+            processPssMb = runCatching { Debug.getPss() / 1024 }.getOrNull()
         )
         Timber.i("Local ASR result: ${metrics.summary()} ${stats.summary()}")
         post { events.onFinal(token, text) }

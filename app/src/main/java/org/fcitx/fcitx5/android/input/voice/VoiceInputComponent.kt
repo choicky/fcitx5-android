@@ -171,7 +171,11 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         inputFlow.close()
         stateListeners.clear()
         levelListeners.clear()
-        // may wait for a decode still running on the cancelled session; keep it off the main thread
+        releaseLocalAsr()
+    }
+
+    /** May wait for a decode still running on a cancelled session; kept off the main thread. */
+    private fun releaseLocalAsr() {
         thread(name = "local-asr-release") { localAsrCache.clear() }
     }
 
@@ -184,6 +188,8 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             return
         }
         val backend = configuredBackend
+        // a cached Local ASR model (about 1 GB for FunASR Nano) is not kept once Local is off
+        if (backend !is VoiceBackendKind.LocalAsr) releaseLocalAsr()
         if (!backend.isAvailable()) {
             service.toast(R.string.voice_input_unavailable)
             return

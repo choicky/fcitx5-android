@@ -32,6 +32,24 @@ class LocalAsrTest {
     }
 
     @Test
+    fun funAsrNanoChecksTheFilesSherpaValidates() {
+        // sherpa-onnx 1.13.8 OfflineFunASRNanoModelConfig::Validate() requires all three
+        // tokenizer files; a partial tokenizer dir must be caught before the native load
+        val dir = Files.createTempDirectory("local-asr").toFile()
+        try {
+            val model = LocalAsrModel.FunAsrNano
+            listOf("vocab.json", "merges.txt", "tokenizer.json").forEach {
+                assertTrue("Qwen3-0.6B/$it" in model.requiredFiles)
+            }
+            model.requiredFiles.forEach { dir.resolve(it).apply { parentFile!!.mkdirs(); writeText("x") } }
+            dir.resolve("Qwen3-0.6B/merges.txt").delete()
+            assertEquals(listOf("Qwen3-0.6B/merges.txt"), model.missingFiles(dir))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun streamingDecodesWhileAudioArrivesAndFlushesOnFinish() {
         val calls = mutableListOf<String>()
         var text = ""
@@ -151,6 +169,8 @@ class LocalAsrTest {
         assertEquals(0.25, m.rtf, 1e-9)
         assertTrue(m.summary().contains("load=cached"))
         assertTrue(m.summary().contains("rtf=0.250"))
+        assertTrue(m.summary().contains("pss=-"))
+        assertTrue(m.copy(processPssMb = 1320).summary().contains("pss=1320MB"))
         assertEquals(0.0, m.copy(audioMillis = 0).rtf, 0.0)
     }
 }
