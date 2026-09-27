@@ -25,6 +25,8 @@ import java.util.concurrent.TimeUnit
 internal class NetworkAsrBackend(
     private val scope: CoroutineScope,
     private val label: String,
+    /** How long to wait for the final result after the end of input. */
+    private val finalTimeoutMs: Long = DEFAULT_FINAL_TIMEOUT_MS,
     private val newClient: (NetworkAsrClient.Listener) -> NetworkAsrClient
 ) : VoiceBackend {
 
@@ -44,7 +46,7 @@ internal class NetworkAsrBackend(
     private var partials = 0
 
     private val finalTimeout = Runnable {
-        fail("no final result within ${FINAL_TIMEOUT_MS}ms")
+        fail("no final result within ${finalTimeoutMs}ms")
     }
 
     override fun start(token: Long, languageTag: String, events: VoiceBackend.Events) {
@@ -68,7 +70,11 @@ internal class NetworkAsrBackend(
             override fun onFailure(detail: String) = post { fail(detail) }
         })
         client = session
-        session.connect()
+        // a malformed endpoint is a failure of this session, not a crash
+        runCatching { session.connect() }.onFailure {
+            post { fail("${it.javaClass.simpleName}: ${it.message}") }
+            return
+        }
         job = scope.launch(Dispatchers.IO) { stream(session, token, events) }
     }
 
@@ -115,7 +121,7 @@ internal class NetworkAsrBackend(
             return
         }
         session.finishInput()
-        post { if (!closed) mainHandler.postDelayed(finalTimeout, FINAL_TIMEOUT_MS) }
+        post { if (!closed) mainHandler.postDelayed(finalTimeout, finalTimeoutMs) }
     }
 
     private fun fail(detail: String) {
@@ -139,7 +145,10 @@ internal class NetworkAsrBackend(
     }
 
     companion object {
-        private const val FINAL_TIMEOUT_MS = 8_000L
+        const val DEFAULT_FINAL_TIMEOUT_MS = 8_000L
+
+        /** A self-hosted CPU server may need longer for its offline pass on long speech. */
+        const val SELF_HOSTED_FINAL_TIMEOUT_MS = 20_000L
         private const val MAX_SESSION_MS = 60_000L
 
         /** Shared by the network clients. */

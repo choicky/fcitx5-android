@@ -400,6 +400,7 @@
     <string name="voice_tencent_engine_zh">16k_zh — standard Chinese</string>
     <string name="voice_tencent_engine_hy">Hy-ASR-3.0-preview — internal trial, some features unsupported</string>
     <string name="voice_credentials_incomplete">Not saved: a required field is missing</string>
+    <string name="voice_credentials_save_failed">Could not store the credentials securely (%1$s)</string>
     <string name="voice_selfhosted_unnamed">Self-hosted server</string>
     <string name="voice_instance_missing">The selected self-hosted server was removed. Choose another service in Voice input settings.</string>
     <string name="voice_endpoint_invalid">The server address must start with wss:// and include a host</string>
