@@ -87,6 +87,27 @@ internal fun resolveAsrProvider(
     }
 }
 
+/** What tapping a voice trigger does next. */
+internal sealed interface VoiceStartStep {
+    data class Start(val backend: VoiceBackendKind) : VoiceStartStep
+    data object RequestSystemAuthorization : VoiceStartStep
+    data object RequestRecordAudio : VoiceStartStep
+    data class Unavailable(val resolution: AsrResolution) : VoiceStartStep
+}
+
+/**
+ * The provider is resolved before RECORD_AUDIO is requested: the System ASR disclosure comes
+ * before any microphone prompt, and nothing asks for the microphone when no service is usable.
+ */
+internal fun voiceStartStep(resolution: AsrResolution, recordAudioGranted: Boolean) =
+    when (resolution) {
+        is AsrResolution.Ready ->
+            if (recordAudioGranted) VoiceStartStep.Start(resolution.backend)
+            else VoiceStartStep.RequestRecordAudio
+        AsrResolution.NeedsSystemAuthorization -> VoiceStartStep.RequestSystemAuthorization
+        else -> VoiceStartStep.Unavailable(resolution)
+    }
+
 /**
  * Debug-only PoC backends that bypass the formal provider, in this order: Doubao Direct, then
  * the capture probe. Release builds never override.

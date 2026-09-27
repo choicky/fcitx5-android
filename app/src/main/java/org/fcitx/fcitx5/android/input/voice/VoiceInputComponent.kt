@@ -186,33 +186,31 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     private fun start() {
         if (passwordField) return
-        if (service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            requestRecordAudioPermission()
-            return
-        }
         val resolved = resolution
         // a cached Local ASR model (about 1 GB for FunASR Nano) is not kept once Local is off
         if ((resolved as? AsrResolution.Ready)?.backend !is VoiceBackendKind.LocalAsr) {
             releaseLocalAsr()
         }
-        val backend = when (resolved) {
-            is AsrResolution.Ready -> resolved.backend
-            AsrResolution.NeedsSystemAuthorization -> {
+        val recordAudioGranted = service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        val backend = when (val step = voiceStartStep(resolved, recordAudioGranted)) {
+            is VoiceStartStep.Start -> step.backend
+            VoiceStartStep.RequestSystemAuthorization -> {
                 requestSystemAsrAuthorization()
                 return
             }
-            AsrResolution.LocalUnavailable -> {
-                service.toast(R.string.voice_local_unavailable)
+            VoiceStartStep.RequestRecordAudio -> {
+                requestRecordAudioPermission()
                 return
             }
-            AsrResolution.SystemUnavailable -> {
-                service.toast(R.string.voice_input_unavailable)
-                return
-            }
-            AsrResolution.NoProvider -> {
-                service.toast(R.string.voice_no_provider)
+            is VoiceStartStep.Unavailable -> {
+                service.toast(
+                    when (step.resolution) {
+                        AsrResolution.LocalUnavailable -> R.string.voice_local_unavailable
+                        AsrResolution.SystemUnavailable -> R.string.voice_input_unavailable
+                        else -> R.string.voice_no_provider
+                    }
+                )
                 return
             }
         }
