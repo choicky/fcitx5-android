@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.input.keyboard
 
+import org.fcitx.fcitx5.android.input.voice.VoiceInputSession.State
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -89,5 +90,40 @@ class SpaceVoiceTriggerTest {
         assertEquals(listOf(SpaceVoiceCommand.Start, SpaceVoiceCommand.Cancel), cancelled)
         assertFalse(SpaceVoiceCommand.Stop in cancelled)
         assertTrue(cancelled.count { it == SpaceVoiceCommand.Cancel } == 1)
+    }
+
+    @Test
+    fun cancelArmsAndDisarmsWhileHeld() {
+        val tracker = SpaceLongPressTracker(threshold)
+        tracker.onDown(100f)
+        assertNull(tracker.onMove(90f)) // still below the threshold: no change
+        assertEquals(true, tracker.onMove(100f - threshold))
+        assertNull(tracker.onMove(0f)) // already armed
+        assertEquals(false, tracker.onMove(95f)) // moved back down
+        assertEquals(false, tracker.onUp(95f, longPressTriggered = true))
+        // the next press starts disarmed
+        tracker.onDown(50f)
+        assertNull(tracker.onMove(50f))
+    }
+
+    @Test
+    fun spaceHintFollowsSessionAndGesture() {
+        assertEquals(SpaceVoiceHint.None, spaceVoiceHint(State.Idle, spaceHeld = true, cancelArmed = true))
+        assertEquals(SpaceVoiceHint.ReleaseToFinish, spaceVoiceHint(State.Starting, spaceHeld = true, cancelArmed = false))
+        assertEquals(SpaceVoiceHint.ReleaseToFinish, spaceVoiceHint(State.Listening, spaceHeld = true, cancelArmed = false))
+        assertEquals(SpaceVoiceHint.ReleaseToCancel, spaceVoiceHint(State.Listening, spaceHeld = true, cancelArmed = true))
+        // mic-button sessions share the state but have no held Space
+        assertEquals(SpaceVoiceHint.Listening, spaceVoiceHint(State.Listening, spaceHeld = false, cancelArmed = false))
+        // after a normal release, waiting for the final result
+        assertEquals(SpaceVoiceHint.Processing, spaceVoiceHint(State.Stopping, spaceHeld = false, cancelArmed = false))
+    }
+
+    @Test
+    fun releaseFlowsReturnToIdleUi() {
+        // normal release: held ends, the session stops, then the final result arrives
+        assertEquals(SpaceVoiceHint.Processing, spaceVoiceHint(State.Stopping, spaceHeld = false, cancelArmed = false))
+        assertEquals(SpaceVoiceHint.None, spaceVoiceHint(State.Idle, spaceHeld = false, cancelArmed = false))
+        // swipe-up release: cancel returns the session to Idle directly, no Processing
+        assertEquals(SpaceVoiceHint.None, spaceVoiceHint(State.Idle, spaceHeld = false, cancelArmed = false))
     }
 }

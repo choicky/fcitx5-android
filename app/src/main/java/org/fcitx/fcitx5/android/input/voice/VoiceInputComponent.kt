@@ -44,7 +44,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         override fun commit(text: String) = service.commitText(text)
 
         override fun stateChanged(state: VoiceInputSession.State) {
-            stateListener?.invoke(state)
+            stateListeners.forEach { it(state) }
         }
 
         override fun reportError(error: VoiceError) {
@@ -63,26 +63,48 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     private var languageCode = ""
     private var passwordField = false
-    private var stateListener: ((VoiceInputSession.State) -> Unit)? = null
+    private val stateListeners = mutableListOf<(VoiceInputSession.State) -> Unit>()
 
     val toggleCallback = View.OnClickListener { toggle() }
 
-    // Phase 4B debug switches; release builds always use System ASR
-    private val useDoubaoAsr: Boolean
-        get() = BuildConfig.DEBUG && voiceDoubaoAsr
+    private enum class Backend { System, CaptureProbe, DoubaoAsr }
 
-    private val useCaptureProbe: Boolean
-        get() = BuildConfig.DEBUG && voiceCaptureProbe && !voiceDoubaoAsr
+    /**
+     * The backend a session would use. Its availability, not System ASR's, decides whether the
+     * trigger is offered; release builds currently only have System ASR. Phase 4B debug switches
+     * select a Direct backend.
+     */
+    private val configuredBackend: Backend
+        get() = when {
+            BuildConfig.DEBUG && voiceDoubaoAsr -> Backend.DoubaoAsr
+            BuildConfig.DEBUG && voiceCaptureProbe -> Backend.CaptureProbe
+            else -> Backend.System
+        }
 
-    internal fun setStateListener(listener: (VoiceInputSession.State) -> Unit) {
-        stateListener = listener
+    private fun Backend.isAvailable() = when (this) {
+        Backend.System -> SpeechRecognizer.isRecognitionAvailable(service)
+        Backend.CaptureProbe, Backend.DoubaoAsr -> true
+    }
+
+    private fun Backend.create(): VoiceBackend = when (this) {
+        Backend.System -> SystemAsrBackend(service)
+        Backend.CaptureProbe -> CaptureProbeBackend(service, service.lifecycleScope)
+        Backend.DoubaoAsr ->
+            DoubaoAsrBackend(service.lifecycleScope, DoubaoCredentials.fromBuildConfig())
+    }
+
+    internal val state: VoiceInputSession.State
+        get() = inputFlow.state
+
+    /** Every voice UI (toolbar button, Space key) follows the one shared session. */
+    internal fun addStateListener(listener: (VoiceInputSession.State) -> Unit) {
+        stateListeners += listener
         listener(inputFlow.state)
     }
 
     fun shouldShowVoiceInput(capFlags: CapabilityFlags): Boolean {
         passwordField = capFlags.has(CapabilityFlag.Password)
-        return showVoiceInputButton && !passwordField &&
-            (useDoubaoAsr || useCaptureProbe || SpeechRecognizer.isRecognitionAvailable(service))
+        return showVoiceInputButton && !passwordField && configuredBackend.isAvailable()
     }
 
     override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: CapabilityFlags) {
@@ -119,7 +141,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     fun close() {
         inputFlow.close()
-        stateListener = null
+        stateListeners.clear()
     }
 
     private fun start() {
@@ -130,9 +152,8 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             requestRecordAudioPermission()
             return
         }
-        val doubaoAsr = useDoubaoAsr
-        val captureProbe = useCaptureProbe
-        if (!doubaoAsr && !captureProbe && !SpeechRecognizer.isRecognitionAvailable(service)) {
+        val backend = configuredBackend
+        if (!backend.isAvailable()) {
             service.toast(R.string.voice_input_unavailable)
             return
         }
@@ -142,12 +163,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             // implementation clears its context and updates preedit without committing it.
             service.prepareForVoiceInput().join()
             yield()
-            val backend = when {
-                doubaoAsr -> DoubaoAsrBackend(service.lifecycleScope, DoubaoCredentials.fromBuildConfig())
-                captureProbe -> CaptureProbeBackend(service, service.lifecycleScope)
-                else -> SystemAsrBackend(service)
-            }
-            inputFlow.launch(token, languageCode, backend)
+            inputFlow.launch(token, languageCode, backend.create())
         }
     }
 
