@@ -325,6 +325,7 @@
     <string name="voice_state_ready">可用</string>
     <string name="voice_state_needs_authorization">首次使用前需要你的授权</string>
     <string name="voice_last_used">最近一次实际使用：%1$s</string>
+    <string name="voice_last_error">上次失败：%1$s</string>
     <string name="voice_run_recommendation">一键推荐（仅首次）</string>
     <string name="voice_run_recommendation_summary">为你选定一个服务，只运行一次；不会自动选择云端或自托管服务。</string>
     <string name="voice_choose_current">选择当前服务</string>

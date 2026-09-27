@@ -41,9 +41,11 @@ class FunAsr2PassInteropTest {
         client.connect()
         assertTrue(opened.await(10, TimeUnit.SECONDS))
         samples.toList().chunked(320).forEach { client.send(it.toShortArray(), it.size); Thread.sleep(20) }
+        val stopAt = System.nanoTime()
         client.finishInput()
         assertTrue("no final", done.await(120, TimeUnit.SECONDS))
-        println("partials=$partials final=$final failure=$failure")
+        val stopToFinalMs = (System.nanoTime() - stopAt) / 1_000_000
+        println("audio=${samples.size / 16}ms stopToFinal=${stopToFinalMs}ms partials=$partials final=$final failure=$failure")
         assertTrue(failure == null && !final.isNullOrBlank())
     }
 }

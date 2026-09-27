@@ -92,4 +92,15 @@ class VoicePrefsTest {
             assertEquals(VoiceSelection(null, emptySet(), true), load())
         }
     }
+
+    @Test
+    fun lastErrorRoundTripsAndIsBounded() {
+        val values = mutableMapOf<String, Any>()
+        store(values).lastError = "qwen" to "InvalidApiKey: Invalid API-key provided."
+        assertEquals("qwen" to "InvalidApiKey: Invalid API-key provided.", store(values).lastError)
+        store(values).lastError = "tencent" to "x".repeat(500)
+        assertEquals(160, store(values).lastError!!.second.length)
+        store(values).lastError = null
+        assertEquals(null, store(values).lastError)
+    }
 }
