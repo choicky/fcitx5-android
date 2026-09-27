@@ -63,7 +63,24 @@ internal data class ModelCatalogEntry(
             downloadBase = "https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30/resolve/6f16bd378457e13f36ccf3910df9017f96c346fb"
         )
 
-        val entries = listOf(ZipformerZh, FunAsrNano)
+        /**
+         * C: Apache-2.0 on the sherpa-onnx mirror and on the upstream
+         * pfluo/k2fsa-zipformer-chinese-english-mixed; training data not published.
+         * Hashes: HF csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20 @ 98590b7e.
+         */
+        val ZipformerBilingual = ModelCatalogEntry(
+            LocalAsrModel.ZipformerBilingual,
+            version = "2023-02-20 (HF 98590b7e)",
+            files = listOf(
+                ModelFile("encoder-epoch-99-avg-1.int8.onnx", 181895032, "8fa764187a261844f859d7143ebaa563af5d10adfece4c18a8f414c88cba2a9b"),
+                ModelFile("decoder-epoch-99-avg-1.onnx", 13876452, "2e3b5ec371f8899ee6acd829fd753ba45772df57a91bdf37cde3136354e7db7d"),
+                ModelFile("joiner-epoch-99-avg-1.int8.onnx", 3228404, "1ed689c5ed19dbaa725d9d191bb4822b5f4855a39e1ffd28cbc1f340d25b2ee0"),
+                ModelFile("tokens.txt", 56317, "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3")
+            ),
+            downloadBase = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/98590b7ed6443e77b714204da2757d75e1a642f4"
+        )
+
+        val entries = listOf(ZipformerZh, FunAsrNano, ZipformerBilingual)
 
         fun of(model: LocalAsrModel) = entries.first { it.model == model }
     }

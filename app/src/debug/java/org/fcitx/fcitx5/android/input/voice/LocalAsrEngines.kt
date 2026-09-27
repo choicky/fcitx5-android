@@ -22,22 +22,36 @@ internal object LocalAsrEngines {
 
     fun load(model: LocalAsrModel, modelDir: File, threads: Int): LocalAsrRecognizer =
         when (model) {
-            LocalAsrModel.ZipformerZh -> zipformer(modelDir, threads)
+            LocalAsrModel.ZipformerZh -> zipformer(
+                modelDir, threads, "encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "zipformer2"
+            )
             LocalAsrModel.FunAsrNano -> funAsrNano(modelDir, threads)
+            // model type left empty: sherpa-onnx reads it from the model metadata
+            LocalAsrModel.ZipformerBilingual -> zipformer(
+                modelDir, threads, "encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.onnx",
+                "joiner-epoch-99-avg-1.int8.onnx", ""
+            )
         }
 
-    private fun zipformer(dir: File, threads: Int): LocalAsrRecognizer {
+    private fun zipformer(
+        dir: File,
+        threads: Int,
+        encoder: String,
+        decoder: String,
+        joiner: String,
+        modelType: String
+    ): LocalAsrRecognizer {
         val recognizer = OnlineRecognizer(
             config = OnlineRecognizerConfig(
                 modelConfig = OnlineModelConfig(
                     transducer = OnlineTransducerModelConfig(
-                        encoder = dir.resolve("encoder.int8.onnx").path,
-                        decoder = dir.resolve("decoder.onnx").path,
-                        joiner = dir.resolve("joiner.int8.onnx").path
+                        encoder = dir.resolve(encoder).path,
+                        decoder = dir.resolve(decoder).path,
+                        joiner = dir.resolve(joiner).path
                     ),
                     tokens = dir.resolve("tokens.txt").path,
                     numThreads = threads,
-                    modelType = "zipformer2"
+                    modelType = modelType
                 ),
                 // push-to-talk: the user ends the utterance, not the endpoint detector
                 enableEndpoint = false

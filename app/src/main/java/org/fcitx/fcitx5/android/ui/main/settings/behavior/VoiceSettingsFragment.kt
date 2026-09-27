@@ -116,6 +116,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         when (model) {
             LocalAsrModel.ZipformerZh -> R.string.voice_model_a
             LocalAsrModel.FunAsrNano -> R.string.voice_model_b
+            LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c
         }
     )
 
@@ -123,6 +124,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         when (model) {
             LocalAsrModel.ZipformerZh -> R.string.voice_model_a_note
             LocalAsrModel.FunAsrNano -> R.string.voice_model_b_note
+            LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c_note
         }
     )
 
@@ -418,7 +420,13 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private fun confirmDownload(entry: ModelCatalogEntry) {
         AlertDialog.Builder(requireContext())
             .setTitle(modelLabel(entry.model))
-            .setMessage(getString(R.string.voice_model_download_confirm, megabytes(entry.totalBytes)))
+            .setMessage(
+                getString(
+                    if (entry.model == LocalAsrModel.ZipformerBilingual) R.string.voice_model_download_confirm_c
+                    else R.string.voice_model_download_confirm,
+                    megabytes(entry.totalBytes)
+                )
+            )
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 ModelJobs.download(requireContext(), entry)
                 render()
