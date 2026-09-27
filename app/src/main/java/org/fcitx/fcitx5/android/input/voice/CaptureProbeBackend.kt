@@ -60,19 +60,22 @@ internal class CaptureProbeBackend(
         var failure: String? = null
         var capture: AudioCapture? = null
         try {
-            capture = AudioCapture.open().apply { start() }
+            // own the recorder before starting it, so a failed start is still released below
+            val opened = AudioCapture.open()
+            capture = opened
+            opened.start()
             post { events.onStarted(token) }
             val buffer = ShortArray(AudioCapture.SAMPLE_RATE / READS_PER_SECOND)
             var nextSilenceCheck = 0L
             while (isActive && !stopRequested) {
-                val count = capture.read(buffer)
+                val count = opened.read(buffer)
                 if (count < 0) {
                     failure = "AudioRecord.read=$count"
                     break
                 }
                 stats.accept(buffer, count)
                 if (stats.samples >= nextSilenceCheck) {
-                    stats.recordSilenced(capture.isClientSilenced())
+                    stats.recordSilenced(opened.isClientSilenced())
                     nextSilenceCheck = stats.samples + AudioCapture.SAMPLE_RATE / 4
                 }
                 if (SystemClock.elapsedRealtime() - startedAt > MAX_SESSION_MS) break
