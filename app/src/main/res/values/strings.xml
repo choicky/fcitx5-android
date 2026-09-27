@@ -295,6 +295,8 @@
     <string name="stop_voice_input">Stop voice input</string>
     <string name="voice_input_unavailable">No speech recognition service is available</string>
     <string name="voice_input_error">Voice input failed (error %1$d)</string>
+    <string name="voice_capture_error">Microphone capture failed: %1$s</string>
+    <string name="voice_capture_probe">Voice input: microphone capture probe (debug)</string>
     <string name="hide_keyboard">Hide keyboard</string>
     <string name="private_mode">Private mode (tap to toggle toolbar)</string>
     <string name="hide_toolbar">Hide toolbar</string>

@@ -12,7 +12,7 @@ internal class VoiceInputSession {
     }
 
     enum class StopAction {
-        None, CancelPendingStart, StopRecognizer
+        None, CancelPendingStart, StopBackend
     }
 
     var state: State = State.Idle
@@ -27,7 +27,7 @@ internal class VoiceInputSession {
         return generation
     }
 
-    fun onRecognizerStarted(token: Long): Boolean {
+    fun onBackendStarted(token: Long): Boolean {
         if (token != generation || state != State.Starting) return false
         state = State.Listening
         return true
@@ -46,7 +46,7 @@ internal class VoiceInputSession {
         }
         State.Listening -> {
             state = State.Stopping
-            StopAction.StopRecognizer
+            StopAction.StopBackend
         }
         State.Idle, State.Stopping -> StopAction.None
     }
