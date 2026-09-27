@@ -100,7 +100,8 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             local = localStatus(),
             systemAuthorization = selectionStore.systemAuthorization,
             systemAvailable = { SpeechRecognizer.isRecognitionAvailable(service) },
-            configured = { it == AsrServiceId.Doubao && credentials.has(DoubaoCredentials.PROVIDER) }
+            // plain ws:// self-hosted endpoints are only allowed in debug builds
+            external = selectionStore.externalServices(credentials, allowCleartext = BuildConfig.DEBUG)
         )
 
     /** The configured Local model and whether its files are in place; nothing is loaded. */
@@ -121,6 +122,13 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             service.lifecycleScope,
             DoubaoCredentials.fromStore(credentials.read(DoubaoCredentials.PROVIDER))
         )
+        is VoiceBackendKind.SelfHosted -> when (instance.protocol) {
+            SelfHostedProtocol.SherpaOnnx -> SherpaOnnxServerBackend(
+                service.lifecycleScope,
+                instance,
+                credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
+            )
+        }
         is VoiceBackendKind.LocalAsr -> LocalAsrBackend(
             service.lifecycleScope,
             model,
@@ -257,6 +265,9 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 UnavailableReason.NoLocalModel -> R.string.voice_local_no_model
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable
                 UnavailableReason.MissingCredentials -> R.string.voice_missing_credentials
+                UnavailableReason.InstanceMissing -> R.string.voice_instance_missing
+                UnavailableReason.InvalidEndpoint -> R.string.voice_endpoint_invalid
+                UnavailableReason.CleartextEndpoint -> R.string.voice_endpoint_cleartext
             }
             else -> R.string.voice_no_provider
         }

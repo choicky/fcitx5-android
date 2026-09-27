@@ -32,10 +32,24 @@ internal sealed interface AsrServiceId {
         override val external = true
     }
 
+    /** A user-defined self-hosted server instance. */
+    data class SelfHosted(val instanceId: String) : AsrServiceId {
+        override val key get() = PREFIX + instanceId
+        override val external get() = true
+    }
+
     companion object {
+        private const val PREFIX = "selfhosted:"
+
+        /** The fixed services; self-hosted instances are listed by their store. */
         val entries: List<AsrServiceId> = listOf(System, Local, Doubao)
 
-        fun parse(key: String): AsrServiceId? = entries.firstOrNull { it.key == key }
+        fun parse(key: String): AsrServiceId? =
+            if (key.startsWith(PREFIX)) {
+                key.removePrefix(PREFIX).takeIf(SelfHostedInstance::isValidId)?.let(::SelfHosted)
+            } else {
+                entries.firstOrNull { it.key == key }
+            }
     }
 }
 
@@ -48,6 +62,9 @@ internal sealed interface VoiceBackendKind {
 
     /** Product Doubao with the user's stored credentials (Direct BYOK). */
     data object Doubao : VoiceBackendKind
+
+    /** A self-hosted server; its token is read from the credential store when starting. */
+    data class SelfHosted(val instance: SelfHostedInstance) : VoiceBackendKind
     data class LocalAsr(val model: LocalAsrModel) : VoiceBackendKind
 }
 
@@ -90,7 +107,7 @@ internal data class LocalStatus(
 
 internal enum class UnavailableReason {
     Disabled, NoSystemRecognizer, NoLocalRuntime, NoLocalModel, LocalModelFilesMissing,
-    MissingCredentials
+    MissingCredentials, InstanceMissing, InvalidEndpoint, CleartextEndpoint
 }
 
 /** What the one-time recommendation would do (D034). It never picks a network service. */
@@ -157,8 +174,7 @@ internal fun resolveCurrentService(
     local: LocalStatus,
     systemAuthorization: SystemAsrAuthorization,
     systemAvailable: () -> Boolean,
-    /** Whether an external service has its credentials; they are only read when starting. */
-    configured: (AsrServiceId) -> Boolean = { false }
+    external: ExternalServices = ExternalServices.None
 ): AsrResolution {
     val current = selection.current
         ?: return if (selection.recommendationDone) AsrResolution.NoService
@@ -188,8 +204,19 @@ internal fun resolveCurrentService(
             }
         }
         AsrServiceId.Doubao ->
-            if (configured(current)) AsrResolution.Ready(current, VoiceBackendKind.Doubao)
+            if (external.configured(current)) AsrResolution.Ready(current, VoiceBackendKind.Doubao)
             else AsrResolution.CurrentUnavailable(current, UnavailableReason.MissingCredentials)
+        is AsrServiceId.SelfHosted -> {
+            val instance = external.instance(current.instanceId)
+                ?: return AsrResolution.CurrentUnavailable(current, UnavailableReason.InstanceMissing)
+            when (endpointProblem(instance.url, external.allowCleartext)) {
+                null -> AsrResolution.Ready(current, VoiceBackendKind.SelfHosted(instance))
+                EndpointProblem.Invalid ->
+                    AsrResolution.CurrentUnavailable(current, UnavailableReason.InvalidEndpoint)
+                EndpointProblem.Cleartext ->
+                    AsrResolution.CurrentUnavailable(current, UnavailableReason.CleartextEndpoint)
+            }
+        }
     }
 }
 
@@ -233,9 +260,9 @@ internal fun resolveVoiceBackend(
     local: LocalStatus,
     systemAuthorization: SystemAsrAuthorization,
     systemAvailable: () -> Boolean,
-    configured: (AsrServiceId) -> Boolean = { false }
+    external: ExternalServices = ExternalServices.None
 ): AsrResolution = debugOverride?.let { AsrResolution.Ready(null, it) }
-    ?: resolveCurrentService(selection, local, systemAuthorization, systemAvailable, configured)
+    ?: resolveCurrentService(selection, local, systemAuthorization, systemAvailable, external)
 
 /** The selection after the System ASR disclosure is answered. */
 internal fun VoiceSelection.afterSystemDisclosure(allowed: Boolean): VoiceSelection = when {

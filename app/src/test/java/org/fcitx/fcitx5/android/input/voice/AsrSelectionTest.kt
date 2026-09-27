@@ -42,6 +42,13 @@ class AsrSelectionTest {
         debugOverride: VoiceBackendKind? = null
     ) = resolveVoiceBackend(debugOverride, selection, local, authorization, systemAvailable = { systemAvailable })
 
+    private fun configured(vararg services: AsrServiceId, instances: List<SelfHostedInstance> = emptyList(), cleartext: Boolean = false) =
+        object : ExternalServices {
+            override fun configured(service: AsrServiceId) = service in services
+            override fun instance(id: String) = instances.firstOrNull { it.id == id }
+            override val allowCleartext = cleartext
+        }
+
     /** SpeechRecognizer must not even be queried on these paths (D030). */
     private val systemNotQueried: () -> Boolean = { throw AssertionError("System ASR queried") }
 
@@ -222,11 +229,11 @@ class AsrSelectionTest {
         )
         assertEquals(
             AsrResolution.Ready(AsrServiceId.Doubao, VoiceBackendKind.Doubao),
-            resolveCurrentService(doubao, localReady, NotAsked, systemNotQueried) { it == AsrServiceId.Doubao }
+            resolveCurrentService(doubao, localReady, NotAsked, systemNotQueried, configured(AsrServiceId.Doubao))
         )
         assertEquals(
             AsrResolution.CurrentUnavailable(AsrServiceId.Doubao, UnavailableReason.Disabled),
-            resolveCurrentService(doubao.withEnabled(AsrServiceId.Doubao, false), localReady, Allowed, systemNotQueried) { true }
+            resolveCurrentService(doubao.withEnabled(AsrServiceId.Doubao, false), localReady, Allowed, systemNotQueried, configured(AsrServiceId.Doubao))
         )
     }
 
@@ -249,5 +256,60 @@ class AsrSelectionTest {
             val recommended = migrated.applyRecommendation(recommend(auth) { true })
             assertFalse(recommended.current == AsrServiceId.Doubao)
         }
+    }
+
+    @Test
+    fun selfHostedInstanceResolutionAndEndpointPolicy() {
+        val secure = SelfHostedInstance("a1", "home", SelfHostedProtocol.SherpaOnnx, "wss://asr.example.org/ws")
+        val plain = secure.copy(id = "b2", url = "ws://192.168.1.2:6006")
+        val selection = VoiceSelection(secure.service, setOf(secure.service, plain.service), true)
+        val ext = configured(instances = listOf(secure, plain))
+        assertEquals(
+            AsrResolution.Ready(secure.service, VoiceBackendKind.SelfHosted(secure)),
+            resolveCurrentService(selection, localReady, NotAsked, systemNotQueried, ext)
+        )
+        // plain ws:// is refused unless cleartext is explicitly allowed (debug builds only)
+        val onPlain = selection.copy(current = plain.service)
+        assertEquals(
+            AsrResolution.CurrentUnavailable(plain.service, UnavailableReason.CleartextEndpoint),
+            resolveCurrentService(onPlain, localReady, NotAsked, systemNotQueried, ext)
+        )
+        assertEquals(
+            AsrResolution.Ready(plain.service, VoiceBackendKind.SelfHosted(plain)),
+            resolveCurrentService(onPlain, localReady, NotAsked, systemNotQueried, configured(instances = listOf(plain), cleartext = true))
+        )
+        // a removed instance keeps the saved selection but is unavailable
+        assertEquals(
+            AsrResolution.CurrentUnavailable(secure.service, UnavailableReason.InstanceMissing),
+            resolveCurrentService(selection, localReady, NotAsked, systemNotQueried, configured())
+        )
+    }
+
+    @Test
+    fun endpointValidation() {
+        assertNull(endpointProblem("wss://h:443/path", allowCleartext = false))
+        assertEquals(EndpointProblem.Cleartext, endpointProblem("ws://h", allowCleartext = false))
+        assertNull(endpointProblem("ws://h", allowCleartext = true))
+        assertEquals(EndpointProblem.Invalid, endpointProblem("https://h", allowCleartext = true))
+        assertEquals(EndpointProblem.Invalid, endpointProblem("wss://", allowCleartext = true))
+        assertEquals(EndpointProblem.Invalid, endpointProblem("not a url", allowCleartext = true))
+    }
+
+    @Test
+    fun selfHostedKeysAndInstanceStorage() {
+        val s = AsrServiceId.SelfHosted("abc123")
+        assertEquals(s, AsrServiceId.parse(s.key))
+        assertNull(AsrServiceId.parse("selfhosted:../x"))
+        val list = listOf(SelfHostedInstance("abc123", "家里的服务器", SelfHostedProtocol.SherpaOnnx, "wss://h/ws"))
+        assertEquals(list, SelfHostedInstance.decode(SelfHostedInstance.encode(list)))
+        // unknown protocol entries are dropped, not fatal
+        assertEquals(emptyList<SelfHostedInstance>(), SelfHostedInstance.decode("""[{"id":"x1","protocol":"future","url":"wss://h"}]"""))
+        assertEquals(emptyList<SelfHostedInstance>(), SelfHostedInstance.decode("garbage"))
+    }
+
+    @Test
+    fun selfHostedFallsBackOnlyToProductionLocal() {
+        val s = AsrServiceId.SelfHosted("abc123")
+        assertNull(fallbackTarget(s, VoiceSelection(s, setOf(s, AsrServiceId.Local, AsrServiceId.System), true), localReady))
     }
 }

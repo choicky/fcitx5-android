@@ -7,25 +7,31 @@ package org.fcitx.fcitx5.android.ui.main.settings.behavior
 import android.os.Bundle
 import android.speech.SpeechRecognizer
 import android.text.InputType
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.PreferenceCategory
+import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.voice.AsrResolution
 import org.fcitx.fcitx5.android.input.voice.AsrServiceId
 import org.fcitx.fcitx5.android.input.voice.DoubaoCredentials
+import org.fcitx.fcitx5.android.input.voice.EndpointProblem
 import org.fcitx.fcitx5.android.input.voice.KeystoreSecretCipher
 import org.fcitx.fcitx5.android.input.voice.LocalAsrBackend
 import org.fcitx.fcitx5.android.input.voice.LocalAsrEngines
 import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
 import org.fcitx.fcitx5.android.input.voice.LocalStatus
 import org.fcitx.fcitx5.android.input.voice.Recommendation
+import org.fcitx.fcitx5.android.input.voice.SelfHostedInstance
+import org.fcitx.fcitx5.android.input.voice.SelfHostedProtocol
 import org.fcitx.fcitx5.android.input.voice.SystemAsrAuthorization
 import org.fcitx.fcitx5.android.input.voice.UnavailableReason
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.fcitx.fcitx5.android.input.voice.applyRecommendation
+import org.fcitx.fcitx5.android.input.voice.endpointProblem
 import org.fcitx.fcitx5.android.input.voice.recommend
 import org.fcitx.fcitx5.android.input.voice.resolveCurrentService
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
@@ -67,13 +73,16 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         LocalAsrBackend.modelDir(requireContext().getExternalFilesDir(null), model)
             ?.let { model.missingFiles(it).isEmpty() } == true
 
-    private fun label(service: AsrServiceId) = getString(
-        when (service) {
-            AsrServiceId.System -> R.string.asr_provider_system
-            AsrServiceId.Local -> R.string.asr_provider_local
-            AsrServiceId.Doubao -> R.string.asr_service_doubao
-        }
-    )
+    private fun label(service: AsrServiceId): String = when (service) {
+        AsrServiceId.System -> getString(R.string.asr_provider_system)
+        AsrServiceId.Local -> getString(R.string.asr_provider_local)
+        AsrServiceId.Doubao -> getString(R.string.asr_service_doubao)
+        is AsrServiceId.SelfHosted -> store.instances.firstOrNull { it.id == service.instanceId }
+            ?.name?.ifEmpty { null } ?: getString(R.string.voice_selfhosted_unnamed)
+    }
+
+    private fun external() =
+        store.externalServices(credentials, allowCleartext = BuildConfig.DEBUG)
 
     private fun stateText(resolution: AsrResolution): String = getString(
         when (resolution) {
@@ -86,6 +95,9 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 UnavailableReason.NoLocalModel -> R.string.voice_local_no_model
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable
                 UnavailableReason.MissingCredentials -> R.string.voice_missing_credentials
+                UnavailableReason.InstanceMissing -> R.string.voice_instance_missing
+                UnavailableReason.InvalidEndpoint -> R.string.voice_endpoint_invalid
+                UnavailableReason.CleartextEndpoint -> R.string.voice_endpoint_cleartext
             }
             is AsrResolution.NeedsRecommendation, AsrResolution.NoService -> R.string.voice_current_none
         }
@@ -113,8 +125,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val authorization = store.systemAuthorization
         val resolution =
             resolveCurrentService(
-                selection, localStatus(), authorization, ::systemAvailable,
-                configured = { it == AsrServiceId.Doubao && credentials.has(DoubaoCredentials.PROVIDER) }
+                selection, localStatus(), authorization, ::systemAvailable, external()
             )
 
         screen.addCategory(R.string.voice_current_section) {
@@ -191,6 +202,28 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             ) { editDoubaoCredentials() }
         }
 
+        screen.addCategory(R.string.voice_section_selfhosted) {
+            store.instances.forEach { instance ->
+                val problem = when (endpointProblem(instance.url, BuildConfig.DEBUG)) {
+                    null -> null
+                    EndpointProblem.Invalid -> getString(R.string.voice_endpoint_invalid)
+                    EndpointProblem.Cleartext -> getString(R.string.voice_endpoint_cleartext)
+                }
+                val state = getString(
+                    if (selection.isEnabled(instance.service)) R.string.voice_enabled
+                    else R.string.voice_disabled
+                )
+                val summary = listOfNotNull(
+                    getString(R.string.voice_selfhosted_sherpa), instance.url, state, problem
+                ).joinToString(" · ")
+                addPreference(label(instance.service), summary) { editInstance(instance) }
+            }
+            addPreference(
+                getString(R.string.voice_selfhosted_add),
+                getString(R.string.voice_selfhosted_note)
+            ) { editInstance(null) }
+        }
+
         screen.addCategory(R.string.voice_section_other) {
             addPreference(MySwitchPreference(ctx).apply {
                 key = prefs.voice.showVoiceInputButton.key
@@ -227,7 +260,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     /** Only enabled services can be current; the saved choice is never changed silently. */
     private fun chooseCurrent() {
         val selection = store.load()
-        val enabled = AsrServiceId.entries.filter { selection.isEnabled(it) }
+        val enabled = (AsrServiceId.entries + store.instances.map { it.service })
+            .filter { selection.isEnabled(it) }
         if (enabled.isEmpty()) {
             requireContext().toast(R.string.voice_no_enabled_services)
             return
@@ -326,6 +360,84 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    /**
+     * Add or edit a self-hosted server. Only `wss://` is accepted in release builds; the token
+     * is optional (for a reverse proxy), stored encrypted, and never shown.
+     */
+    private fun editInstance(existing: SelfHostedInstance?) {
+        val ctx = requireContext()
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val storedToken = existing?.let { credentials.read(it.credentialProvider)?.get(SelfHostedInstance.TOKEN) }
+        val name = EditText(ctx).apply {
+            setHint(R.string.voice_selfhosted_name)
+            setText(existing?.name.orEmpty())
+        }
+        val url = EditText(ctx).apply {
+            setHint(R.string.voice_selfhosted_url)
+            setText(existing?.url.orEmpty())
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        }
+        val token = EditText(ctx).apply {
+            setHint(
+                if (storedToken.isNullOrEmpty()) R.string.voice_selfhosted_token
+                else R.string.voice_secret_kept
+            )
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val enabled = CheckBox(ctx).apply {
+            setText(R.string.voice_selfhosted_enable)
+            isChecked = existing?.let { store.load().isEnabled(it.service) } ?: true
+        }
+        val form = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            listOf(name, url, token, enabled).forEach { addView(it) }
+        }
+        val builder = AlertDialog.Builder(ctx)
+            .setTitle(R.string.voice_selfhosted_sherpa)
+            .setMessage(R.string.voice_selfhosted_protocol_hint)
+            .setView(form)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val endpoint = url.text.toString().trim()
+                when (endpointProblem(endpoint, BuildConfig.DEBUG)) {
+                    EndpointProblem.Invalid -> ctx.toast(R.string.voice_endpoint_invalid)
+                    EndpointProblem.Cleartext -> ctx.toast(R.string.voice_endpoint_cleartext)
+                    null -> {
+                        val id = existing?.id ?: newInstanceId()
+                        val instance = SelfHostedInstance(
+                            id, name.text.toString().trim(), SelfHostedProtocol.SherpaOnnx, endpoint
+                        )
+                        store.instances = store.instances.filter { it.id != id } + instance
+                        val newToken = token.text.toString().trim()
+                        if (newToken.isNotEmpty()) {
+                            credentials.write(
+                                instance.credentialProvider,
+                                mapOf(SelfHostedInstance.TOKEN to newToken)
+                            )
+                        }
+                        store.save(store.load().withEnabled(instance.service, enabled.isChecked))
+                    }
+                }
+                render()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+        if (existing != null) {
+            builder.setNeutralButton(R.string.voice_credentials_clear) { _, _ ->
+                store.removeInstance(existing.id, credentials)
+                render()
+            }
+        }
+        builder.show()
+    }
+
+    private fun newInstanceId(): String {
+        val used = store.instances.map { it.id }.toSet()
+        while (true) {
+            val id = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+            if (id !in used) return id
+        }
     }
 
     /** The one-time recommendation (D034); it never selects a network service. */

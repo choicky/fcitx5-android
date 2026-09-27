@@ -57,6 +57,34 @@ internal class VoiceSelectionStore(private val prefs: AppPrefs) {
         save(selection.afterSystemDisclosure(allowed))
     }
 
+    var instances: List<SelfHostedInstance>
+        get() = SelfHostedInstance.decode(prefs.internal.voiceSelfHostedInstances.getValue())
+        set(value) = prefs.internal.voiceSelfHostedInstances.setValue(SelfHostedInstance.encode(value))
+
+    /**
+     * Removes an instance and its token. The saved current selection is kept, so a removed
+     * current instance reads as unavailable instead of silently switching services.
+     */
+    fun removeInstance(id: String, credentials: CredentialStore) {
+        val instance = instances.firstOrNull { it.id == id } ?: return
+        instances = instances - instance
+        credentials.clear(instance.credentialProvider)
+        save(load().withEnabled(instance.service, false))
+    }
+
+    /** What resolution may know about external services; no secret is read here. */
+    fun externalServices(credentials: CredentialStore, allowCleartext: Boolean): ExternalServices {
+        val known = instances
+        return object : ExternalServices {
+            override fun configured(service: AsrServiceId) =
+                service == AsrServiceId.Doubao && credentials.has(DoubaoCredentials.PROVIDER)
+
+            override fun instance(id: String) = known.firstOrNull { it.id == id }
+
+            override val allowCleartext = allowCleartext
+        }
+    }
+
     var lastUsedService: String
         get() = prefs.internal.voiceLastUsedService.getValue()
         set(value) = prefs.internal.voiceLastUsedService.setValue(value)
