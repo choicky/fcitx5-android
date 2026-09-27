@@ -10,6 +10,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
+import androidx.preference.ListPreference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
@@ -102,6 +103,31 @@ class DeveloperFragment : PaddingPreferenceFragment() {
                     key = AppPrefs.getInstance().internal.voiceDoubaoAsr.key
                     setTitle(R.string.voice_doubao_asr)
                     setDefaultValue(false)
+                    isIconSpaceReserved = false
+                    isSingleLineTitle = false
+                })
+                // Phase 4B.3b-1 Local ASR A/B comparison; takes precedence over the switches above
+                addPreference(ListPreference(context).apply {
+                    key = AppPrefs.getInstance().internal.voiceLocalAsr.key
+                    setTitle(R.string.voice_local_asr)
+                    entries = arrayOf<CharSequence>(
+                        getString(R.string.voice_local_asr_off),
+                        "A: streaming Zipformer zh INT8",
+                        "B: FunASR Nano INT8"
+                    )
+                    entryValues = arrayOf<CharSequence>("Off", "ZipformerZh", "FunAsrNano")
+                    setDefaultValue("Off")
+                    summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+                    isIconSpaceReserved = false
+                    isSingleLineTitle = false
+                })
+                addPreference(ListPreference(context).apply {
+                    key = AppPrefs.getInstance().internal.voiceLocalAsrThreads.key
+                    setTitle(R.string.voice_local_asr_threads)
+                    entries = arrayOf<CharSequence>("1", "2", "3", "4")
+                    entryValues = entries
+                    setDefaultValue("2")
+                    summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
                     isIconSpaceReserved = false
                     isSingleLineTitle = false
                 })

@@ -38,6 +38,9 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val needNotifications = bool("need_notifications", true)
         val voiceCaptureProbe = bool("voice_capture_probe", false)
         val voiceDoubaoAsr = bool("voice_doubao_asr", false)
+        // Phase 4B.3b-1: "Off", or a LocalAsrModel name; threads "1".."4"
+        val voiceLocalAsr = string("voice_local_asr", "Off")
+        val voiceLocalAsrThreads = string("voice_local_asr_threads", "2")
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {

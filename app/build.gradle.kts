@@ -133,6 +133,8 @@ dependencies {
     implementation(libs.flexbox)
     implementation(libs.dependency)
     implementation(libs.okhttp)
+    // Phase 4B.3b-1 Local ASR PoC: official AAR (Kotlin API + JNI), debug builds only
+    debugImplementation("com.k2fsa.sherpa.onnx:sherpa-onnx:${libs.versions.sherpaOnnx.get()}@aar")
     implementation(libs.timber)
     implementation(libs.splitties.bitflags)
     implementation(libs.splitties.dimensions)

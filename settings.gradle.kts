@@ -13,6 +13,19 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // sherpa-onnx ships its Android AAR only as a GitHub release asset
+        // (debug-only Local ASR PoC; v1.13.8 sha256 633c2432...bd96)
+        exclusiveContent {
+            forRepository {
+                ivy {
+                    name = "sherpaOnnxReleases"
+                    url = uri("https://github.com/k2-fsa/sherpa-onnx/releases/download/")
+                    patternLayout { artifact("v[revision]/[module]-[revision].[ext]") }
+                    metadataSources { artifact() }
+                }
+            }
+            filter { includeModule("com.k2fsa.sherpa.onnx", "sherpa-onnx") }
+        }
     }
 }
 
