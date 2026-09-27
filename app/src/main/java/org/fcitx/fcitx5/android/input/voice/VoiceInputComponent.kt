@@ -135,6 +135,12 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                     SherpaOnnxServerClient(NetworkAsrBackend.http, instance.url, token, listener)
                 }
             }
+            SelfHostedProtocol.FunAsr2Pass -> {
+                val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
+                NetworkAsrBackend(service.lifecycleScope, "Self-hosted FunASR 2pass") { listener ->
+                    FunAsr2PassClient(NetworkAsrBackend.http, instance.url, token, listener)
+                }
+            }
         }
         is VoiceBackendKind.LocalAsr -> LocalAsrBackend(
             service.lifecycleScope,

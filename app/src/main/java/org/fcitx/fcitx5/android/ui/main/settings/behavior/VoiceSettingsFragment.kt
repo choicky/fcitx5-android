@@ -637,6 +637,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private fun protocolLabel(protocol: SelfHostedProtocol) = getString(
         when (protocol) {
             SelfHostedProtocol.SherpaOnnx -> R.string.voice_selfhosted_sherpa
+            SelfHostedProtocol.FunAsr2Pass -> R.string.voice_selfhosted_funasr
         }
     )
 
