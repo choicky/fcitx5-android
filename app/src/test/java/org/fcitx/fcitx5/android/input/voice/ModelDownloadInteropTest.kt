@@ -11,19 +11,22 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Installs catalog B from its real pinned upstream (about 1 GB). Skipped unless
- * MODEL_DOWNLOAD_TEST_DIR is set, so CI never downloads it.
+ * Installs a downloadable catalog entry from its real pinned upstream (B is about 1 GB).
+ * Skipped unless MODEL_DOWNLOAD_TEST_DIR is set, so CI never downloads it;
+ * MODEL_DOWNLOAD_TEST_MODEL picks the entry (default FunAsrNano).
  */
 class ModelDownloadInteropTest {
     @Test
-    fun downloadsAndVerifiesTheFunAsrNanoCatalogEntry() {
+    fun downloadsAndVerifiesACatalogEntry() {
         val dir = System.getenv("MODEL_DOWNLOAD_TEST_DIR")?.let(::File)
         assumeTrue(dir != null)
+        val model = LocalAsrModel.valueOf(System.getenv("MODEL_DOWNLOAD_TEST_MODEL") ?: "FunAsrNano")
+        val entry = ModelCatalogEntry.of(model)
         val installer = LocalModelInstaller(dir!!)
         var last = 0L
         installer.install(
-            ModelCatalogEntry.FunAsrNano,
-            ModelSources.download(OkHttpClient(), ModelCatalogEntry.FunAsrNano),
+            entry,
+            ModelSources.download(OkHttpClient(), entry),
             onProgress = { done, total ->
                 if (done - last > 100_000_000 || done == total) {
                     last = done
@@ -32,6 +35,6 @@ class ModelDownloadInteropTest {
             },
             attempts = 3
         )
-        assertTrue(installer.isInstalled(LocalAsrModel.FunAsrNano))
+        assertTrue(installer.isInstalled(model))
     }
 }

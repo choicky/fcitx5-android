@@ -340,6 +340,9 @@
     <string name="voice_model_b">B：FunASR Nano INT8（研究模型）</string>
     <string name="voice_model_a_note">研究模型。模型权重没有明确的再分发许可，因此不提供下载；可导入你合法取得的文件。</string>
     <string name="voice_model_b_note">研究模型。约 1 GB；实测约占 2 GB 内存；超过约 34–39 秒的语音会得到空结果。</string>
+    <string name="voice_model_c">C：流式 Zipformer 中英双语 INT8（候选，尚未设备验证）</string>
+    <string name="voice_model_c_note">评估中的候选模型。许可：上游作者声明 Apache-2.0；训练数据未公开。约 199 MB，流式。尚未在手机上验证，不是推荐模型。</string>
+    <string name="voice_model_download_confirm_c">将从 Hugging Face（csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20 的固定版本）下载约 %1$d MB，并逐个文件校验 SHA-256。\n\n许可：sherpa-onnx 镜像与上游作者（pfluo/k2fsa-zipformer-chinese-english-mixed）均声明 Apache-2.0；训练数据未公开。\n\n此模型尚未在手机上验证。</string>
     <string name="voice_model_installed">已安装</string>
     <string name="voice_model_not_installed">未安装</string>
     <string name="voice_model_summary">%1$s · 约 %2$d MB · %3$s</string>

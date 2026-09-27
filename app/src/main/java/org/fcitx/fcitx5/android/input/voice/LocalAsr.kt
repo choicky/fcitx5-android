@@ -42,6 +42,22 @@ internal enum class LocalAsrModel(
             "Qwen3-0.6B/merges.txt",
             "Qwen3-0.6B/tokenizer.json"
         )
+    ),
+
+    /**
+     * C: streaming Zipformer bilingual zh-en INT8 (sherpa-onnx OnlineRecognizer), a candidate
+     * under evaluation with Apache-2.0 declared by the mirror and the upstream author; not a
+     * production model until it passes the device gate.
+     */
+    ZipformerBilingual(
+        "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20",
+        streaming = true,
+        listOf(
+            "encoder-epoch-99-avg-1.int8.onnx",
+            "decoder-epoch-99-avg-1.onnx",
+            "joiner-epoch-99-avg-1.int8.onnx",
+            "tokens.txt"
+        )
     );
 
     fun missingFiles(modelDir: File): List<String> =
