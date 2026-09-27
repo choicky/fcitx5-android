@@ -26,6 +26,8 @@ import org.fcitx.fcitx5.android.input.popup.PopupActionListener
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
 import org.fcitx.fcitx5.android.input.wm.EssentialWindow
 import org.fcitx.fcitx5.android.input.voice.VoiceInputComponent
+import org.fcitx.fcitx5.android.input.voice.VoiceInputSession
+import org.fcitx.fcitx5.android.input.voice.VoicePanelUi
 import org.fcitx.fcitx5.android.input.wm.InputWindow
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.mechdancer.dependency.manager.must
@@ -90,11 +92,38 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
         popup.listener
     }
 
+    // voice session panel: covers the keys while a voice session is active (Phase 4B.2)
+    private val voicePanel by lazy {
+        VoicePanelUi(
+            context, theme,
+            onCancel = { voiceInput.cancel() },
+            onFinish = { voiceInput.stopVoiceInput() }
+        )
+    }
+    private var voiceState = VoiceInputSession.State.Idle
+    private var spaceVoiceHeld = false
+    private var spaceVoiceCancelArmed = false
+
+    private val spaceVoiceGestureListener = { held: Boolean, cancelArmed: Boolean ->
+        spaceVoiceHeld = held
+        spaceVoiceCancelArmed = cancelArmed
+        updateVoicePanel()
+    }
+
+    private fun updateVoicePanel() {
+        voicePanel.render(voicePanelState(voiceState, spaceVoiceHeld, spaceVoiceCancelArmed))
+    }
+
     // This will be called EXACTLY ONCE
     override fun onCreateView(): View {
         keyboardView = context.frameLayout(R.id.keyboard_view)
+        keyboardView.apply { add(voicePanel, lParams(matchParent, matchParent)) }
         attachLayout(TextKeyboard.Name)
-        voiceInput.addStateListener { currentKeyboard?.onVoiceStateUpdate(it) }
+        voiceInput.addStateListener {
+            voiceState = it
+            updateVoicePanel()
+        }
+        voiceInput.addAudioLevelListener { voicePanel.pushLevel(it) }
         return keyboardView
     }
 
@@ -104,7 +133,10 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
             keyboardView.removeView(it)
             it.keyActionListener = null
             it.popupActionListener = null
+            it.spaceVoiceGestureListener = null
         }
+        spaceVoiceHeld = false
+        spaceVoiceCancelArmed = false
     }
 
     private fun attachLayout(target: String) {
@@ -112,11 +144,13 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
         currentKeyboard?.let {
             it.keyActionListener = keyActionListener
             it.popupActionListener = popupActionListener
+            it.spaceVoiceGestureListener = spaceVoiceGestureListener
             keyboardView.apply { add(it, lParams(matchParent, matchParent)) }
+            // the panel stays above whichever layout is attached
+            voicePanel.bringToFront()
             it.onAttach()
             it.onReturnDrawableUpdate(returnKeyDrawable.resourceId)
             it.onInputMethodUpdate(fcitx.runImmediately { inputMethodEntryCached })
-            it.onVoiceStateUpdate(voiceInput.state)
         }
     }
 

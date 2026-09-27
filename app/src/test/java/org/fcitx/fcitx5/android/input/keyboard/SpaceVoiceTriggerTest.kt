@@ -107,23 +107,41 @@ class SpaceVoiceTriggerTest {
     }
 
     @Test
-    fun spaceHintFollowsSessionAndGesture() {
-        assertEquals(SpaceVoiceHint.None, spaceVoiceHint(State.Idle, spaceHeld = true, cancelArmed = true))
-        assertEquals(SpaceVoiceHint.ReleaseToFinish, spaceVoiceHint(State.Starting, spaceHeld = true, cancelArmed = false))
-        assertEquals(SpaceVoiceHint.ReleaseToFinish, spaceVoiceHint(State.Listening, spaceHeld = true, cancelArmed = false))
-        assertEquals(SpaceVoiceHint.ReleaseToCancel, spaceVoiceHint(State.Listening, spaceHeld = true, cancelArmed = true))
-        // mic-button sessions share the state but have no held Space
-        assertEquals(SpaceVoiceHint.Listening, spaceVoiceHint(State.Listening, spaceHeld = false, cancelArmed = false))
-        // after a normal release, waiting for the final result
-        assertEquals(SpaceVoiceHint.Processing, spaceVoiceHint(State.Stopping, spaceHeld = false, cancelArmed = false))
+    fun panelFollowsSessionAndGesture() {
+        assertEquals(VoicePanelState.Hidden, voicePanelState(State.Idle, spaceHeld = true, cancelArmed = true))
+        assertEquals(VoicePanelState.ReleaseToFinish, voicePanelState(State.Starting, spaceHeld = true, cancelArmed = false))
+        assertEquals(VoicePanelState.ReleaseToFinish, voicePanelState(State.Listening, spaceHeld = true, cancelArmed = false))
+        assertEquals(VoicePanelState.ReleaseToCancel, voicePanelState(State.Listening, spaceHeld = true, cancelArmed = true))
+        // mic sessions share the state but have no held Space
+        assertEquals(VoicePanelState.Listening, voicePanelState(State.Listening, spaceHeld = false, cancelArmed = false))
+        assertEquals(VoicePanelState.Recognizing, voicePanelState(State.Stopping, spaceHeld = false, cancelArmed = false))
     }
 
     @Test
-    fun releaseFlowsReturnToIdleUi() {
-        // normal release: held ends, the session stops, then the final result arrives
-        assertEquals(SpaceVoiceHint.Processing, spaceVoiceHint(State.Stopping, spaceHeld = false, cancelArmed = false))
-        assertEquals(SpaceVoiceHint.None, spaceVoiceHint(State.Idle, spaceHeld = false, cancelArmed = false))
-        // swipe-up release: cancel returns the session to Idle directly, no Processing
-        assertEquals(SpaceVoiceHint.None, spaceVoiceHint(State.Idle, spaceHeld = false, cancelArmed = false))
+    fun spaceHoldArmsAndDisarmsCancel() {
+        // Listening -> CancelArmed -> back to Listening while the Space key is held
+        val tracker = SpaceLongPressTracker(threshold)
+        tracker.onDown(100f)
+        fun panel(armed: Boolean) = voicePanelState(State.Listening, spaceHeld = true, cancelArmed = armed)
+        assertEquals(VoicePanelState.ReleaseToCancel, panel(tracker.onMove(100f - threshold)!!))
+        assertEquals(VoicePanelState.ReleaseToFinish, panel(tracker.onMove(90f)!!))
+    }
+
+    @Test
+    fun onlyMicSessionsGetButtons() {
+        assertTrue(VoicePanelState.Listening.showsCancel && VoicePanelState.Listening.showsFinish)
+        // stopped: Done no longer applies, Cancel still discards
+        assertTrue(VoicePanelState.Recognizing.showsCancel)
+        assertFalse(VoicePanelState.Recognizing.showsFinish)
+        // a held Space ends by release, not by buttons
+        listOf(VoicePanelState.ReleaseToFinish, VoicePanelState.ReleaseToCancel, VoicePanelState.Hidden).forEach {
+            assertFalse(it.showsCancel || it.showsFinish)
+        }
+    }
+
+    @Test
+    fun panelHidesWhenSessionEnds() {
+        // final, error and cancel all return the shared session to Idle
+        assertEquals(VoicePanelState.Hidden, voicePanelState(State.Idle, spaceHeld = false, cancelArmed = false))
     }
 }

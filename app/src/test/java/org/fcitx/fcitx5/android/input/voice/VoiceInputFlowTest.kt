@@ -43,6 +43,7 @@ class VoiceInputFlowTest {
         val commits = mutableListOf<String>()
         val errors = mutableListOf<VoiceError>()
         val states = mutableListOf<VoiceInputSession.State>()
+        val levels = mutableListOf<Float>()
         var clears = 0
 
         override fun updateComposing(text: String) {
@@ -63,6 +64,10 @@ class VoiceInputFlowTest {
 
         override fun reportError(error: VoiceError) {
             errors += error
+        }
+
+        override fun audioLevel(level: Float) {
+            levels += level
         }
     }
 
@@ -235,6 +240,65 @@ class VoiceInputFlowTest {
         flow.onFinal(token, "late")
         assertTrue(output.commits.isEmpty())
         assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    @Test
+    fun panelCancelDiscards() {
+        // mic panel [Cancel] -> VoiceInputComponent.cancel()
+        val (token, backend) = startListening()
+        flow.onPartial(token, "partial")
+        assertTrue(flow.cancel())
+        assertEquals(1, backend.cancels)
+        assertEquals(0, backend.stops)
+        flow.onFinal(token, "late")
+        assertTrue(output.commits.isEmpty())
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    @Test
+    fun panelFinishStopsThenCommitsFinal() {
+        // mic panel [Done] and Space release -> VoiceInputComponent.stopVoiceInput()
+        val (token, backend) = startListening()
+        flow.stop()
+        assertEquals(1, backend.stops)
+        assertEquals(VoiceInputSession.State.Stopping, flow.state)
+        flow.onFinal(token, "完成")
+        assertEquals(listOf("完成"), output.commits)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    @Test
+    fun audioLevelIsForwardedWithoutAffectingSession() {
+        val (token, backend) = startListening()
+        flow.onAudioLevel(token, 0.4f)
+        flow.onAudioLevel(token, 0.9f)
+        assertEquals(listOf(0.4f, 0.9f), output.levels)
+        assertEquals(VoiceInputSession.State.Listening, flow.state)
+        assertEquals(0, backend.stops + backend.cancels)
+        flow.stop()
+        flow.onFinal(token, "text")
+        assertEquals(listOf("text"), output.commits)
+    }
+
+    @Test
+    fun staleAudioLevelIsDropped() {
+        val (token, _) = startListening()
+        flow.cancel()
+        flow.onAudioLevel(token, 0.5f)
+        val (second, _) = startListening()
+        flow.onAudioLevel(token, 0.6f)
+        flow.onAudioLevel(second, 0.7f)
+        assertEquals(listOf(0.7f), output.levels)
+    }
+
+    @Test
+    fun backendWithoutAudioLevelStillWorks() {
+        // e.g. System ASR: never reports a level
+        val (token, _) = startListening()
+        flow.stop()
+        flow.onFinal(token, "ok")
+        assertEquals(listOf("ok"), output.commits)
+        assertTrue(output.levels.isEmpty())
     }
 
     @Test

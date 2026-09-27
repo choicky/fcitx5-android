@@ -17,7 +17,6 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.popup.PopupAction
-import org.fcitx.fcitx5.android.input.voice.VoiceInputSession
 import splitties.views.imageResource
 
 @SuppressLint("ViewConstructor")
@@ -150,45 +149,7 @@ class TextKeyboard(
         super.onAction(transformed, source)
     }
 
-    private var imeLabel = ""
-    private var voiceState = VoiceInputSession.State.Idle
-    private var spaceVoiceHeld = false
-    private var spaceVoiceCancelArmed = false
-    private val spaceLabelColors by lazy { space.mainText.textColors }
-
-    override fun onVoiceStateUpdate(state: VoiceInputSession.State) {
-        voiceState = state
-        updateSpaceLabel()
-    }
-
-    override fun onSpaceVoiceGesture(held: Boolean, cancelArmed: Boolean) {
-        spaceVoiceHeld = held
-        spaceVoiceCancelArmed = cancelArmed
-        updateSpaceLabel()
-    }
-
-    /** The Space key shows the input method, or the voice hint while a session is active. */
-    private fun updateSpaceLabel() {
-        // read the theme colors before any voice hint recolors the label
-        val normalColors = spaceLabelColors
-        val hint = spaceVoiceHint(voiceState, spaceVoiceHeld, spaceVoiceCancelArmed)
-        space.mainText.text = when (hint) {
-            SpaceVoiceHint.None -> imeLabel
-            SpaceVoiceHint.Listening -> context.getString(R.string.voice_hint_listening)
-            SpaceVoiceHint.ReleaseToFinish -> context.getString(R.string.voice_hint_release_to_finish)
-            SpaceVoiceHint.ReleaseToCancel -> context.getString(R.string.voice_hint_release_to_cancel)
-            SpaceVoiceHint.Processing -> context.getString(R.string.voice_hint_processing)
-        }
-        if (hint == SpaceVoiceHint.ReleaseToCancel) {
-            space.mainText.setTextColor(theme.accentKeyBackgroundColor)
-        } else {
-            space.mainText.setTextColor(normalColors)
-        }
-    }
-
     override fun onAttach() {
-        spaceVoiceHeld = false
-        spaceVoiceCancelArmed = false
         capsState = CapsState.None
         updateCapsButtonIcon()
         updateAlphabetKeys()
@@ -204,11 +165,10 @@ class TextKeyboard(
     }
 
     override fun onInputMethodUpdate(ime: InputMethodEntry) {
-        imeLabel = buildString {
+        space.mainText.text = buildString {
             append(ime.displayName)
             ime.subMode.run { label.ifEmpty { name.ifEmpty { null } } }?.let { append(" ($it)") }
         }
-        updateSpaceLabel()
         if (capsState != CapsState.None) {
             switchCapsState()
         }
