@@ -76,8 +76,11 @@ internal class VoiceSelectionStore(private val prefs: AppPrefs) {
     fun externalServices(credentials: CredentialStore, allowCleartext: Boolean): ExternalServices {
         val known = instances
         return object : ExternalServices {
-            override fun configured(service: AsrServiceId) =
-                service == AsrServiceId.Doubao && credentials.has(DoubaoCredentials.PROVIDER)
+            override fun configured(service: AsrServiceId) = when (service) {
+                AsrServiceId.Doubao -> credentials.has(DoubaoCredentials.PROVIDER)
+                AsrServiceId.Qwen -> credentials.has(QwenAsrConfig.PROVIDER)
+                else -> false
+            }
 
             override fun instance(id: String) = known.firstOrNull { it.id == id }
 

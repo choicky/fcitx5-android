@@ -32,6 +32,12 @@ internal sealed interface AsrServiceId {
         override val external = true
     }
 
+    /** Managed Cloud: Alibaba Model Studio real-time ASR (Qwen-Audio / Fun-ASR), user's key. */
+    data object Qwen : AsrServiceId {
+        override val key = "qwen"
+        override val external = true
+    }
+
     /** A user-defined self-hosted server instance. */
     data class SelfHosted(val instanceId: String) : AsrServiceId {
         override val key get() = PREFIX + instanceId
@@ -42,7 +48,7 @@ internal sealed interface AsrServiceId {
         private const val PREFIX = "selfhosted:"
 
         /** The fixed services; self-hosted instances are listed by their store. */
-        val entries: List<AsrServiceId> = listOf(System, Local, Doubao)
+        val entries: List<AsrServiceId> = listOf(System, Local, Doubao, Qwen)
 
         fun parse(key: String): AsrServiceId? =
             if (key.startsWith(PREFIX)) {
@@ -62,6 +68,9 @@ internal sealed interface VoiceBackendKind {
 
     /** Product Doubao with the user's stored credentials (Direct BYOK). */
     data object Doubao : VoiceBackendKind
+
+    /** Model Studio real-time ASR with the user's stored key. */
+    data object Qwen : VoiceBackendKind
 
     /** A self-hosted server; its token is read from the credential store when starting. */
     data class SelfHosted(val instance: SelfHostedInstance) : VoiceBackendKind
@@ -203,9 +212,15 @@ internal fun resolveCurrentService(
                 else -> AsrResolution.Ready(current, VoiceBackendKind.LocalAsr(model))
             }
         }
-        AsrServiceId.Doubao ->
-            if (external.configured(current)) AsrResolution.Ready(current, VoiceBackendKind.Doubao)
-            else AsrResolution.CurrentUnavailable(current, UnavailableReason.MissingCredentials)
+        AsrServiceId.Doubao, AsrServiceId.Qwen ->
+            if (!external.configured(current)) {
+                AsrResolution.CurrentUnavailable(current, UnavailableReason.MissingCredentials)
+            } else {
+                AsrResolution.Ready(
+                    current,
+                    if (current == AsrServiceId.Qwen) VoiceBackendKind.Qwen else VoiceBackendKind.Doubao
+                )
+            }
         is AsrServiceId.SelfHosted -> {
             val instance = external.instance(current.instanceId)
                 ?: return AsrResolution.CurrentUnavailable(current, UnavailableReason.InstanceMissing)

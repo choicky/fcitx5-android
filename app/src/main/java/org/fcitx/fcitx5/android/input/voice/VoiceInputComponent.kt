@@ -122,12 +122,19 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             service.lifecycleScope,
             DoubaoCredentials.fromStore(credentials.read(DoubaoCredentials.PROVIDER))
         )
+        VoiceBackendKind.Qwen -> {
+            val config = QwenAsrConfig.fromStore(credentials.read(QwenAsrConfig.PROVIDER))
+            NetworkAsrBackend(service.lifecycleScope, "Qwen ${config.model}") { listener ->
+                QwenAsrClient(NetworkAsrBackend.http, config, listener)
+            }
+        }
         is VoiceBackendKind.SelfHosted -> when (instance.protocol) {
-            SelfHostedProtocol.SherpaOnnx -> SherpaOnnxServerBackend(
-                service.lifecycleScope,
-                instance,
-                credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
-            )
+            SelfHostedProtocol.SherpaOnnx -> {
+                val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
+                NetworkAsrBackend(service.lifecycleScope, "Self-hosted sherpa-onnx") { listener ->
+                    SherpaOnnxServerClient(NetworkAsrBackend.http, instance.url, token, listener)
+                }
+            }
         }
         is VoiceBackendKind.LocalAsr -> LocalAsrBackend(
             service.lifecycleScope,

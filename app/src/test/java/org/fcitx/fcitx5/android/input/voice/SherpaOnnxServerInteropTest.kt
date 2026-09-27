@@ -37,8 +37,8 @@ class SherpaOnnxServerInteropTest {
         val partials = mutableListOf<String>()
         var final: String? = null
         var failure: String? = null
-        val client = SherpaOnnxServerClient(OkHttpClient(), url!!, null, object : SherpaOnnxServerClient.Listener {
-            override fun onOpen() = opened.countDown()
+        val client = SherpaOnnxServerClient(OkHttpClient(), url!!, null, object : NetworkAsrClient.Listener {
+            override fun onEstablished() = opened.countDown()
             override fun onPartial(text: String) { synchronized(partials) { partials += text } }
             override fun onFinal(text: String) { final = text; done.countDown() }
             override fun onFailure(detail: String) { failure = detail; done.countDown() }

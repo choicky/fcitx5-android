@@ -18,14 +18,14 @@ import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
 /**
- * Self-hosted sherpa-onnx streaming server: Fcitx-owned [AudioCapture] PCM goes to the user's
- * server through [SherpaOnnxServerClient]. Partial text is only logged (as for Doubao); the
- * final text is the transcript.
+ * A streaming network service (Managed Cloud or Self-hosted): Fcitx-owned [AudioCapture] PCM
+ * goes to the provider through its own [NetworkAsrClient]. Partial text is only logged (as for
+ * Doubao, D028); the final text is the transcript. [label] names the service in logs only.
  */
-internal class SherpaOnnxServerBackend(
+internal class NetworkAsrBackend(
     private val scope: CoroutineScope,
-    private val instance: SelfHostedInstance,
-    private val bearerToken: String?
+    private val label: String,
+    private val newClient: (NetworkAsrClient.Listener) -> NetworkAsrClient
 ) : VoiceBackend {
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -39,7 +39,7 @@ internal class SherpaOnnxServerBackend(
     // main thread only
     private var events: VoiceBackend.Events? = null
     private var token = 0L
-    private var client: SherpaOnnxServerClient? = null
+    private var client: NetworkAsrClient? = null
     private var job: Job? = null
     private var partials = 0
 
@@ -50,18 +50,17 @@ internal class SherpaOnnxServerBackend(
     override fun start(token: Long, languageTag: String, events: VoiceBackend.Events) {
         this.token = token
         this.events = events
-        val session = SherpaOnnxServerClient(http, instance.url, bearerToken, object :
-            SherpaOnnxServerClient.Listener {
-            // the server accepted the WebSocket: failures after this are no longer early
-            override fun onOpen() = post { events.onSessionEstablished(token) }
+        val session = newClient(object : NetworkAsrClient.Listener {
+            // the service accepted the session: failures after this are no longer early
+            override fun onEstablished() = post { events.onSessionEstablished(token) }
 
             override fun onPartial(text: String) = post {
                 partials++
-                Timber.d("Self-hosted ASR partial #$partials (${text.length} chars)")
+                Timber.d("$label partial #$partials (${text.length} chars)")
             }
 
             override fun onFinal(text: String) = post {
-                Timber.i("Self-hosted ASR final: ${text.length} chars after $partials partials")
+                Timber.i("$label final: ${text.length} chars after $partials partials")
                 release()
                 events.onFinal(token, text)
             }
@@ -83,7 +82,7 @@ internal class SherpaOnnxServerBackend(
     }
 
     private fun CoroutineScope.stream(
-        session: SherpaOnnxServerClient,
+        session: NetworkAsrClient,
         token: Long,
         events: VoiceBackend.Events
     ) {
@@ -109,7 +108,7 @@ internal class SherpaOnnxServerBackend(
                 failure = failure ?: "release: ${it.javaClass.simpleName}: ${it.message}"
             }
         }
-        Timber.i("Self-hosted ASR capture released: ${stats.summary()}")
+        Timber.i("$label capture released: ${stats.summary()}")
         if (closed) return
         failure?.let {
             post { fail("capture: $it") }
@@ -121,7 +120,7 @@ internal class SherpaOnnxServerBackend(
 
     private fun fail(detail: String) {
         val events = events ?: return
-        Timber.w("Self-hosted ASR failed: $detail")
+        Timber.w("$label failed: $detail")
         release()
         events.onError(token, VoiceError.Service(detail))
     }
@@ -143,7 +142,8 @@ internal class SherpaOnnxServerBackend(
         private const val FINAL_TIMEOUT_MS = 8_000L
         private const val MAX_SESSION_MS = 60_000L
 
-        private val http by lazy {
+        /** Shared by the network clients. */
+        val http: OkHttpClient by lazy {
             OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).build()
         }
     }
