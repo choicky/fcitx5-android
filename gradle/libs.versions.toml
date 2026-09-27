@@ -9,6 +9,7 @@ test = "1.7.0"
 splitties = "3.0.0"
 aboutlibraries = "14.2.1"
 arrow = "2.2.3"
+sherpaOnnx = "1.13.8"
 
 [libraries]
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "androidGradlePlugin" }

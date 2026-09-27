@@ -299,6 +299,9 @@
     <string name="voice_capture_error">麦克风采集失败：%1$s</string>
     <string name="voice_capture_probe">语音输入：麦克风采集探针（调试）</string>
     <string name="voice_doubao_asr">语音输入：豆包云端识别（调试）</string>
+    <string name="voice_local_asr">语音输入：本地识别（调试 PoC）</string>
+    <string name="voice_local_asr_off">关闭</string>
+    <string name="voice_local_asr_threads">本地识别线程数（调试）</string>
     <string name="voice_asr_error">语音识别失败：%1$s</string>
     <string name="voice_hint_listening">正在聆听…</string>
     <string name="voice_hint_release_to_finish">松开结束 · 上滑取消</string>

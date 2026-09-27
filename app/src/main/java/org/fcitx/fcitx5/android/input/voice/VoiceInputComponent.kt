@@ -27,6 +27,7 @@ import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
 import org.mechdancer.dependency.manager.ManagedHandler
 import org.mechdancer.dependency.manager.managedHandler
+import kotlin.concurrent.thread
 
 class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     ManagedHandler by managedHandler(), InputBroadcastReceiver {
@@ -35,6 +36,13 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     private val showVoiceInputButton by AppPrefs.getInstance().keyboard.showVoiceInputButton
     private val voiceCaptureProbe by AppPrefs.getInstance().internal.voiceCaptureProbe
     private val voiceDoubaoAsr by AppPrefs.getInstance().internal.voiceDoubaoAsr
+    private val voiceLocalAsr by AppPrefs.getInstance().internal.voiceLocalAsr
+    private val voiceLocalAsrThreads by AppPrefs.getInstance().internal.voiceLocalAsrThreads
+
+    // loaded Local ASR models outlive single sessions; released when this component closes
+    private val localAsrCache = LocalAsrRecognizerCache { model, threads ->
+        LocalAsrEngines.load(model, localAsrModelDir(model)!!, threads)
+    }
 
     private val inputFlow = VoiceInputFlow(object : VoiceInputFlow.Output {
         override fun updateComposing(text: String) = service.updateVoiceComposingText(text)
@@ -72,31 +80,41 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     val toggleCallback = View.OnClickListener { toggle() }
 
-    private enum class Backend { System, CaptureProbe, DoubaoAsr }
-
     /**
      * The backend a session would use. Its availability, not System ASR's, decides whether the
      * trigger is offered; release builds currently only have System ASR. Phase 4B debug switches
      * select a Direct backend.
      */
-    private val configuredBackend: Backend
-        get() = when {
-            BuildConfig.DEBUG && voiceDoubaoAsr -> Backend.DoubaoAsr
-            BuildConfig.DEBUG && voiceCaptureProbe -> Backend.CaptureProbe
-            else -> Backend.System
-        }
+    private val configuredBackend: VoiceBackendKind
+        get() = configuredBackendKind(
+            debug = BuildConfig.DEBUG,
+            localAsr = localAsrModel(voiceLocalAsr),
+            doubaoAsr = voiceDoubaoAsr,
+            captureProbe = voiceCaptureProbe
+        )
 
-    private fun Backend.isAvailable() = when (this) {
-        Backend.System -> SpeechRecognizer.isRecognitionAvailable(service)
-        Backend.CaptureProbe, Backend.DoubaoAsr -> true
+    private fun VoiceBackendKind.isAvailable() = when (this) {
+        VoiceBackendKind.System -> SpeechRecognizer.isRecognitionAvailable(service)
+        // missing Local ASR model files are reported when a session starts
+        VoiceBackendKind.CaptureProbe, VoiceBackendKind.DoubaoAsr, is VoiceBackendKind.LocalAsr -> true
     }
 
-    private fun Backend.create(): VoiceBackend = when (this) {
-        Backend.System -> SystemAsrBackend(service)
-        Backend.CaptureProbe -> CaptureProbeBackend(service, service.lifecycleScope)
-        Backend.DoubaoAsr ->
+    private fun VoiceBackendKind.create(): VoiceBackend = when (this) {
+        VoiceBackendKind.System -> SystemAsrBackend(service)
+        VoiceBackendKind.CaptureProbe -> CaptureProbeBackend(service, service.lifecycleScope)
+        VoiceBackendKind.DoubaoAsr ->
             DoubaoAsrBackend(service.lifecycleScope, DoubaoCredentials.fromBuildConfig())
+        is VoiceBackendKind.LocalAsr -> LocalAsrBackend(
+            service.lifecycleScope,
+            model,
+            localAsrThreads(voiceLocalAsrThreads),
+            localAsrModelDir(model),
+            localAsrCache
+        )
     }
+
+    private fun localAsrModelDir(model: LocalAsrModel) =
+        LocalAsrBackend.modelDir(service.getExternalFilesDir(null), model)
 
     internal val state: VoiceInputSession.State
         get() = inputFlow.state
@@ -153,6 +171,8 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         inputFlow.close()
         stateListeners.clear()
         levelListeners.clear()
+        // may wait for a decode still running on the cancelled session; keep it off the main thread
+        thread(name = "local-asr-release") { localAsrCache.clear() }
     }
 
     private fun start() {
@@ -185,3 +205,33 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         })
     }
 }
+
+/** Phase 4B debug backend choice; release builds always use System ASR. */
+internal sealed interface VoiceBackendKind {
+    data object System : VoiceBackendKind
+    data object CaptureProbe : VoiceBackendKind
+    data object DoubaoAsr : VoiceBackendKind
+    data class LocalAsr(val model: LocalAsrModel) : VoiceBackendKind
+}
+
+internal fun configuredBackendKind(
+    debug: Boolean,
+    localAsr: LocalAsrModel?,
+    doubaoAsr: Boolean,
+    captureProbe: Boolean
+): VoiceBackendKind = when {
+    !debug -> VoiceBackendKind.System
+    localAsr != null -> VoiceBackendKind.LocalAsr(localAsr)
+    doubaoAsr -> VoiceBackendKind.DoubaoAsr
+    captureProbe -> VoiceBackendKind.CaptureProbe
+    else -> VoiceBackendKind.System
+}
+
+/** The debug preference value is a [LocalAsrModel] name, or anything else for off. */
+internal fun localAsrModel(value: String): LocalAsrModel? =
+    LocalAsrModel.entries.firstOrNull { it.name == value }
+
+internal fun localAsrThreads(value: String): Int =
+    value.toIntOrNull()?.coerceIn(1, 4) ?: DEFAULT_LOCAL_ASR_THREADS
+
+internal const val DEFAULT_LOCAL_ASR_THREADS = 2
