@@ -44,14 +44,23 @@ internal object DoubaoAsrProtocol {
     private const val SERIALIZATION_JSON = 0b0001
     private const val COMPRESSION_GZIP = 0b0001
 
+    /** `definite` marks an utterance re-recognized by the second (non-streaming) pass. */
+    data class Utterance(val text: String, val definite: Boolean)
+
     sealed interface Response {
-        /** [last] marks the final response, sent after the client's last audio packet. */
+        /**
+         * [lastPackage] is the server's is_last_package flag: every tail result is complete and
+         * the request may close. A definite utterance alone does not end the request.
+         */
         data class Result(
             val sequence: Int?,
-            val last: Boolean,
+            val lastPackage: Boolean,
             val text: String?,
+            val utterances: List<Utterance>
+        ) : Response {
             val definiteUtterances: Int
-        ) : Response
+                get() = utterances.count { it.definite }
+        }
 
         data class Error(val code: Int, val message: String) : Response
     }
@@ -111,14 +120,18 @@ internal object DoubaoAsrProtocol {
                     is JsonArray -> r.firstOrNull() as? JsonObject
                     else -> null
                 }
-                val definite = (result?.get("utterances") as? JsonArray)?.count {
-                    ((it as? JsonObject)?.get("definite"))?.jsonPrimitive?.booleanOrNull == true
-                } ?: 0
+                val utterances = (result?.get("utterances") as? JsonArray).orEmpty().mapNotNull {
+                    val u = it as? JsonObject ?: return@mapNotNull null
+                    Utterance(
+                        text = u["text"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                        definite = u["definite"]?.jsonPrimitive?.booleanOrNull == true
+                    )
+                }
                 Response.Result(
                     sequence = sequence,
-                    last = flags and FLAG_LAST != 0,
+                    lastPackage = flags and FLAG_LAST != 0,
                     text = result?.get("text")?.jsonPrimitive?.contentOrNull,
-                    definiteUtterances = definite
+                    utterances = utterances
                 )
             }
             TYPE_SERVER_ERROR -> {
@@ -165,13 +178,17 @@ internal object DoubaoAsrProtocol {
 }
 
 /**
- * Decides what each Doubao response means for the session. Only the last response is final;
- * everything before it is provisional and must never reach the editor.
+ * Decides what each Doubao response means for the session. Results before the server's last
+ * package are never delivered: non-definite text is provisional, and definite utterances are
+ * stable but the request continues. Only the last package ends it, exactly once.
  */
 internal class DoubaoResultTracker {
 
     sealed interface Outcome {
-        data class Provisional(val text: String, val definiteUtterances: Int) : Outcome
+        data class Provisional(val text: String) : Outcome
+
+        /** A second-pass utterance became definite; the request keeps going. */
+        data class Stable(val stableText: String, val definiteUtterances: Int) : Outcome
         data class Final(val text: String?) : Outcome
         data class Failed(val detail: String) : Outcome
         data object Ignored : Outcome
@@ -183,6 +200,10 @@ internal class DoubaoResultTracker {
     var provisionalCount = 0
         private set
 
+    /** Definite utterances of the latest full result, joined. */
+    private var stableText = ""
+    private var stableCount = 0
+
     fun accept(response: DoubaoAsrProtocol.Response): Outcome {
         if (finished) return Outcome.Ignored
         return when (response) {
@@ -190,12 +211,22 @@ internal class DoubaoResultTracker {
                 finished = true
                 Outcome.Failed("server error ${response.code}: ${response.message}")
             }
-            is DoubaoAsrProtocol.Response.Result -> if (response.last) {
-                finished = true
-                Outcome.Final(response.text)
-            } else {
-                provisionalCount++
-                Outcome.Provisional(response.text.orEmpty(), response.definiteUtterances)
+            is DoubaoAsrProtocol.Response.Result -> {
+                val definite = response.utterances.filter { it.definite }
+                if (definite.isNotEmpty()) stableText = definite.joinToString("") { it.text }
+                if (response.lastPackage) {
+                    finished = true
+                    // result_type=full: the last package carries the whole transcript; fall back
+                    // to definite (never provisional) text if it comes without one
+                    Outcome.Final(response.text?.takeIf { it.isNotBlank() }
+                        ?: stableText.takeIf { it.isNotBlank() })
+                } else if (definite.size > stableCount) {
+                    stableCount = definite.size
+                    Outcome.Stable(stableText, definite.size)
+                } else {
+                    provisionalCount++
+                    Outcome.Provisional(response.text.orEmpty())
+                }
             }
         }
     }

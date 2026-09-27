@@ -112,6 +112,9 @@ internal class DoubaoAsrBackend(
         val stats = CaptureStats(AudioCapture.SAMPLE_RATE)
         val startedAt = SystemClock.elapsedRealtime()
         val packet = ByteArrayOutputStream(PACKET_BYTES)
+        // one full packet is held back, so the last (negative sequence) packet always carries
+        // real audio as in the official demos, instead of an empty payload
+        var pending: ByteArray? = null
         var sequence = 2
         var failure: String? = null
         var capture: AudioCapture? = null
@@ -131,7 +134,10 @@ internal class DoubaoAsrBackend(
                     packet.write(v shr 8)
                 }
                 if (packet.size() >= PACKET_BYTES) {
-                    ws.send(DoubaoAsrProtocol.audioRequest(sequence++, packet.toByteArray(), false).toByteString())
+                    pending?.let {
+                        ws.send(DoubaoAsrProtocol.audioRequest(sequence++, it, false).toByteString())
+                    }
+                    pending = packet.toByteArray()
                     packet.reset()
                 }
             }
@@ -142,14 +148,23 @@ internal class DoubaoAsrBackend(
                 failure = failure ?: "release: ${it.javaClass.simpleName}: ${it.message}"
             }
         }
-        Timber.i("Doubao ASR capture released: packets=${sequence - 2} ${stats.summary()}")
+        Timber.i("Doubao ASR capture released: ${stats.summary()}")
         if (closed) return
         if (failure != null) {
             post { finish(tracker.fail("capture: $failure")) }
             return
         }
-        // end of input: the remainder goes out as the last (negative sequence) packet
-        ws.send(DoubaoAsrProtocol.audioRequest(sequence, packet.toByteArray(), true).toByteString())
+        // end of input only: tail results keep arriving until the server's last package
+        val tail = packet.toByteArray()
+        val last = if (tail.isNotEmpty()) {
+            pending?.let {
+                ws.send(DoubaoAsrProtocol.audioRequest(sequence++, it, false).toByteString())
+            }
+            tail
+        } else {
+            pending ?: tail
+        }
+        ws.send(DoubaoAsrProtocol.audioRequest(sequence, last, true).toByteString())
         post { if (!tracker.finished) mainHandler.postDelayed(finalTimeout, FINAL_TIMEOUT_MS) }
     }
 
@@ -181,10 +196,12 @@ internal class DoubaoAsrBackend(
 
     private fun handle(response: DoubaoAsrProtocol.Response) {
         when (val outcome = tracker.accept(response)) {
-            // observe only: provisional text never reaches preedit or the editor
+            // observe only: neither provisional nor stable text reaches preedit or the editor
             is DoubaoResultTracker.Outcome.Provisional -> Timber.d(
-                "Doubao ASR provisional #${tracker.provisionalCount}: " +
-                        "definite=${outcome.definiteUtterances} text=${outcome.text}"
+                "Doubao ASR provisional #${tracker.provisionalCount}: ${outcome.text}"
+            )
+            is DoubaoResultTracker.Outcome.Stable -> Timber.d(
+                "Doubao ASR stable (${outcome.definiteUtterances} definite): ${outcome.stableText}"
             )
             else -> finish(outcome)
         }
