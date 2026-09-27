@@ -62,8 +62,17 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private val credentials by lazy { KeystoreSecretCipher.store(requireContext()) }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        // the file picker may outlive this instance (e.g. after a configuration change)
+        pendingImport = savedInstanceState?.getString(PENDING_IMPORT)
+            ?.let { name -> LocalAsrModel.entries.firstOrNull { it.name == name } }
+            ?.let(ModelCatalogEntry::of)
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext())
         render()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingImport?.let { outState.putString(PENDING_IMPORT, it.model.name) }
     }
 
     override fun onResume() {
@@ -129,6 +138,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     )
 
     private fun render() {
+        // dialog callbacks and posted updates can arrive after the screen is gone
+        if (!isAdded) return
         val screen = preferenceScreen ?: return
         val ctx = requireContext()
         screen.removeAll()
@@ -729,5 +740,9 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             }
             .setOnDismissListener { render() }
             .show()
+    }
+
+    private companion object {
+        const val PENDING_IMPORT = "pending_model_import"
     }
 }
