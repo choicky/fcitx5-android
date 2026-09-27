@@ -9,6 +9,20 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Phase 4B.3a Doubao ASR PoC credentials for local debug builds: taken from the environment or a
+// user-level Gradle property (~/.gradle/gradle.properties or -P), never from files in this repo.
+val doubaoAsrCredentials = listOf(
+    "DOUBAO_ASR_API_KEY" to "doubaoAsrApiKey",
+    "DOUBAO_ASR_APP_KEY" to "doubaoAsrAppKey",
+    "DOUBAO_ASR_ACCESS_KEY" to "doubaoAsrAccessKey",
+    "DOUBAO_ASR_RESOURCE_ID" to "doubaoAsrResourceId"
+).associate { (env, prop) ->
+    env to (providers.environmentVariable(env).orNull ?: providers.gradleProperty(prop).orNull).orEmpty()
+}
+
+fun buildConfigString(value: String) =
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "org.fcitx.fcitx5.android"
 
@@ -44,11 +58,16 @@ android {
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round")
             resValue("string", "app_name", "@string/app_name_release")
             proguardFile("proguard-rules.pro")
+            doubaoAsrCredentials.keys.forEach { buildConfigField("String", it, "\"\"") }
         }
         debug {
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher_debug")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round_debug")
             resValue("string", "app_name", "@string/app_name_debug")
+            // Phase 4B.3a PoC: local test credentials only, never committed or in release
+            doubaoAsrCredentials.forEach { (field, value) ->
+                buildConfigField("String", field, buildConfigString(value))
+            }
         }
     }
 
@@ -113,6 +132,7 @@ dependencies {
     implementation(libs.imagecropper)
     implementation(libs.flexbox)
     implementation(libs.dependency)
+    implementation(libs.okhttp)
     implementation(libs.timber)
     implementation(libs.splitties.bitflags)
     implementation(libs.splitties.dimensions)

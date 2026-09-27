@@ -34,6 +34,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     private val service by manager.inputMethodService()
     private val showVoiceInputButton by AppPrefs.getInstance().keyboard.showVoiceInputButton
     private val voiceCaptureProbe by AppPrefs.getInstance().internal.voiceCaptureProbe
+    private val voiceDoubaoAsr by AppPrefs.getInstance().internal.voiceDoubaoAsr
 
     private val inputFlow = VoiceInputFlow(object : VoiceInputFlow.Output {
         override fun updateComposing(text: String) = service.updateVoiceComposingText(text)
@@ -54,6 +55,8 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                     service.toast(service.getString(R.string.voice_input_error, error.code))
                 is VoiceError.Capture ->
                     service.toast(service.getString(R.string.voice_capture_error, error.detail))
+                is VoiceError.Service ->
+                    service.toast(service.getString(R.string.voice_asr_error, error.detail))
             }
         }
     })
@@ -64,9 +67,12 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     val toggleCallback = View.OnClickListener { toggle() }
 
-    // Phase 4B capture gate: debug builds can swap System ASR for the capture-only probe
+    // Phase 4B debug switches; release builds always use System ASR
+    private val useDoubaoAsr: Boolean
+        get() = BuildConfig.DEBUG && voiceDoubaoAsr
+
     private val useCaptureProbe: Boolean
-        get() = BuildConfig.DEBUG && voiceCaptureProbe
+        get() = BuildConfig.DEBUG && voiceCaptureProbe && !voiceDoubaoAsr
 
     internal fun setStateListener(listener: (VoiceInputSession.State) -> Unit) {
         stateListener = listener
@@ -76,7 +82,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     fun shouldShowVoiceInput(capFlags: CapabilityFlags): Boolean {
         passwordField = capFlags.has(CapabilityFlag.Password)
         return showVoiceInputButton && !passwordField &&
-            (useCaptureProbe || SpeechRecognizer.isRecognitionAvailable(service))
+            (useDoubaoAsr || useCaptureProbe || SpeechRecognizer.isRecognitionAvailable(service))
     }
 
     override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: CapabilityFlags) {
@@ -114,8 +120,9 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             requestRecordAudioPermission()
             return
         }
+        val doubaoAsr = useDoubaoAsr
         val captureProbe = useCaptureProbe
-        if (!captureProbe && !SpeechRecognizer.isRecognitionAvailable(service)) {
+        if (!doubaoAsr && !captureProbe && !SpeechRecognizer.isRecognitionAvailable(service)) {
             service.toast(R.string.voice_input_unavailable)
             return
         }
@@ -125,9 +132,11 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             // implementation clears its context and updates preedit without committing it.
             service.prepareForVoiceInput().join()
             yield()
-            val backend =
-                if (captureProbe) CaptureProbeBackend(service, service.lifecycleScope)
-                else SystemAsrBackend(service)
+            val backend = when {
+                doubaoAsr -> DoubaoAsrBackend(service.lifecycleScope, DoubaoCredentials.fromBuildConfig())
+                captureProbe -> CaptureProbeBackend(service, service.lifecycleScope)
+                else -> SystemAsrBackend(service)
+            }
             inputFlow.launch(token, languageCode, backend)
         }
     }
