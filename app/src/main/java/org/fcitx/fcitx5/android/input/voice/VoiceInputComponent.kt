@@ -137,19 +137,25 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         is VoiceBackendKind.SelfHosted -> when (instance.protocol) {
             SelfHostedProtocol.SherpaOnnx -> {
                 val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
-                NetworkAsrBackend(service.lifecycleScope, "Self-hosted sherpa-onnx") { listener ->
+                NetworkAsrBackend(
+                    service.lifecycleScope, "Self-hosted sherpa-onnx", NetworkAsrBackend.SELF_HOSTED_FINAL_TIMEOUT_MS
+                ) { listener ->
                     SherpaOnnxServerClient(NetworkAsrBackend.http, instance.url, token, listener)
                 }
             }
             SelfHostedProtocol.FunAsr2Pass -> {
                 val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
-                NetworkAsrBackend(service.lifecycleScope, "Self-hosted FunASR 2pass") { listener ->
+                NetworkAsrBackend(
+                    service.lifecycleScope, "Self-hosted FunASR 2pass", NetworkAsrBackend.SELF_HOSTED_FINAL_TIMEOUT_MS
+                ) { listener ->
                     FunAsr2PassClient(NetworkAsrBackend.http, instance.url, token, listener)
                 }
             }
             SelfHostedProtocol.FunAsrNano -> {
                 val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
-                NetworkAsrBackend(service.lifecycleScope, "Self-hosted Fun-ASR-Nano") { listener ->
+                NetworkAsrBackend(
+                    service.lifecycleScope, "Self-hosted Fun-ASR-Nano", NetworkAsrBackend.SELF_HOSTED_FINAL_TIMEOUT_MS
+                ) { listener ->
                     FunAsrNanoServerClient(NetworkAsrBackend.http, instance.url, token, listener)
                 }
             }

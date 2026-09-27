@@ -518,7 +518,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 val values = readers.associate { (key, read) -> key to read() }
                     .filterValues { it.isNotEmpty() }
                 if (isComplete(values)) {
-                    credentials.write(provider, values)
+                    saveCredentials(provider, values)
                 } else {
                     ctx.toast(R.string.voice_credentials_incomplete)
                 }
@@ -530,6 +530,13 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    /** The Keystore can fail on some devices; that must not crash the settings screen. */
+    private fun saveCredentials(provider: String, values: Map<String, String>) {
+        runCatching { credentials.write(provider, values) }.onFailure {
+            requireContext().toast(getString(R.string.voice_credentials_save_failed, it.javaClass.simpleName))
+        }
     }
 
     private fun editDoubaoCredentials() = editCredentials(
@@ -650,7 +657,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                         store.instances = store.instances.filter { it.id != id } + instance
                         val newToken = token.text.toString().trim()
                         if (newToken.isNotEmpty()) {
-                            credentials.write(
+                            saveCredentials(
                                 instance.credentialProvider,
                                 mapOf(SelfHostedInstance.TOKEN to newToken)
                             )

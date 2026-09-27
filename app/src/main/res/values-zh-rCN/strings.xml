@@ -400,6 +400,7 @@
     <string name="voice_tencent_engine_zh">16k_zh — 标准中文</string>
     <string name="voice_tencent_engine_hy">Hy-ASR-3.0-preview — 内测版，部分功能不支持</string>
     <string name="voice_credentials_incomplete">未保存：缺少必填项</string>
+    <string name="voice_credentials_save_failed">无法安全保存凭据（%1$s）</string>
     <string name="voice_selfhosted_unnamed">自建服务器</string>
     <string name="voice_instance_missing">所选自建服务器已删除，请在“语音输入”设置中选择其他服务。</string>
     <string name="voice_endpoint_invalid">服务器地址须以 wss:// 开头并包含主机名</string>
