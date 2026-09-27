@@ -30,6 +30,7 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyAction.PickerSwitchAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.QuickPhraseAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.ShowInputMethodPickerAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SpaceLongPressAction
+import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SpaceLongPressReleaseAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SymAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.UnicodeAction
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
@@ -91,7 +92,8 @@ class CommonKeyActionListener :
 
     val listener by lazy {
         KeyActionListener { action, _ ->
-            voiceInput.cancel()
+            // any other key interrupts voice input; a held Space ends it through its release
+            if (action !is SpaceLongPressReleaseAction) voiceInput.cancel()
             when (action) {
                 is FcitxKeyAction -> service.postFcitxJob {
                     sendKey(action.act, action.states.states, action.code)
@@ -183,7 +185,13 @@ class CommonKeyActionListener :
                             toggleIme()
                         }
                         SpaceLongPressBehavior.ShowPicker -> showInputMethodPicker()
+                        SpaceLongPressBehavior.VoiceInput -> voiceInput.startVoiceInput()
                     }
+                }
+                is SpaceLongPressReleaseAction -> when (spaceVoiceCommand(spaceKeyLongPressBehavior, action)) {
+                    SpaceVoiceCommand.Stop -> voiceInput.stopVoiceInput()
+                    SpaceVoiceCommand.Cancel -> voiceInput.cancel()
+                    SpaceVoiceCommand.Start, SpaceVoiceCommand.None -> {}
                 }
                 else -> {}
             }

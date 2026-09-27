@@ -157,8 +157,19 @@ abstract class BaseKeyboard(
                 swipeRepeatEnabled = true
                 swipeThresholdX = selectionSwipeThreshold
                 swipeThresholdY = disabledSwipeThreshold
+                // swiping up by the same distance as swipe-up symbol input cancels voice input
+                val longPress = SpaceLongPressTracker(inputSwipeThreshold)
                 onGestureListener = OnGestureListener { view, event ->
                     when (event.type) {
+                        GestureType.Down -> {
+                            longPress.onDown(event.y)
+                            false
+                        }
+                        GestureType.Up -> {
+                            longPress.onUp(event.y, (view as CustomGestureView).longPressTriggered)
+                                ?.let { onAction(KeyAction.SpaceLongPressReleaseAction(it)) }
+                            false
+                        }
                         GestureType.Move -> when (val count = event.countX) {
                             0 -> false
                             else -> {
@@ -172,7 +183,6 @@ abstract class BaseKeyboard(
                                 true
                             }
                         }
-                        else -> false
                     }
                 }
             } else if (def is BackspaceKey) {
