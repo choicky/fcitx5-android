@@ -5,8 +5,11 @@
 package org.fcitx.fcitx5.android.data.prefs
 
 import android.content.SharedPreferences
-import org.fcitx.fcitx5.android.input.voice.AsrProvider
+import org.fcitx.fcitx5.android.input.voice.AsrServiceId
+import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
 import org.fcitx.fcitx5.android.input.voice.SystemAsrAuthorization
+import org.fcitx.fcitx5.android.input.voice.VoiceSelection
+import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.lang.reflect.Proxy
@@ -41,39 +44,52 @@ class VoicePrefsTest {
         } as SharedPreferences
     }
 
-    private fun authorization(prefs: AppPrefs) = SystemAsrAuthorization.of(
-        prefs.voice.systemAsrAllowed.getValue(),
-        prefs.internal.voiceSystemAsrAnswered.getValue()
-    )
+    private fun store(values: MutableMap<String, Any>) = VoiceSelectionStore(AppPrefs(prefs(values)))
 
     @Test
-    fun defaultsAreAutoAndSystemNotAsked() {
-        val prefs = AppPrefs(prefs(mutableMapOf()))
-        assertEquals(AsrProvider.Auto, prefs.voice.asrProvider.getValue())
-        assertEquals(SystemAsrAuthorization.NotAsked, authorization(prefs))
+    fun freshInstallHasNoCurrentServiceAndPendingRecommendation() {
+        val store = store(mutableMapOf())
+        assertEquals(VoiceSelection(null, false, false, false), store.load())
+        assertEquals(SystemAsrAuthorization.NotAsked, store.systemAuthorization)
     }
 
     @Test
-    fun authorizationAnswerPersists() {
-        val allowed = mutableMapOf<String, Any>()
-        AppPrefs(prefs(allowed)).run {
-            // what the disclosure dialog writes on "Allow"
-            voice.systemAsrAllowed.setValue(true)
-            internal.voiceSystemAsrAnswered.setValue(true)
-        }
-        assertEquals(SystemAsrAuthorization.Allowed, authorization(AppPrefs(prefs(allowed))))
+    fun legacySettingsMigrateOnceWithoutNetworkServices() {
+        val system = mutableMapOf<String, Any>("voice_asr_provider" to "System")
+        assertEquals(AsrServiceId.System, store(system).load().current)
 
+        val local = mutableMapOf<String, Any>("voice_asr_provider" to "Local", "voice_local_asr" to "FunAsrNano")
+        store(local).run {
+            assertEquals(AsrServiceId.Local, load().current)
+            // the Developer research selection becomes the configured Local model
+            assertEquals(LocalAsrModel.FunAsrNano, localModel)
+        }
+
+        // old Auto after a decline: remembered, nothing selected
+        val declined = mutableMapOf<String, Any>(
+            "voice_asr_provider" to "Auto", "voice_system_asr_answered" to true
+        )
+        assertEquals(VoiceSelection(null, false, false, true), store(declined).load())
+
+        // migration runs once: later edits are not overwritten by the legacy value
+        store(system).save(VoiceSelection(AsrServiceId.Local, false, true, true))
+        assertEquals(AsrServiceId.Local, store(system).load().current)
+    }
+
+    @Test
+    fun disclosureAnswerPersists() {
+        val values = mutableMapOf<String, Any>()
+        store(values).answerSystemDisclosure(true)
+        store(values).run {
+            assertEquals(SystemAsrAuthorization.Allowed, systemAuthorization)
+            // answered during the first-use recommendation: System becomes current
+            assertEquals(VoiceSelection(AsrServiceId.System, true, false, true), load())
+        }
         val declined = mutableMapOf<String, Any>()
-        AppPrefs(prefs(declined)).run {
-            voice.systemAsrAllowed.setValue(false)
-            internal.voiceSystemAsrAnswered.setValue(true)
+        store(declined).answerSystemDisclosure(false)
+        store(declined).run {
+            assertEquals(SystemAsrAuthorization.Declined, systemAuthorization)
+            assertEquals(VoiceSelection(null, false, false, true), load())
         }
-        assertEquals(SystemAsrAuthorization.Declined, authorization(AppPrefs(prefs(declined))))
-    }
-
-    @Test
-    fun storedProviderIsRead() {
-        val prefs = AppPrefs(prefs(mutableMapOf("voice_asr_provider" to "Local")))
-        assertEquals(AsrProvider.Local, prefs.voice.asrProvider.getValue())
     }
 }

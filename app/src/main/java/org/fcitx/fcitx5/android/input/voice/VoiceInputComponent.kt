@@ -22,6 +22,7 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.ui.main.MainActivity
+import org.fcitx.fcitx5.android.utils.AppUtil
 import org.fcitx.fcitx5.android.utils.toast
 import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
@@ -34,12 +35,9 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     private val service by manager.inputMethodService()
     private val showVoiceInputButton by AppPrefs.getInstance().voice.showVoiceInputButton
-    private val asrProvider by AppPrefs.getInstance().voice.asrProvider
-    private val systemAsrAllowed by AppPrefs.getInstance().voice.systemAsrAllowed
-    private val systemAsrAnswered by AppPrefs.getInstance().internal.voiceSystemAsrAnswered
+    private val selectionStore = VoiceSelectionStore(AppPrefs.getInstance())
     private val voiceCaptureProbe by AppPrefs.getInstance().internal.voiceCaptureProbe
     private val voiceDoubaoAsr by AppPrefs.getInstance().internal.voiceDoubaoAsr
-    private val voiceLocalAsr by AppPrefs.getInstance().internal.voiceLocalAsr
     private val voiceLocalAsrThreads by AppPrefs.getInstance().internal.voiceLocalAsrThreads
 
     // loaded Local ASR models outlive single sessions; released when this component closes
@@ -85,24 +83,26 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     /**
      * What a session would use now, for both the trigger and [start] (D030: it follows this
-     * resolution, not System ASR availability). Debug PoC switches override the formal provider.
+     * resolution, not System ASR availability). Debug PoC switches override the selection.
      */
     private val resolution: AsrResolution
         get() = resolveVoiceBackend(
             debugOverride = debugBackendOverride(
                 BuildConfig.DEBUG, voiceDoubaoAsr, voiceCaptureProbe
             ),
-            configured = asrProvider,
-            usableLocal = usableLocalModel(),
-            systemAuthorization = SystemAsrAuthorization.of(systemAsrAllowed, systemAsrAnswered),
+            selection = selectionStore.load(),
+            local = localStatus(),
+            systemAuthorization = selectionStore.systemAuthorization,
             systemAvailable = { SpeechRecognizer.isRecognitionAvailable(service) }
         )
 
-    /** The configured Local model if its files are in place; no model is loaded here. */
-    private fun usableLocalModel(): LocalAsrModel? =
-        configuredLocalModel(LocalAsrEngines.AVAILABLE, voiceLocalAsr)?.takeIf { model ->
-            localAsrModelDir(model)?.let { model.missingFiles(it).isEmpty() } == true
-        }
+    /** The configured Local model and whether its files are in place; nothing is loaded. */
+    private fun localStatus(): LocalStatus {
+        val model = selectionStore.localModel
+        val filesPresent = model != null &&
+                localAsrModelDir(model)?.let { model.missingFiles(it).isEmpty() } == true
+        return LocalStatus(LocalAsrEngines.AVAILABLE, model, filesPresent)
+    }
 
     private fun VoiceBackendKind.create(): VoiceBackend = when (this) {
         VoiceBackendKind.System -> SystemAsrBackend(service)
@@ -203,17 +203,22 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 requestRecordAudioPermission()
                 return
             }
+            is VoiceStartStep.ApplyRecommendation -> {
+                selectionStore.save(selectionStore.load().applyRecommendation(step.recommendation))
+                // resolves to the recommended service, or to no service with its message
+                if (step.recommendation == Recommendation.Nothing) {
+                    showUnavailable(AsrResolution.NoService)
+                } else {
+                    start()
+                }
+                return
+            }
             is VoiceStartStep.Unavailable -> {
-                service.toast(
-                    when (step.resolution) {
-                        AsrResolution.LocalUnavailable -> R.string.voice_local_unavailable
-                        AsrResolution.SystemUnavailable -> R.string.voice_input_unavailable
-                        else -> R.string.voice_no_provider
-                    }
-                )
+                showUnavailable(step.resolution)
                 return
             }
         }
+        selectionStore.lastUsedService = (resolved as? AsrResolution.Ready)?.service?.key ?: ""
         val token = inputFlow.begin() ?: return
         service.lifecycleScope.launch {
             // Fcitx InputContext::reset dispatches the engine ResetEvent. The pinned Pinyin
@@ -222,6 +227,22 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             yield()
             inputFlow.launch(token, languageCode, backend.create())
         }
+    }
+
+    /** Explain why nothing can start and open the Voice settings to choose a service. */
+    private fun showUnavailable(resolution: AsrResolution) {
+        val message = when (resolution) {
+            is AsrResolution.CurrentUnavailable -> when (resolution.reason) {
+                UnavailableReason.Disabled -> R.string.voice_current_disabled
+                UnavailableReason.NoSystemRecognizer -> R.string.voice_input_unavailable
+                UnavailableReason.NoLocalRuntime -> R.string.voice_local_no_runtime
+                UnavailableReason.NoLocalModel -> R.string.voice_local_no_model
+                UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable
+            }
+            else -> R.string.voice_no_provider
+        }
+        service.toast(message)
+        AppUtil.launchMainToVoice(service)
     }
 
     private fun requestSystemAsrAuthorization() {
@@ -238,20 +259,3 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         })
     }
 }
-
-/** The backends a session can run on; chosen by [resolveVoiceBackend]. */
-internal sealed interface VoiceBackendKind {
-    data object System : VoiceBackendKind
-    data object CaptureProbe : VoiceBackendKind
-    data object DoubaoAsr : VoiceBackendKind
-    data class LocalAsr(val model: LocalAsrModel) : VoiceBackendKind
-}
-
-/** The debug preference value is a [LocalAsrModel] name, or anything else for off. */
-internal fun localAsrModel(value: String): LocalAsrModel? =
-    LocalAsrModel.entries.firstOrNull { it.name == value }
-
-internal fun localAsrThreads(value: String): Int =
-    value.toIntOrNull()?.coerceIn(1, 4) ?: DEFAULT_LOCAL_ASR_THREADS
-
-internal const val DEFAULT_LOCAL_ASR_THREADS = 2
