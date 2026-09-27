@@ -24,7 +24,11 @@ internal enum class LocalAsrModel(
         listOf("encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "tokens.txt")
     ),
 
-    /** B: sherpa-onnx OfflineRecognizer with FunASR Nano, whole-utterance decode on stop. */
+    /**
+     * B: sherpa-onnx OfflineRecognizer with FunASR Nano, whole-utterance decode on stop. The
+     * tokenizer files are the ones sherpa-onnx 1.13.8 OfflineFunASRNanoModelConfig::Validate()
+     * requires in the tokenizer directory.
+     */
     FunAsrNano(
         "sherpa-onnx-funasr-nano-int8-2025-12-30",
         streaming = false,
@@ -32,6 +36,8 @@ internal enum class LocalAsrModel(
             "encoder_adaptor.int8.onnx",
             "llm.int8.onnx",
             "embedding.int8.onnx",
+            "Qwen3-0.6B/vocab.json",
+            "Qwen3-0.6B/merges.txt",
             "Qwen3-0.6B/tokenizer.json"
         )
     );
@@ -202,7 +208,9 @@ internal data class LocalAsrMetrics(
     val partials: Int,
     val decodeMillis: Long,
     val stopToFinalMillis: Long?,
-    val finalChars: Int
+    val finalChars: Int,
+    /** Process PSS right after the final result, i.e. with the model loaded; null if unknown. */
+    val processPssMb: Long? = null
 ) {
     val rtf: Double
         get() = if (audioMillis > 0) decodeMillis.toDouble() / audioMillis else 0.0
@@ -211,5 +219,6 @@ internal data class LocalAsrMetrics(
             "load=${loadMillis?.let { "${it}ms" } ?: "cached"} audio=${audioMillis}ms " +
             "firstPartial=${firstPartialMillis?.let { "${it}ms" } ?: "-"} partials=$partials " +
             "decode=${decodeMillis}ms rtf=${"%.3f".format(Locale.ROOT, rtf)} " +
-            "stopToFinal=${stopToFinalMillis?.let { "${it}ms" } ?: "-"} finalChars=$finalChars"
+            "stopToFinal=${stopToFinalMillis?.let { "${it}ms" } ?: "-"} finalChars=$finalChars " +
+            "pss=${processPssMb?.let { "${it}MB" } ?: "-"}"
 }
