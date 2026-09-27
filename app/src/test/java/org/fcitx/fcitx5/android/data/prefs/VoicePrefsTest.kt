@@ -49,7 +49,7 @@ class VoicePrefsTest {
     @Test
     fun freshInstallHasNoCurrentServiceAndPendingRecommendation() {
         val store = store(mutableMapOf())
-        assertEquals(VoiceSelection(null, false, false, false), store.load())
+        assertEquals(VoiceSelection(null, emptySet(), false), store.load())
         assertEquals(SystemAsrAuthorization.NotAsked, store.systemAuthorization)
     }
 
@@ -69,10 +69,10 @@ class VoicePrefsTest {
         val declined = mutableMapOf<String, Any>(
             "voice_asr_provider" to "Auto", "voice_system_asr_answered" to true
         )
-        assertEquals(VoiceSelection(null, false, false, true), store(declined).load())
+        assertEquals(VoiceSelection(null, emptySet(), true), store(declined).load())
 
         // migration runs once: later edits are not overwritten by the legacy value
-        store(system).save(VoiceSelection(AsrServiceId.Local, false, true, true))
+        store(system).save(VoiceSelection(AsrServiceId.Local, setOf(AsrServiceId.Local), true))
         assertEquals(AsrServiceId.Local, store(system).load().current)
     }
 
@@ -83,13 +83,13 @@ class VoicePrefsTest {
         store(values).run {
             assertEquals(SystemAsrAuthorization.Allowed, systemAuthorization)
             // answered during the first-use recommendation: System becomes current
-            assertEquals(VoiceSelection(AsrServiceId.System, true, false, true), load())
+            assertEquals(VoiceSelection(AsrServiceId.System, setOf(AsrServiceId.System), true), load())
         }
         val declined = mutableMapOf<String, Any>()
         store(declined).answerSystemDisclosure(false)
         store(declined).run {
             assertEquals(SystemAsrAuthorization.Declined, systemAuthorization)
-            assertEquals(VoiceSelection(null, false, false, true), load())
+            assertEquals(VoiceSelection(null, emptySet(), true), load())
         }
     }
 }

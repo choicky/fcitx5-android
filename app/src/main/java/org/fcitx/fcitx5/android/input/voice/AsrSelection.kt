@@ -26,8 +26,14 @@ internal sealed interface AsrServiceId {
         override val external = false
     }
 
+    /** Managed Cloud: Doubao / Seed-ASR 2.0 with the user's own Volcengine credentials. */
+    data object Doubao : AsrServiceId {
+        override val key = "doubao"
+        override val external = true
+    }
+
     companion object {
-        val entries: List<AsrServiceId> = listOf(System, Local)
+        val entries: List<AsrServiceId> = listOf(System, Local, Doubao)
 
         fun parse(key: String): AsrServiceId? = entries.firstOrNull { it.key == key }
     }
@@ -37,7 +43,11 @@ internal sealed interface AsrServiceId {
 internal sealed interface VoiceBackendKind {
     data object System : VoiceBackendKind
     data object CaptureProbe : VoiceBackendKind
+    /** Debug PoC with build-time credentials; not the product path. */
     data object DoubaoAsr : VoiceBackendKind
+
+    /** Product Doubao with the user's stored credentials (Direct BYOK). */
+    data object Doubao : VoiceBackendKind
     data class LocalAsr(val model: LocalAsrModel) : VoiceBackendKind
 }
 
@@ -61,15 +71,14 @@ internal enum class SystemAsrAuthorization {
 /** Persisted selection state; configuration, enablement and the current choice are separate. */
 internal data class VoiceSelection(
     val current: AsrServiceId?,
-    val systemEnabled: Boolean,
-    val localEnabled: Boolean,
+    val enabled: Set<AsrServiceId>,
     /** The one-time first-setup recommendation has run (or a choice was migrated). */
     val recommendationDone: Boolean
 ) {
-    fun isEnabled(service: AsrServiceId) = when (service) {
-        AsrServiceId.System -> systemEnabled
-        AsrServiceId.Local -> localEnabled
-    }
+    fun isEnabled(service: AsrServiceId) = service in enabled
+
+    fun withEnabled(service: AsrServiceId, on: Boolean) =
+        copy(enabled = if (on) enabled + service else enabled - service)
 }
 
 /** What the Local service can offer right now; no model is loaded to find out. */
@@ -80,7 +89,8 @@ internal data class LocalStatus(
 )
 
 internal enum class UnavailableReason {
-    Disabled, NoSystemRecognizer, NoLocalRuntime, NoLocalModel, LocalModelFilesMissing
+    Disabled, NoSystemRecognizer, NoLocalRuntime, NoLocalModel, LocalModelFilesMissing,
+    MissingCredentials
 }
 
 /** What the one-time recommendation would do (D034). It never picks a network service. */
@@ -146,7 +156,9 @@ internal fun resolveCurrentService(
     selection: VoiceSelection,
     local: LocalStatus,
     systemAuthorization: SystemAsrAuthorization,
-    systemAvailable: () -> Boolean
+    systemAvailable: () -> Boolean,
+    /** Whether an external service has its credentials; they are only read when starting. */
+    configured: (AsrServiceId) -> Boolean = { false }
 ): AsrResolution {
     val current = selection.current
         ?: return if (selection.recommendationDone) AsrResolution.NoService
@@ -175,6 +187,9 @@ internal fun resolveCurrentService(
                 else -> AsrResolution.Ready(current, VoiceBackendKind.LocalAsr(model))
             }
         }
+        AsrServiceId.Doubao ->
+            if (configured(current)) AsrResolution.Ready(current, VoiceBackendKind.Doubao)
+            else AsrResolution.CurrentUnavailable(current, UnavailableReason.MissingCredentials)
     }
 }
 
@@ -190,7 +205,9 @@ internal fun fallbackTarget(
 ): VoiceBackendKind? {
     if (selected == null || !selected.external) return null
     val model = local.model ?: return null
-    if (!selection.localEnabled || !local.runtimeAvailable || !local.filesPresent) return null
+    if (!selection.isEnabled(AsrServiceId.Local) || !local.runtimeAvailable || !local.filesPresent) {
+        return null
+    }
     return if (model.production) VoiceBackendKind.LocalAsr(model) else null
 }
 
@@ -215,16 +232,21 @@ internal fun resolveVoiceBackend(
     selection: VoiceSelection,
     local: LocalStatus,
     systemAuthorization: SystemAsrAuthorization,
-    systemAvailable: () -> Boolean
+    systemAvailable: () -> Boolean,
+    configured: (AsrServiceId) -> Boolean = { false }
 ): AsrResolution = debugOverride?.let { AsrResolution.Ready(null, it) }
-    ?: resolveCurrentService(selection, local, systemAuthorization, systemAvailable)
+    ?: resolveCurrentService(selection, local, systemAuthorization, systemAvailable, configured)
 
 /** The selection after the System ASR disclosure is answered. */
 internal fun VoiceSelection.afterSystemDisclosure(allowed: Boolean): VoiceSelection = when {
     // the recommendation asked: an allow selects System, a decline ends the recommendation
     current == null && !recommendationDone ->
-        if (allowed) copy(current = AsrServiceId.System, systemEnabled = true, recommendationDone = true)
-        else copy(recommendationDone = true)
+        if (allowed) {
+            copy(current = AsrServiceId.System, recommendationDone = true)
+                .withEnabled(AsrServiceId.System, true)
+        } else {
+            copy(recommendationDone = true)
+        }
     else -> this
 }
 
@@ -232,7 +254,8 @@ internal fun VoiceSelection.afterSystemDisclosure(allowed: Boolean): VoiceSelect
 internal fun VoiceSelection.applyRecommendation(recommendation: Recommendation): VoiceSelection =
     when (recommendation) {
         Recommendation.SelectSystem ->
-            copy(current = AsrServiceId.System, systemEnabled = true, recommendationDone = true)
+            copy(current = AsrServiceId.System, recommendationDone = true)
+                .withEnabled(AsrServiceId.System, true)
         Recommendation.Nothing -> copy(recommendationDone = true)
         // the disclosure answer decides; see afterSystemDisclosure
         Recommendation.AskSystemAuthorization -> this
@@ -247,10 +270,10 @@ internal fun migrateLegacyProvider(
     legacy: String?,
     systemAuthorization: SystemAsrAuthorization
 ): VoiceSelection {
-    val none = VoiceSelection(null, systemEnabled = false, localEnabled = false, recommendationDone = false)
+    val none = VoiceSelection(null, emptySet(), recommendationDone = false)
     return when (legacy) {
-        "System" -> VoiceSelection(AsrServiceId.System, systemEnabled = true, localEnabled = false, recommendationDone = true)
-        "Local" -> VoiceSelection(AsrServiceId.Local, systemEnabled = false, localEnabled = true, recommendationDone = true)
+        "System" -> VoiceSelection(AsrServiceId.System, setOf(AsrServiceId.System), recommendationDone = true)
+        "Local" -> VoiceSelection(AsrServiceId.Local, setOf(AsrServiceId.Local), recommendationDone = true)
         // "Auto", unset, or anything unknown
         else -> when (systemAuthorization) {
             SystemAsrAuthorization.Allowed -> none.applyRecommendation(Recommendation.SelectSystem)

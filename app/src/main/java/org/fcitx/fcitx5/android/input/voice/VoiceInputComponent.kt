@@ -36,6 +36,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     private val service by manager.inputMethodService()
     private val showVoiceInputButton by AppPrefs.getInstance().voice.showVoiceInputButton
     private val selectionStore = VoiceSelectionStore(AppPrefs.getInstance())
+    private val credentials by lazy { KeystoreSecretCipher.store(service) }
     private val voiceCaptureProbe by AppPrefs.getInstance().internal.voiceCaptureProbe
     private val voiceDoubaoAsr by AppPrefs.getInstance().internal.voiceDoubaoAsr
     private val voiceLocalAsrThreads by AppPrefs.getInstance().internal.voiceLocalAsrThreads
@@ -98,7 +99,8 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             selection = selectionStore.load(),
             local = localStatus(),
             systemAuthorization = selectionStore.systemAuthorization,
-            systemAvailable = { SpeechRecognizer.isRecognitionAvailable(service) }
+            systemAvailable = { SpeechRecognizer.isRecognitionAvailable(service) },
+            configured = { it == AsrServiceId.Doubao && credentials.has(DoubaoCredentials.PROVIDER) }
         )
 
     /** The configured Local model and whether its files are in place; nothing is loaded. */
@@ -114,6 +116,11 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         VoiceBackendKind.CaptureProbe -> CaptureProbeBackend(service, service.lifecycleScope)
         VoiceBackendKind.DoubaoAsr ->
             DoubaoAsrBackend(service.lifecycleScope, DoubaoCredentials.fromBuildConfig())
+        // an unreadable store yields incomplete credentials: the session fails early
+        VoiceBackendKind.Doubao -> DoubaoAsrBackend(
+            service.lifecycleScope,
+            DoubaoCredentials.fromStore(credentials.read(DoubaoCredentials.PROVIDER))
+        )
         is VoiceBackendKind.LocalAsr -> LocalAsrBackend(
             service.lifecycleScope,
             model,
@@ -249,6 +256,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 UnavailableReason.NoLocalRuntime -> R.string.voice_local_no_runtime
                 UnavailableReason.NoLocalModel -> R.string.voice_local_no_model
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable
+                UnavailableReason.MissingCredentials -> R.string.voice_missing_credentials
             }
             else -> R.string.voice_no_provider
         }

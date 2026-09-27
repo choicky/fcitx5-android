@@ -40,7 +40,21 @@ internal class DoubaoCredentials(
 
     companion object {
         // Doubao streaming ASR model 2.0, hourly billing
-        private const val DEFAULT_RESOURCE_ID = "volc.seedasr.sauc.duration"
+        const val DEFAULT_RESOURCE_ID = "volc.seedasr.sauc.duration"
+
+        const val PROVIDER = "doubao"
+        const val API_KEY = "api_key"
+        const val APP_KEY = "app_key"
+        const val ACCESS_KEY = "access_key"
+        const val RESOURCE_ID = "resource_id"
+
+        /** The user's own credentials (Direct BYOK); missing fields make it incomplete. */
+        fun fromStore(fields: Map<String, String>?) = DoubaoCredentials(
+            fields?.get(API_KEY).orEmpty(),
+            fields?.get(APP_KEY).orEmpty(),
+            fields?.get(ACCESS_KEY).orEmpty(),
+            fields?.get(RESOURCE_ID).orEmpty().ifEmpty { DEFAULT_RESOURCE_ID }
+        )
 
         fun fromBuildConfig() = DoubaoCredentials(
             BuildConfig.DOUBAO_ASR_API_KEY,
@@ -87,7 +101,7 @@ internal class DoubaoAsrBackend(
         this.token = token
         this.events = events
         if (!credentials.isComplete) {
-            finish(tracker.fail("Doubao credentials are not configured in this build"))
+            finish(tracker.fail("Doubao credentials are missing or could not be read"))
             return
         }
         // requests are queued by OkHttp until the handshake completes, in order

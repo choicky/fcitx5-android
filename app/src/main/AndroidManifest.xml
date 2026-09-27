@@ -15,6 +15,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- user-configured cloud / self-hosted speech recognition (D028 Direct BYOK); audio is only
+         sent while the user has selected such a service -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- remove intent queries merged from library manifest (namely Android-Image-Cropper) -->
     <queries tools:node="removeAll" />
 
