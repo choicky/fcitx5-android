@@ -9,7 +9,11 @@ import android.speech.SpeechRecognizer
 import android.text.InputType
 import android.widget.CheckBox
 import android.widget.EditText
+import android.view.View
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.PreferenceCategory
@@ -27,6 +31,7 @@ import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
 import org.fcitx.fcitx5.android.input.voice.LocalModels
 import org.fcitx.fcitx5.android.input.voice.ModelCatalogEntry
 import org.fcitx.fcitx5.android.input.voice.ModelJobs
+import org.fcitx.fcitx5.android.input.voice.QwenAsrConfig
 import org.fcitx.fcitx5.android.input.voice.LocalStatus
 import org.fcitx.fcitx5.android.input.voice.Recommendation
 import org.fcitx.fcitx5.android.input.voice.SelfHostedInstance
@@ -78,6 +83,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         AsrServiceId.System -> getString(R.string.asr_provider_system)
         AsrServiceId.Local -> getString(R.string.asr_provider_local)
         AsrServiceId.Doubao -> getString(R.string.asr_service_doubao)
+        AsrServiceId.Qwen -> getString(R.string.asr_service_qwen)
         is AsrServiceId.SelfHosted -> store.instances.firstOrNull { it.id == service.instanceId }
             ?.name?.ifEmpty { null } ?: getString(R.string.voice_selfhosted_unnamed)
     }
@@ -195,6 +201,20 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                     else R.string.voice_credentials_missing
                 )
             ) { editDoubaoCredentials() }
+            addSwitch(
+                getString(R.string.voice_enable_qwen),
+                getString(R.string.voice_byok_note_qwen),
+                selection.isEnabled(AsrServiceId.Qwen)
+            ) {
+                store.save(store.load().withEnabled(AsrServiceId.Qwen, it))
+            }
+            addPreference(
+                getString(R.string.voice_qwen_credentials),
+                getString(
+                    if (credentials.has(QwenAsrConfig.PROVIDER)) R.string.voice_credentials_set
+                    else R.string.voice_credentials_missing
+                )
+            ) { editQwenCredentials() }
         }
 
         screen.addCategory(R.string.voice_section_selfhosted) {
@@ -209,7 +229,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                     else R.string.voice_disabled
                 )
                 val summary = listOfNotNull(
-                    getString(R.string.voice_selfhosted_sherpa), instance.url, state, problem
+                    protocolLabel(instance.protocol), instance.url, state, problem
                 ).joinToString(" · ")
                 addPreference(label(instance.service), summary) { editInstance(instance) }
             }
@@ -414,64 +434,125 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         super.onStop()
     }
 
+    /** One field of a provider's credential form; [choices] shows radio buttons instead of text. */
+    private data class CredentialField(
+        val key: String,
+        val label: Int,
+        val secret: Boolean = false,
+        val default: String = "",
+        val choices: List<Pair<String, String>> = emptyList()
+    )
+
     /**
-     * Direct BYOK (D028): the user's own Volcengine credentials, stored encrypted on this device
-     * only. Secret fields are never shown; leaving one empty keeps the stored value.
+     * Direct BYOK (D028): a provider's own credentials, stored encrypted on this device only and
+     * never shown back; leaving a secret field empty keeps the stored value.
      */
-    private fun editDoubaoCredentials() {
+    private fun editCredentials(
+        provider: String,
+        title: Int,
+        hint: Int,
+        fields: List<CredentialField>,
+        isComplete: (Map<String, String>) -> Boolean
+    ) {
         val ctx = requireContext()
-        val stored = credentials.read(DoubaoCredentials.PROVIDER).orEmpty()
+        val stored = credentials.read(provider).orEmpty()
         val pad = (16 * resources.displayMetrics.density).toInt()
-        fun field(hint: Int, secret: Boolean, value: String = "") = EditText(ctx).apply {
-            setHint(hint)
-            setText(value)
-            val variation = if (secret) InputType.TYPE_TEXT_VARIATION_PASSWORD else 0
-            inputType = InputType.TYPE_CLASS_TEXT or variation
-        }
-        val apiKey = field(R.string.voice_doubao_api_key, secret = true)
-        val appKey = field(
-            R.string.voice_doubao_app_key, secret = false,
-            value = stored[DoubaoCredentials.APP_KEY].orEmpty()
-        )
-        val accessKey = field(R.string.voice_doubao_access_key, secret = true)
-        val resourceId = field(
-            R.string.voice_doubao_resource_id, secret = false,
-            value = stored[DoubaoCredentials.RESOURCE_ID] ?: DoubaoCredentials.DEFAULT_RESOURCE_ID
-        )
-        if (!stored[DoubaoCredentials.API_KEY].isNullOrEmpty()) apiKey.setHint(R.string.voice_secret_kept)
-        if (!stored[DoubaoCredentials.ACCESS_KEY].isNullOrEmpty()) accessKey.setHint(R.string.voice_secret_kept)
         val form = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad / 2, pad, 0)
-            listOf(apiKey, appKey, accessKey, resourceId).forEach { addView(it) }
+        }
+        val readers: List<Pair<String, () -> String>> = fields.map { field ->
+            if (field.choices.isNotEmpty()) {
+                form.addView(TextView(ctx).apply { setText(field.label) })
+                val group = RadioGroup(ctx)
+                val current = stored[field.key] ?: field.default
+                val ids = field.choices.map { (value, text) ->
+                    val button = RadioButton(ctx).apply {
+                        id = View.generateViewId()
+                        this.text = text
+                    }
+                    group.addView(button)
+                    if (value == current) group.check(button.id)
+                    button.id to value
+                }
+                form.addView(group)
+                field.key to {
+                    ids.firstOrNull { it.first == group.checkedRadioButtonId }?.second ?: field.default
+                }
+            } else {
+                val keep = field.secret && !stored[field.key].isNullOrEmpty()
+                val input = EditText(ctx).apply {
+                    setHint(if (keep) R.string.voice_secret_kept else field.label)
+                    if (!field.secret) setText(stored[field.key] ?: field.default)
+                    val variation = if (field.secret) InputType.TYPE_TEXT_VARIATION_PASSWORD else 0
+                    inputType = InputType.TYPE_CLASS_TEXT or variation
+                }
+                form.addView(input)
+                field.key to {
+                    val typed = input.text.toString().trim()
+                    if (typed.isEmpty() && field.secret) stored[field.key].orEmpty() else typed
+                }
+            }
         }
         AlertDialog.Builder(ctx)
-            .setTitle(R.string.voice_doubao_credentials)
-            .setMessage(R.string.voice_doubao_credentials_hint)
+            .setTitle(title)
+            .setMessage(hint)
             .setView(form)
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                fun keep(input: EditText, key: String) =
-                    input.text.toString().trim().ifEmpty { stored[key].orEmpty() }
-                val fields = mapOf(
-                    DoubaoCredentials.API_KEY to keep(apiKey, DoubaoCredentials.API_KEY),
-                    DoubaoCredentials.APP_KEY to appKey.text.toString().trim(),
-                    DoubaoCredentials.ACCESS_KEY to keep(accessKey, DoubaoCredentials.ACCESS_KEY),
-                    DoubaoCredentials.RESOURCE_ID to resourceId.text.toString().trim()
-                ).filterValues { it.isNotEmpty() }
-                if (DoubaoCredentials.fromStore(fields).isComplete) {
-                    credentials.write(DoubaoCredentials.PROVIDER, fields)
+                val values = readers.associate { (key, read) -> key to read() }
+                    .filterValues { it.isNotEmpty() }
+                if (isComplete(values)) {
+                    credentials.write(provider, values)
                 } else {
-                    ctx.toast(R.string.voice_doubao_credentials_incomplete)
+                    ctx.toast(R.string.voice_credentials_incomplete)
                 }
                 render()
             }
             .setNeutralButton(R.string.voice_credentials_clear) { _, _ ->
-                credentials.clear(DoubaoCredentials.PROVIDER)
+                credentials.clear(provider)
                 render()
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
+
+    private fun editDoubaoCredentials() = editCredentials(
+        DoubaoCredentials.PROVIDER,
+        R.string.voice_doubao_credentials,
+        R.string.voice_doubao_credentials_hint,
+        listOf(
+            CredentialField(DoubaoCredentials.API_KEY, R.string.voice_doubao_api_key, secret = true),
+            CredentialField(DoubaoCredentials.APP_KEY, R.string.voice_doubao_app_key),
+            CredentialField(DoubaoCredentials.ACCESS_KEY, R.string.voice_doubao_access_key, secret = true),
+            CredentialField(
+                DoubaoCredentials.RESOURCE_ID, R.string.voice_doubao_resource_id,
+                default = DoubaoCredentials.DEFAULT_RESOURCE_ID
+            )
+        )
+    ) { DoubaoCredentials.fromStore(it).isComplete }
+
+    private fun editQwenCredentials() = editCredentials(
+        QwenAsrConfig.PROVIDER,
+        R.string.voice_qwen_credentials,
+        R.string.voice_qwen_credentials_hint,
+        listOf(
+            CredentialField(QwenAsrConfig.API_KEY, R.string.voice_qwen_api_key, secret = true),
+            CredentialField(QwenAsrConfig.WORKSPACE_ID, R.string.voice_qwen_workspace),
+            CredentialField(
+                QwenAsrConfig.REGION, R.string.voice_qwen_region,
+                default = QwenAsrConfig.Region.Beijing.name,
+                choices = listOf(
+                    QwenAsrConfig.Region.Beijing.name to getString(R.string.voice_region_beijing),
+                    QwenAsrConfig.Region.Singapore.name to getString(R.string.voice_region_singapore)
+                )
+            ),
+            CredentialField(
+                QwenAsrConfig.MODEL, R.string.voice_qwen_model,
+                default = QwenAsrConfig.DEFAULT_MODEL,
+                choices = QwenAsrConfig.MODELS.map { it to it }
+            )
+        )
+    ) { QwenAsrConfig.fromStore(it).isComplete }
 
     /**
      * Add or edit a self-hosted server. Only `wss://` is accepted in release builds; the token
@@ -497,6 +578,16 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             )
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
+        val protocols = RadioGroup(ctx)
+        val protocolIds = SelfHostedProtocol.entries.map { protocol ->
+            val button = RadioButton(ctx).apply {
+                id = View.generateViewId()
+                text = protocolLabel(protocol)
+            }
+            protocols.addView(button)
+            if (protocol == (existing?.protocol ?: SelfHostedProtocol.SherpaOnnx)) protocols.check(button.id)
+            button.id to protocol
+        }
         val enabled = CheckBox(ctx).apply {
             setText(R.string.voice_selfhosted_enable)
             isChecked = existing?.let { store.load().isEnabled(it.service) } ?: true
@@ -504,10 +595,10 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val form = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad / 2, pad, 0)
-            listOf(name, url, token, enabled).forEach { addView(it) }
+            listOf(name, protocols, url, token, enabled).forEach { addView(it) }
         }
         val builder = AlertDialog.Builder(ctx)
-            .setTitle(R.string.voice_selfhosted_sherpa)
+            .setTitle(R.string.voice_selfhosted_server)
             .setMessage(R.string.voice_selfhosted_protocol_hint)
             .setView(form)
             .setPositiveButton(android.R.string.ok) { _, _ ->
@@ -517,9 +608,9 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                     EndpointProblem.Cleartext -> ctx.toast(R.string.voice_endpoint_cleartext)
                     null -> {
                         val id = existing?.id ?: newInstanceId()
-                        val instance = SelfHostedInstance(
-                            id, name.text.toString().trim(), SelfHostedProtocol.SherpaOnnx, endpoint
-                        )
+                        val protocol = protocolIds.firstOrNull { it.first == protocols.checkedRadioButtonId }
+                            ?.second ?: SelfHostedProtocol.SherpaOnnx
+                        val instance = SelfHostedInstance(id, name.text.toString().trim(), protocol, endpoint)
                         store.instances = store.instances.filter { it.id != id } + instance
                         val newToken = token.text.toString().trim()
                         if (newToken.isNotEmpty()) {
@@ -542,6 +633,12 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
         builder.show()
     }
+
+    private fun protocolLabel(protocol: SelfHostedProtocol) = getString(
+        when (protocol) {
+            SelfHostedProtocol.SherpaOnnx -> R.string.voice_selfhosted_sherpa
+        }
+    )
 
     private fun newInstanceId(): String {
         val used = store.instances.map { it.id }.toSet()

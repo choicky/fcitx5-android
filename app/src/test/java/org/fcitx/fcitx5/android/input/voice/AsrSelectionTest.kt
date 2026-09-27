@@ -312,4 +312,20 @@ class AsrSelectionTest {
         val s = AsrServiceId.SelfHosted("abc123")
         assertNull(fallbackTarget(s, VoiceSelection(s, setOf(s, AsrServiceId.Local, AsrServiceId.System), true), localReady))
     }
+
+    @Test
+    fun qwenIsAnIndependentManagedCloudService() {
+        val qwen = VoiceSelection(AsrServiceId.Qwen, setOf(AsrServiceId.Qwen, AsrServiceId.Doubao), true)
+        // Doubao's credentials do not configure Qwen
+        assertEquals(
+            AsrResolution.CurrentUnavailable(AsrServiceId.Qwen, UnavailableReason.MissingCredentials),
+            resolveCurrentService(qwen, localReady, Allowed, systemNotQueried, configured(AsrServiceId.Doubao))
+        )
+        assertEquals(
+            AsrResolution.Ready(AsrServiceId.Qwen, VoiceBackendKind.Qwen),
+            resolveCurrentService(qwen, localReady, Allowed, systemNotQueried, configured(AsrServiceId.Qwen))
+        )
+        // no external-to-external fallback: Qwen falls back only to a production Local model
+        assertNull(fallbackTarget(AsrServiceId.Qwen, qwen, localReady))
+    }
 }

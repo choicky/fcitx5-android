@@ -61,35 +61,21 @@ internal object SherpaOnnxServerProtocol {
             get() = joinSegments(segments.values)
     }
 
-    /** Chinese needs no separator; Latin words split across segments keep one space. */
-    fun joinSegments(parts: Collection<String>): String = buildString {
-        parts.map { it.trim() }.filter { it.isNotEmpty() }.forEach { part ->
-            if (isNotEmpty() && last().isLatinOrDigit() && part.first().isLatinOrDigit()) append(' ')
-            append(part)
-        }
-    }
-
-    private fun Char.isLatinOrDigit() =
-        this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9'
+    fun joinSegments(parts: Collection<String>) = joinTranscriptParts(parts)
 }
 
 /**
  * One session against a sherpa-onnx streaming server. Callbacks run on OkHttp threads.
- * [onOpen] means the server accepted the WebSocket, which is the only session acknowledgement
- * the protocol has; reverse-proxy authentication failures arrive before it.
+ * The server accepting the WebSocket is the only session acknowledgement the protocol has, so
+ * that is [NetworkAsrClient.Listener.onEstablished]; reverse-proxy authentication failures
+ * arrive before it.
  */
 internal class SherpaOnnxServerClient(
     private val client: OkHttpClient,
     private val url: String,
     private val bearerToken: String?,
-    private val listener: Listener
-) {
-    interface Listener {
-        fun onOpen()
-        fun onPartial(text: String)
-        fun onFinal(text: String)
-        fun onFailure(detail: String)
-    }
+    private val listener: NetworkAsrClient.Listener
+) : NetworkAsrClient {
 
     private val transcript = SherpaOnnxServerProtocol.Transcript()
     private var socket: WebSocket? = null
@@ -100,12 +86,12 @@ internal class SherpaOnnxServerClient(
     @Volatile
     private var done = false
 
-    fun connect() {
+    override fun connect() {
         val request = Request.Builder().url(url).apply {
             bearerToken?.takeIf { it.isNotEmpty() }?.let { header("Authorization", "Bearer $it") }
         }.build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) = listener.onOpen()
+            override fun onOpen(webSocket: WebSocket, response: Response) = listener.onEstablished()
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val result = SherpaOnnxServerProtocol.parse(text) ?: return
@@ -127,17 +113,16 @@ internal class SherpaOnnxServerClient(
         })
     }
 
-    fun send(pcm: ShortArray, count: Int) {
+    override fun send(pcm: ShortArray, count: Int) {
         socket?.send(SherpaOnnxServerProtocol.audioFrame(pcm, count).toByteString())
     }
 
-    /** End of input; the final result follows. */
-    fun finishInput() {
+    override fun finishInput() {
         finishing = true
         socket?.send(SherpaOnnxServerProtocol.DONE)
     }
 
-    fun cancel() {
+    override fun cancel() {
         done = true
         socket?.cancel()
         socket = null
