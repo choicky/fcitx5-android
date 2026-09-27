@@ -24,7 +24,10 @@ internal enum class SelfHostedProtocol(val key: String) {
     SherpaOnnx("sherpa-onnx"),
 
     /** FunASR real-time server in 2pass mode (online Paraformer + offline correction). */
-    FunAsr2Pass("funasr-2pass");
+    FunAsr2Pass("funasr-2pass"),
+
+    /** FunASR's Fun-ASR-Nano streaming server (`funasr-realtime-server`; START/STOP). */
+    FunAsrNano("funasr-nano");
 
     companion object {
         fun parse(key: String) = entries.firstOrNull { it.key == key }
