@@ -25,7 +25,14 @@ class AsrSelectionTest {
         system: Boolean = true,
         local: Boolean = true,
         done: Boolean = true
-    ) = VoiceSelection(current, system, local, done)
+    ) = VoiceSelection(
+        current,
+        buildSet {
+            if (system) add(AsrServiceId.System)
+            if (local) add(AsrServiceId.Local)
+        },
+        done
+    )
 
     private fun resolve(
         selection: VoiceSelection,
@@ -33,7 +40,7 @@ class AsrSelectionTest {
         authorization: SystemAsrAuthorization = Allowed,
         systemAvailable: Boolean = true,
         debugOverride: VoiceBackendKind? = null
-    ) = resolveVoiceBackend(debugOverride, selection, local, authorization) { systemAvailable }
+    ) = resolveVoiceBackend(debugOverride, selection, local, authorization, systemAvailable = { systemAvailable })
 
     /** SpeechRecognizer must not even be queried on these paths (D030). */
     private val systemNotQueried: () -> Boolean = { throw AssertionError("System ASR queried") }
@@ -131,18 +138,18 @@ class AsrSelectionTest {
     @Test
     fun legacyMigrationNeverSelectsANetworkService() {
         assertEquals(
-            VoiceSelection(AsrServiceId.System, systemEnabled = true, localEnabled = false, recommendationDone = true),
+            VoiceSelection(AsrServiceId.System, setOf(AsrServiceId.System), true),
             migrateLegacyProvider("System", NotAsked)
         )
         assertEquals(
-            VoiceSelection(AsrServiceId.Local, systemEnabled = false, localEnabled = true, recommendationDone = true),
+            VoiceSelection(AsrServiceId.Local, setOf(AsrServiceId.Local), true),
             migrateLegacyProvider("Local", Allowed)
         )
         // old Auto: keep an allowed System, remember a decline, otherwise recommend on first use
         assertEquals(AsrServiceId.System, migrateLegacyProvider("Auto", Allowed).current)
-        assertEquals(VoiceSelection(null, false, false, true), migrateLegacyProvider("Auto", Declined))
-        assertEquals(VoiceSelection(null, false, false, false), migrateLegacyProvider(null, NotAsked))
-        assertEquals(VoiceSelection(null, false, false, false), migrateLegacyProvider("Auto", NotAsked))
+        assertEquals(VoiceSelection(null, emptySet(), true), migrateLegacyProvider("Auto", Declined))
+        assertEquals(VoiceSelection(null, emptySet(), false), migrateLegacyProvider(null, NotAsked))
+        assertEquals(VoiceSelection(null, emptySet(), false), migrateLegacyProvider("Auto", NotAsked))
     }
 
     @Test
@@ -204,5 +211,43 @@ class AsrSelectionTest {
         assertNull(fallbackTarget(null, selection(null), localReady))
         // A and B are research models (D037), never fallback targets
         LocalAsrModel.entries.forEach { assertFalse(it.production) }
+    }
+
+    @Test
+    fun doubaoNeedsItsOwnCredentials() {
+        val doubao = VoiceSelection(AsrServiceId.Doubao, setOf(AsrServiceId.Doubao), true)
+        assertEquals(
+            AsrResolution.CurrentUnavailable(AsrServiceId.Doubao, UnavailableReason.MissingCredentials),
+            resolveCurrentService(doubao, localReady, Allowed, systemNotQueried)
+        )
+        assertEquals(
+            AsrResolution.Ready(AsrServiceId.Doubao, VoiceBackendKind.Doubao),
+            resolveCurrentService(doubao, localReady, NotAsked, systemNotQueried) { it == AsrServiceId.Doubao }
+        )
+        assertEquals(
+            AsrResolution.CurrentUnavailable(AsrServiceId.Doubao, UnavailableReason.Disabled),
+            resolveCurrentService(doubao.withEnabled(AsrServiceId.Doubao, false), localReady, Allowed, systemNotQueried) { true }
+        )
+    }
+
+    @Test
+    fun externalServiceFallsBackOnlyToAProductionLocalModel() {
+        val doubao = VoiceSelection(AsrServiceId.Doubao, setOf(AsrServiceId.Doubao, AsrServiceId.Local), true)
+        // research models are not production: no fallback
+        assertNull(fallbackTarget(AsrServiceId.Doubao, doubao, localReady))
+        // never to System, even when System is enabled and allowed
+        assertNull(fallbackTarget(AsrServiceId.Doubao, doubao.withEnabled(AsrServiceId.System, true), noLocal))
+    }
+
+    @Test
+    fun neverSelectsDoubaoWithoutTheUser() {
+        // the recommendation and the migration never pick a network service
+        for (auth in SystemAsrAuthorization.entries) for (legacy in listOf(null, "Auto", "System", "Local", "bogus")) {
+            val migrated = migrateLegacyProvider(legacy, auth)
+            assertFalse(migrated.current == AsrServiceId.Doubao)
+            assertFalse(AsrServiceId.Doubao in migrated.enabled)
+            val recommended = migrated.applyRecommendation(recommend(auth) { true })
+            assertFalse(recommended.current == AsrServiceId.Doubao)
+        }
     }
 }

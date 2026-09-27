@@ -6,12 +6,17 @@ package org.fcitx.fcitx5.android.ui.main.settings.behavior
 
 import android.os.Bundle
 import android.speech.SpeechRecognizer
+import android.text.InputType
+import android.widget.EditText
+import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.PreferenceCategory
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.voice.AsrResolution
 import org.fcitx.fcitx5.android.input.voice.AsrServiceId
+import org.fcitx.fcitx5.android.input.voice.DoubaoCredentials
+import org.fcitx.fcitx5.android.input.voice.KeystoreSecretCipher
 import org.fcitx.fcitx5.android.input.voice.LocalAsrBackend
 import org.fcitx.fcitx5.android.input.voice.LocalAsrEngines
 import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
@@ -38,6 +43,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     private val prefs = AppPrefs.getInstance()
     private val store = VoiceSelectionStore(prefs)
+    private val credentials by lazy { KeystoreSecretCipher.store(requireContext()) }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext())
@@ -65,6 +71,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         when (service) {
             AsrServiceId.System -> R.string.asr_provider_system
             AsrServiceId.Local -> R.string.asr_provider_local
+            AsrServiceId.Doubao -> R.string.asr_service_doubao
         }
     )
 
@@ -78,6 +85,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 UnavailableReason.NoLocalRuntime -> R.string.voice_local_no_runtime
                 UnavailableReason.NoLocalModel -> R.string.voice_local_no_model
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable
+                UnavailableReason.MissingCredentials -> R.string.voice_missing_credentials
             }
             is AsrResolution.NeedsRecommendation, AsrResolution.NoService -> R.string.voice_current_none
         }
@@ -104,7 +112,10 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val selection = store.load()
         val authorization = store.systemAuthorization
         val resolution =
-            resolveCurrentService(selection, localStatus(), authorization, ::systemAvailable)
+            resolveCurrentService(
+                selection, localStatus(), authorization, ::systemAvailable,
+                configured = { it == AsrServiceId.Doubao && credentials.has(DoubaoCredentials.PROVIDER) }
+            )
 
         screen.addCategory(R.string.voice_current_section) {
             val current = selection.current
@@ -124,8 +135,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
 
         screen.addCategory(R.string.voice_section_system) {
-            addSwitch(getString(R.string.voice_enable_system), null, selection.systemEnabled) {
-                store.save(store.load().copy(systemEnabled = it))
+            addSwitch(getString(R.string.voice_enable_system), null, selection.isEnabled(AsrServiceId.System)) {
+                store.save(store.load().withEnabled(AsrServiceId.System, it))
             }
             addPreference(MySwitchPreference(ctx).apply {
                 key = prefs.voice.systemAsrAllowed.key
@@ -143,8 +154,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
 
         screen.addCategory(R.string.voice_section_local) {
-            addSwitch(getString(R.string.voice_enable_local), null, selection.localEnabled) {
-                store.save(store.load().copy(localEnabled = it))
+            addSwitch(getString(R.string.voice_enable_local), null, selection.isEnabled(AsrServiceId.Local)) {
+                store.save(store.load().withEnabled(AsrServiceId.Local, it))
             }
             val model = store.localModel
             val modelSummary = when {
@@ -161,6 +172,23 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 )
             }
             addPreference(getString(R.string.voice_local_model), modelSummary) { chooseLocalModel() }
+        }
+
+        screen.addCategory(R.string.voice_section_cloud) {
+            addSwitch(
+                getString(R.string.voice_enable_doubao),
+                getString(R.string.voice_byok_note),
+                selection.isEnabled(AsrServiceId.Doubao)
+            ) {
+                store.save(store.load().withEnabled(AsrServiceId.Doubao, it))
+            }
+            addPreference(
+                getString(R.string.voice_doubao_credentials),
+                getString(
+                    if (credentials.has(DoubaoCredentials.PROVIDER)) R.string.voice_credentials_set
+                    else R.string.voice_credentials_missing
+                )
+            ) { editDoubaoCredentials() }
         }
 
         screen.addCategory(R.string.voice_section_other) {
@@ -235,6 +263,65 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             .setSingleChoiceItems(labels, models.indexOf(store.localModel)) { dialog, which ->
                 store.localModel = models[which]
                 dialog.dismiss()
+                render()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * Direct BYOK (D028): the user's own Volcengine credentials, stored encrypted on this device
+     * only. Secret fields are never shown; leaving one empty keeps the stored value.
+     */
+    private fun editDoubaoCredentials() {
+        val ctx = requireContext()
+        val stored = credentials.read(DoubaoCredentials.PROVIDER).orEmpty()
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        fun field(hint: Int, secret: Boolean, value: String = "") = EditText(ctx).apply {
+            setHint(hint)
+            setText(value)
+            val variation = if (secret) InputType.TYPE_TEXT_VARIATION_PASSWORD else 0
+            inputType = InputType.TYPE_CLASS_TEXT or variation
+        }
+        val apiKey = field(R.string.voice_doubao_api_key, secret = true)
+        val appKey = field(
+            R.string.voice_doubao_app_key, secret = false,
+            value = stored[DoubaoCredentials.APP_KEY].orEmpty()
+        )
+        val accessKey = field(R.string.voice_doubao_access_key, secret = true)
+        val resourceId = field(
+            R.string.voice_doubao_resource_id, secret = false,
+            value = stored[DoubaoCredentials.RESOURCE_ID] ?: DoubaoCredentials.DEFAULT_RESOURCE_ID
+        )
+        if (!stored[DoubaoCredentials.API_KEY].isNullOrEmpty()) apiKey.setHint(R.string.voice_secret_kept)
+        if (!stored[DoubaoCredentials.ACCESS_KEY].isNullOrEmpty()) accessKey.setHint(R.string.voice_secret_kept)
+        val form = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            listOf(apiKey, appKey, accessKey, resourceId).forEach { addView(it) }
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.voice_doubao_credentials)
+            .setMessage(R.string.voice_doubao_credentials_hint)
+            .setView(form)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                fun keep(input: EditText, key: String) =
+                    input.text.toString().trim().ifEmpty { stored[key].orEmpty() }
+                val fields = mapOf(
+                    DoubaoCredentials.API_KEY to keep(apiKey, DoubaoCredentials.API_KEY),
+                    DoubaoCredentials.APP_KEY to appKey.text.toString().trim(),
+                    DoubaoCredentials.ACCESS_KEY to keep(accessKey, DoubaoCredentials.ACCESS_KEY),
+                    DoubaoCredentials.RESOURCE_ID to resourceId.text.toString().trim()
+                ).filterValues { it.isNotEmpty() }
+                if (DoubaoCredentials.fromStore(fields).isComplete) {
+                    credentials.write(DoubaoCredentials.PROVIDER, fields)
+                } else {
+                    ctx.toast(R.string.voice_doubao_credentials_incomplete)
+                }
+                render()
+            }
+            .setNeutralButton(R.string.voice_credentials_clear) { _, _ ->
+                credentials.clear(DoubaoCredentials.PROVIDER)
                 render()
             }
             .setNegativeButton(android.R.string.cancel, null)

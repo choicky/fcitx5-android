@@ -19,10 +19,16 @@ internal class VoiceSelectionStore(private val prefs: AppPrefs) {
     fun load(): VoiceSelection {
         migrate()
         val internal = prefs.internal
+        val enabled = buildSet {
+            if (internal.voiceSystemEnabled.getValue()) add(AsrServiceId.System)
+            if (internal.voiceLocalEnabled.getValue()) add(AsrServiceId.Local)
+            internal.voiceEnabledExternal.getValue().split(',')
+                .mapNotNull { AsrServiceId.parse(it) }
+                .filterTo(this) { it.external }
+        }
         return VoiceSelection(
             current = AsrServiceId.parse(internal.voiceCurrentService.getValue()),
-            systemEnabled = internal.voiceSystemEnabled.getValue(),
-            localEnabled = internal.voiceLocalEnabled.getValue(),
+            enabled = enabled,
             recommendationDone = internal.voiceRecommendationDone.getValue()
         )
     }
@@ -30,8 +36,11 @@ internal class VoiceSelectionStore(private val prefs: AppPrefs) {
     fun save(selection: VoiceSelection) {
         val internal = prefs.internal
         internal.voiceCurrentService.setValue(selection.current?.key ?: "")
-        internal.voiceSystemEnabled.setValue(selection.systemEnabled)
-        internal.voiceLocalEnabled.setValue(selection.localEnabled)
+        internal.voiceSystemEnabled.setValue(selection.isEnabled(AsrServiceId.System))
+        internal.voiceLocalEnabled.setValue(selection.isEnabled(AsrServiceId.Local))
+        internal.voiceEnabledExternal.setValue(
+            selection.enabled.filter { it.external }.joinToString(",") { it.key }
+        )
         internal.voiceRecommendationDone.setValue(selection.recommendationDone)
     }
 
