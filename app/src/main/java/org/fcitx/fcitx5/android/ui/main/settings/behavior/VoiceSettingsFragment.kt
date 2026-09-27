@@ -414,6 +414,143 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         super.onStop()
     }
 
+    /**
+     * Direct BYOK (D028): the user's own Volcengine credentials, stored encrypted on this device
+     * only. Secret fields are never shown; leaving one empty keeps the stored value.
+     */
+    private fun editDoubaoCredentials() {
+        val ctx = requireContext()
+        val stored = credentials.read(DoubaoCredentials.PROVIDER).orEmpty()
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        fun field(hint: Int, secret: Boolean, value: String = "") = EditText(ctx).apply {
+            setHint(hint)
+            setText(value)
+            val variation = if (secret) InputType.TYPE_TEXT_VARIATION_PASSWORD else 0
+            inputType = InputType.TYPE_CLASS_TEXT or variation
+        }
+        val apiKey = field(R.string.voice_doubao_api_key, secret = true)
+        val appKey = field(
+            R.string.voice_doubao_app_key, secret = false,
+            value = stored[DoubaoCredentials.APP_KEY].orEmpty()
+        )
+        val accessKey = field(R.string.voice_doubao_access_key, secret = true)
+        val resourceId = field(
+            R.string.voice_doubao_resource_id, secret = false,
+            value = stored[DoubaoCredentials.RESOURCE_ID] ?: DoubaoCredentials.DEFAULT_RESOURCE_ID
+        )
+        if (!stored[DoubaoCredentials.API_KEY].isNullOrEmpty()) apiKey.setHint(R.string.voice_secret_kept)
+        if (!stored[DoubaoCredentials.ACCESS_KEY].isNullOrEmpty()) accessKey.setHint(R.string.voice_secret_kept)
+        val form = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            listOf(apiKey, appKey, accessKey, resourceId).forEach { addView(it) }
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.voice_doubao_credentials)
+            .setMessage(R.string.voice_doubao_credentials_hint)
+            .setView(form)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                fun keep(input: EditText, key: String) =
+                    input.text.toString().trim().ifEmpty { stored[key].orEmpty() }
+                val fields = mapOf(
+                    DoubaoCredentials.API_KEY to keep(apiKey, DoubaoCredentials.API_KEY),
+                    DoubaoCredentials.APP_KEY to appKey.text.toString().trim(),
+                    DoubaoCredentials.ACCESS_KEY to keep(accessKey, DoubaoCredentials.ACCESS_KEY),
+                    DoubaoCredentials.RESOURCE_ID to resourceId.text.toString().trim()
+                ).filterValues { it.isNotEmpty() }
+                if (DoubaoCredentials.fromStore(fields).isComplete) {
+                    credentials.write(DoubaoCredentials.PROVIDER, fields)
+                } else {
+                    ctx.toast(R.string.voice_doubao_credentials_incomplete)
+                }
+                render()
+            }
+            .setNeutralButton(R.string.voice_credentials_clear) { _, _ ->
+                credentials.clear(DoubaoCredentials.PROVIDER)
+                render()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * Add or edit a self-hosted server. Only `wss://` is accepted in release builds; the token
+     * is optional (for a reverse proxy), stored encrypted, and never shown.
+     */
+    private fun editInstance(existing: SelfHostedInstance?) {
+        val ctx = requireContext()
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val storedToken = existing?.let { credentials.read(it.credentialProvider)?.get(SelfHostedInstance.TOKEN) }
+        val name = EditText(ctx).apply {
+            setHint(R.string.voice_selfhosted_name)
+            setText(existing?.name.orEmpty())
+        }
+        val url = EditText(ctx).apply {
+            setHint(R.string.voice_selfhosted_url)
+            setText(existing?.url.orEmpty())
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        }
+        val token = EditText(ctx).apply {
+            setHint(
+                if (storedToken.isNullOrEmpty()) R.string.voice_selfhosted_token
+                else R.string.voice_secret_kept
+            )
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val enabled = CheckBox(ctx).apply {
+            setText(R.string.voice_selfhosted_enable)
+            isChecked = existing?.let { store.load().isEnabled(it.service) } ?: true
+        }
+        val form = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            listOf(name, url, token, enabled).forEach { addView(it) }
+        }
+        val builder = AlertDialog.Builder(ctx)
+            .setTitle(R.string.voice_selfhosted_sherpa)
+            .setMessage(R.string.voice_selfhosted_protocol_hint)
+            .setView(form)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val endpoint = url.text.toString().trim()
+                when (endpointProblem(endpoint, BuildConfig.DEBUG)) {
+                    EndpointProblem.Invalid -> ctx.toast(R.string.voice_endpoint_invalid)
+                    EndpointProblem.Cleartext -> ctx.toast(R.string.voice_endpoint_cleartext)
+                    null -> {
+                        val id = existing?.id ?: newInstanceId()
+                        val instance = SelfHostedInstance(
+                            id, name.text.toString().trim(), SelfHostedProtocol.SherpaOnnx, endpoint
+                        )
+                        store.instances = store.instances.filter { it.id != id } + instance
+                        val newToken = token.text.toString().trim()
+                        if (newToken.isNotEmpty()) {
+                            credentials.write(
+                                instance.credentialProvider,
+                                mapOf(SelfHostedInstance.TOKEN to newToken)
+                            )
+                        }
+                        store.save(store.load().withEnabled(instance.service, enabled.isChecked))
+                    }
+                }
+                render()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+        if (existing != null) {
+            builder.setNeutralButton(R.string.voice_credentials_clear) { _, _ ->
+                store.removeInstance(existing.id, credentials)
+                render()
+            }
+        }
+        builder.show()
+    }
+
+    private fun newInstanceId(): String {
+        val used = store.instances.map { it.id }.toSet()
+        while (true) {
+            val id = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+            if (id !in used) return id
+        }
+    }
+
     /** The one-time recommendation (D034); it never selects a network service. */
     private fun runRecommendation() {
         when (val recommendation = recommend(store.systemAuthorization, ::systemAvailable)) {
