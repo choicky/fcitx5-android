@@ -19,8 +19,8 @@ class VoiceInputSessionTest {
         val token = session.start()
         assertNotNull(token)
         assertEquals(VoiceInputSession.State.Starting, session.state)
-        assertTrue(session.onRecognizerStarted(token!!))
-        assertEquals(VoiceInputSession.StopAction.StopRecognizer, session.stop())
+        assertTrue(session.onBackendStarted(token!!))
+        assertEquals(VoiceInputSession.StopAction.StopBackend, session.stop())
         assertEquals(VoiceInputSession.State.Stopping, session.state)
         assertTrue(session.accepts(token))
         assertTrue(session.complete(token))
@@ -33,7 +33,7 @@ class VoiceInputSessionTest {
         val token = session.start()!!
         assertTrue(session.cancel())
         assertFalse(session.accepts(token))
-        assertFalse(session.onRecognizerStarted(token))
+        assertFalse(session.onBackendStarted(token))
         assertFalse(session.complete(token))
     }
 
