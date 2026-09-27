@@ -11,10 +11,11 @@ on:
   push:
     branches:
       - moqi-test-apk
+      - phase4-voice-poc
   workflow_dispatch:
 
 concurrency:
-  group: moqi-test-apk
+  group: moqi-test-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -58,7 +59,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build debug APK (arm64-v8a)
-        run: BUILD_ABI=arm64-v8a ./gradlew :app:assembleDebug
+        run: BUILD_ABI=arm64-v8a ./gradlew :app:testDebugUnitTest :app:assembleDebug
 
       - name: Report APK
         run: ls -l app/build/outputs/apk/debug/
