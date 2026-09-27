@@ -12,34 +12,6 @@ import org.junit.Test
 class VoiceBackendSelectionTest {
 
     @Test
-    fun releaseAlwaysUsesSystemAsr() {
-        assertEquals(
-            VoiceBackendKind.System,
-            configuredBackendKind(debug = false, LocalAsrModel.FunAsrNano, doubaoAsr = true, captureProbe = true)
-        )
-    }
-
-    @Test
-    fun debugPrecedenceLocalThenDoubaoThenProbe() {
-        assertEquals(
-            VoiceBackendKind.LocalAsr(LocalAsrModel.ZipformerZh),
-            configuredBackendKind(debug = true, LocalAsrModel.ZipformerZh, doubaoAsr = true, captureProbe = true)
-        )
-        assertEquals(
-            VoiceBackendKind.DoubaoAsr,
-            configuredBackendKind(debug = true, null, doubaoAsr = true, captureProbe = true)
-        )
-        assertEquals(
-            VoiceBackendKind.CaptureProbe,
-            configuredBackendKind(debug = true, null, doubaoAsr = false, captureProbe = true)
-        )
-        assertEquals(
-            VoiceBackendKind.System,
-            configuredBackendKind(debug = true, null, doubaoAsr = false, captureProbe = false)
-        )
-    }
-
-    @Test
     fun localAsrPreferenceValues() {
         assertNull(localAsrModel("Off"))
         assertNull(localAsrModel(""))

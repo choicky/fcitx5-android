@@ -106,7 +106,8 @@ class DeveloperFragment : PaddingPreferenceFragment() {
                     isIconSpaceReserved = false
                     isSingleLineTitle = false
                 })
-                // Phase 4B.3b-1 Local ASR A/B comparison; takes precedence over the switches above
+                // Phase 4B.3b-1 research model for the Local provider (none is formally selected);
+                // the Doubao and capture probe switches above override the provider entirely
                 addPreference(ListPreference(context).apply {
                     key = AppPrefs.getInstance().internal.voiceLocalAsr.key
                     setTitle(R.string.voice_local_asr)

@@ -33,7 +33,10 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     ManagedHandler by managedHandler(), InputBroadcastReceiver {
 
     private val service by manager.inputMethodService()
-    private val showVoiceInputButton by AppPrefs.getInstance().keyboard.showVoiceInputButton
+    private val showVoiceInputButton by AppPrefs.getInstance().voice.showVoiceInputButton
+    private val asrProvider by AppPrefs.getInstance().voice.asrProvider
+    private val systemAsrAllowed by AppPrefs.getInstance().voice.systemAsrAllowed
+    private val systemAsrAnswered by AppPrefs.getInstance().internal.voiceSystemAsrAnswered
     private val voiceCaptureProbe by AppPrefs.getInstance().internal.voiceCaptureProbe
     private val voiceDoubaoAsr by AppPrefs.getInstance().internal.voiceDoubaoAsr
     private val voiceLocalAsr by AppPrefs.getInstance().internal.voiceLocalAsr
@@ -81,23 +84,25 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     val toggleCallback = View.OnClickListener { toggle() }
 
     /**
-     * The backend a session would use. Its availability, not System ASR's, decides whether the
-     * trigger is offered; release builds currently only have System ASR. Phase 4B debug switches
-     * select a Direct backend.
+     * What a session would use now, for both the trigger and [start] (D030: it follows this
+     * resolution, not System ASR availability). Debug PoC switches override the formal provider.
      */
-    private val configuredBackend: VoiceBackendKind
-        get() = configuredBackendKind(
-            debug = BuildConfig.DEBUG,
-            localAsr = localAsrModel(voiceLocalAsr),
-            doubaoAsr = voiceDoubaoAsr,
-            captureProbe = voiceCaptureProbe
+    private val resolution: AsrResolution
+        get() = resolveVoiceBackend(
+            debugOverride = debugBackendOverride(
+                BuildConfig.DEBUG, voiceDoubaoAsr, voiceCaptureProbe
+            ),
+            configured = asrProvider,
+            usableLocal = usableLocalModel(),
+            systemAuthorization = SystemAsrAuthorization.of(systemAsrAllowed, systemAsrAnswered),
+            systemAvailable = { SpeechRecognizer.isRecognitionAvailable(service) }
         )
 
-    private fun VoiceBackendKind.isAvailable() = when (this) {
-        VoiceBackendKind.System -> SpeechRecognizer.isRecognitionAvailable(service)
-        // missing Local ASR model files are reported when a session starts
-        VoiceBackendKind.CaptureProbe, VoiceBackendKind.DoubaoAsr, is VoiceBackendKind.LocalAsr -> true
-    }
+    /** The configured Local model if its files are in place; no model is loaded here. */
+    private fun usableLocalModel(): LocalAsrModel? =
+        configuredLocalModel(LocalAsrEngines.AVAILABLE, voiceLocalAsr)?.takeIf { model ->
+            localAsrModelDir(model)?.let { model.missingFiles(it).isEmpty() } == true
+        }
 
     private fun VoiceBackendKind.create(): VoiceBackend = when (this) {
         VoiceBackendKind.System -> SystemAsrBackend(service)
@@ -132,7 +137,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     fun shouldShowVoiceInput(capFlags: CapabilityFlags): Boolean {
         passwordField = capFlags.has(CapabilityFlag.Password)
-        return showVoiceInputButton && !passwordField && configuredBackend.isAvailable()
+        return showVoiceInputButton && !passwordField && resolution.offersTrigger
     }
 
     override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: CapabilityFlags) {
@@ -187,12 +192,29 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             requestRecordAudioPermission()
             return
         }
-        val backend = configuredBackend
+        val resolved = resolution
         // a cached Local ASR model (about 1 GB for FunASR Nano) is not kept once Local is off
-        if (backend !is VoiceBackendKind.LocalAsr) releaseLocalAsr()
-        if (!backend.isAvailable()) {
-            service.toast(R.string.voice_input_unavailable)
-            return
+        if ((resolved as? AsrResolution.Ready)?.backend !is VoiceBackendKind.LocalAsr) {
+            releaseLocalAsr()
+        }
+        val backend = when (resolved) {
+            is AsrResolution.Ready -> resolved.backend
+            AsrResolution.NeedsSystemAuthorization -> {
+                requestSystemAsrAuthorization()
+                return
+            }
+            AsrResolution.LocalUnavailable -> {
+                service.toast(R.string.voice_local_unavailable)
+                return
+            }
+            AsrResolution.SystemUnavailable -> {
+                service.toast(R.string.voice_input_unavailable)
+                return
+            }
+            AsrResolution.NoProvider -> {
+                service.toast(R.string.voice_no_provider)
+                return
+            }
         }
         val token = inputFlow.begin() ?: return
         service.lifecycleScope.launch {
@@ -204,6 +226,13 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         }
     }
 
+    private fun requestSystemAsrAuthorization() {
+        service.startActivity(Intent(service, MainActivity::class.java).apply {
+            action = MainActivity.ACTION_AUTHORIZE_SYSTEM_ASR
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
+    }
+
     private fun requestRecordAudioPermission() {
         service.startActivity(Intent(service, MainActivity::class.java).apply {
             action = MainActivity.ACTION_REQUEST_RECORD_AUDIO_PERMISSION
@@ -212,25 +241,12 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     }
 }
 
-/** Phase 4B debug backend choice; release builds always use System ASR. */
+/** The backends a session can run on; chosen by [resolveVoiceBackend]. */
 internal sealed interface VoiceBackendKind {
     data object System : VoiceBackendKind
     data object CaptureProbe : VoiceBackendKind
     data object DoubaoAsr : VoiceBackendKind
     data class LocalAsr(val model: LocalAsrModel) : VoiceBackendKind
-}
-
-internal fun configuredBackendKind(
-    debug: Boolean,
-    localAsr: LocalAsrModel?,
-    doubaoAsr: Boolean,
-    captureProbe: Boolean
-): VoiceBackendKind = when {
-    !debug -> VoiceBackendKind.System
-    localAsr != null -> VoiceBackendKind.LocalAsr(localAsr)
-    doubaoAsr -> VoiceBackendKind.DoubaoAsr
-    captureProbe -> VoiceBackendKind.CaptureProbe
-    else -> VoiceBackendKind.System
 }
 
 /** The debug preference value is a [LocalAsrModel] name, or anything else for off. */
