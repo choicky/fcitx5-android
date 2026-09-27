@@ -50,6 +50,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val voiceLocalEnabled = bool("voice_local_enabled", false)
         // enabled Managed Cloud / Self-hosted services, comma-separated keys
         val voiceEnabledExternal = string("voice_enabled_external", "")
+        // self-hosted instances (JSON, no secrets; tokens are in the credential store)
+        val voiceSelfHostedInstances = string("voice_selfhosted_instances", "")
         val voiceRecommendationDone = bool("voice_recommendation_done", false)
         val voiceLocalModel = string("voice_local_model", "")
         val voiceSelectionMigrated = bool("voice_selection_migrated", false)

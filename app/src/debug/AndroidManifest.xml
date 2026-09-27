@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- debug builds only: allow plain ws:// to a self-hosted ASR server on a test network.
+         Release builds keep the platform default (no cleartext) and only accept wss://. -->
+    <application android:networkSecurityConfig="@xml/network_security_config_debug" />
+
+</manifest>
