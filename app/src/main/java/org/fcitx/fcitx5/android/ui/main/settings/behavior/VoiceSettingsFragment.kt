@@ -32,6 +32,7 @@ import org.fcitx.fcitx5.android.input.voice.LocalModels
 import org.fcitx.fcitx5.android.input.voice.ModelCatalogEntry
 import org.fcitx.fcitx5.android.input.voice.ModelJobs
 import org.fcitx.fcitx5.android.input.voice.QwenAsrConfig
+import org.fcitx.fcitx5.android.input.voice.TencentAsrConfig
 import org.fcitx.fcitx5.android.input.voice.LocalStatus
 import org.fcitx.fcitx5.android.input.voice.Recommendation
 import org.fcitx.fcitx5.android.input.voice.SelfHostedInstance
@@ -84,6 +85,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         AsrServiceId.Local -> getString(R.string.asr_provider_local)
         AsrServiceId.Doubao -> getString(R.string.asr_service_doubao)
         AsrServiceId.Qwen -> getString(R.string.asr_service_qwen)
+        AsrServiceId.Tencent -> getString(R.string.asr_service_tencent)
         is AsrServiceId.SelfHosted -> store.instances.firstOrNull { it.id == service.instanceId }
             ?.name?.ifEmpty { null } ?: getString(R.string.voice_selfhosted_unnamed)
     }
@@ -215,6 +217,20 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                     else R.string.voice_credentials_missing
                 )
             ) { editQwenCredentials() }
+            addSwitch(
+                getString(R.string.voice_enable_tencent),
+                getString(R.string.voice_byok_note_tencent),
+                selection.isEnabled(AsrServiceId.Tencent)
+            ) {
+                store.save(store.load().withEnabled(AsrServiceId.Tencent, it))
+            }
+            addPreference(
+                getString(R.string.voice_tencent_credentials),
+                getString(
+                    if (credentials.has(TencentAsrConfig.PROVIDER)) R.string.voice_credentials_set
+                    else R.string.voice_credentials_missing
+                )
+            ) { editTencentCredentials() }
         }
 
         screen.addCategory(R.string.voice_section_selfhosted) {
@@ -553,6 +569,26 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             )
         )
     ) { QwenAsrConfig.fromStore(it).isComplete }
+
+    private fun editTencentCredentials() = editCredentials(
+        TencentAsrConfig.PROVIDER,
+        R.string.voice_tencent_credentials,
+        R.string.voice_tencent_credentials_hint,
+        listOf(
+            CredentialField(TencentAsrConfig.APP_ID, R.string.voice_tencent_app_id),
+            CredentialField(TencentAsrConfig.SECRET_ID, R.string.voice_tencent_secret_id),
+            CredentialField(TencentAsrConfig.SECRET_KEY, R.string.voice_tencent_secret_key, secret = true),
+            CredentialField(
+                TencentAsrConfig.ENGINE, R.string.voice_tencent_engine,
+                default = TencentAsrConfig.DEFAULT_ENGINE,
+                choices = listOf(
+                    "16k_zh_en" to getString(R.string.voice_tencent_engine_zh_en),
+                    "16k_zh" to getString(R.string.voice_tencent_engine_zh),
+                    "Hy-ASR-3.0-preview" to getString(R.string.voice_tencent_engine_hy)
+                )
+            )
+        )
+    ) { TencentAsrConfig.fromStore(it).isComplete }
 
     /**
      * Add or edit a self-hosted server. Only `wss://` is accepted in release builds; the token
