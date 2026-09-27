@@ -39,6 +39,30 @@ internal class AudioCapture private constructor(private val record: AudioRecord)
             record.activeRecordingConfiguration?.isClientSilenced
         } else null
 
+    /**
+     * Reads 20 ms chunks while [keepGoing] holds, folding them into [stats] and handing each
+     * non-empty chunk to [onChunk]. Returns `null` when stopped, or a failure detail.
+     */
+    fun pump(
+        stats: CaptureStats,
+        keepGoing: () -> Boolean,
+        onChunk: (buffer: ShortArray, count: Int) -> Unit = { _, _ -> }
+    ): String? {
+        val buffer = ShortArray(SAMPLE_RATE / READS_PER_SECOND)
+        var nextSilenceCheck = 0L
+        while (keepGoing()) {
+            val count = read(buffer)
+            if (count < 0) return "AudioRecord.read=$count"
+            stats.accept(buffer, count)
+            if (stats.samples >= nextSilenceCheck) {
+                stats.recordSilenced(isClientSilenced())
+                nextSilenceCheck = stats.samples + SAMPLE_RATE / 4
+            }
+            if (count > 0) onChunk(buffer, count)
+        }
+        return null
+    }
+
     /** Idempotent; always releases the native recorder, even if stopping fails. */
     fun release() {
         if (released) return
@@ -53,6 +77,7 @@ internal class AudioCapture private constructor(private val record: AudioRecord)
         const val SAMPLE_RATE = 16000
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
+        private const val READS_PER_SECOND = 50
 
         // at least 200 ms of audio, so short scheduling delays don't overrun the buffer
         private const val MIN_BUFFER_BYTES = SAMPLE_RATE * 2 / 5

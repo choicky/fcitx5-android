@@ -65,21 +65,10 @@ internal class CaptureProbeBackend(
             capture = opened
             opened.start()
             post { events.onStarted(token) }
-            val buffer = ShortArray(AudioCapture.SAMPLE_RATE / READS_PER_SECOND)
-            var nextSilenceCheck = 0L
-            while (isActive && !stopRequested) {
-                val count = opened.read(buffer)
-                if (count < 0) {
-                    failure = "AudioRecord.read=$count"
-                    break
-                }
-                stats.accept(buffer, count)
-                if (stats.samples >= nextSilenceCheck) {
-                    stats.recordSilenced(opened.isClientSilenced())
-                    nextSilenceCheck = stats.samples + AudioCapture.SAMPLE_RATE / 4
-                }
-                if (SystemClock.elapsedRealtime() - startedAt > MAX_SESSION_MS) break
-            }
+            failure = opened.pump(stats, keepGoing = {
+                isActive && !stopRequested &&
+                        SystemClock.elapsedRealtime() - startedAt <= MAX_SESSION_MS
+            })
         } catch (e: Exception) {
             failure = "${e.javaClass.simpleName}: ${e.message}"
         } finally {
@@ -113,7 +102,6 @@ internal class CaptureProbeBackend(
     }
 
     companion object {
-        private const val READS_PER_SECOND = 50
         private const val MAX_SESSION_MS = 60_000L
     }
 }

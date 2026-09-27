@@ -45,4 +45,7 @@ internal sealed interface VoiceError {
     data class System(val code: Int) : VoiceError
 
     data class Capture(val detail: String) : VoiceError
+
+    /** A Direct ASR service failed (connection, protocol, server error or timeout). */
+    data class Service(val detail: String) : VoiceError
 }

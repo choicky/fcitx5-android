@@ -98,6 +98,13 @@ class DeveloperFragment : PaddingPreferenceFragment() {
                     isIconSpaceReserved = false
                     isSingleLineTitle = false
                 })
+                addPreference(MySwitchPreference(context).apply {
+                    key = AppPrefs.getInstance().internal.voiceDoubaoAsr.key
+                    setTitle(R.string.voice_doubao_asr)
+                    setDefaultValue(false)
+                    isIconSpaceReserved = false
+                    isSingleLineTitle = false
+                })
             }
             addPreference(R.string.restart_fcitx_instance) {
                 AlertDialog.Builder(context)
