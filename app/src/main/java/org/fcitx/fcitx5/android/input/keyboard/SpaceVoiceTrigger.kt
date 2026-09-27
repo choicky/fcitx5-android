@@ -47,20 +47,29 @@ internal fun spaceVoiceCommand(behavior: SpaceLongPressBehavior, action: KeyActi
         else -> SpaceVoiceCommand.None
     }
 
-internal enum class SpaceVoiceHint { None, Listening, ReleaseToFinish, ReleaseToCancel, Processing }
+/**
+ * What the voice session panel shows, derived from the one shared session and the held Space
+ * gesture. Mic sessions get Cancel/Done buttons; a held Space is ended by releasing it.
+ */
+internal enum class VoicePanelState(val showsCancel: Boolean, val showsFinish: Boolean) {
+    Hidden(false, false),
+    Listening(true, true),
+    ReleaseToFinish(false, false),
+    ReleaseToCancel(false, false),
+    Recognizing(true, false)
+}
 
-/** What the Space key shows for the shared voice session and the held Space gesture. */
-internal fun spaceVoiceHint(
+internal fun voicePanelState(
     state: VoiceInputSession.State,
     spaceHeld: Boolean,
     cancelArmed: Boolean
 ) = when (state) {
-    VoiceInputSession.State.Idle -> SpaceVoiceHint.None
+    VoiceInputSession.State.Idle -> VoicePanelState.Hidden
     VoiceInputSession.State.Starting,
     VoiceInputSession.State.Listening -> when {
-        !spaceHeld -> SpaceVoiceHint.Listening
-        cancelArmed -> SpaceVoiceHint.ReleaseToCancel
-        else -> SpaceVoiceHint.ReleaseToFinish
+        !spaceHeld -> VoicePanelState.Listening
+        cancelArmed -> VoicePanelState.ReleaseToCancel
+        else -> VoicePanelState.ReleaseToFinish
     }
-    VoiceInputSession.State.Stopping -> SpaceVoiceHint.Processing
+    VoiceInputSession.State.Stopping -> VoicePanelState.Recognizing
 }

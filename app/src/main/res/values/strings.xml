@@ -304,6 +304,8 @@
     <string name="voice_hint_release_to_finish">Release to finish · Swipe up to cancel</string>
     <string name="voice_hint_release_to_cancel">Release to cancel</string>
     <string name="voice_hint_processing">Recognizing…</string>
+    <string name="voice_panel_cancel">Cancel</string>
+    <string name="voice_panel_finish">Done</string>
     <string name="hide_keyboard">Hide keyboard</string>
     <string name="private_mode">Private mode (tap to toggle toolbar)</string>
     <string name="hide_toolbar">Hide toolbar</string>

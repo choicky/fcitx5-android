@@ -47,6 +47,10 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             stateListeners.forEach { it(state) }
         }
 
+        override fun audioLevel(level: Float) {
+            levelListeners.forEach { it(level) }
+        }
+
         override fun reportError(error: VoiceError) {
             when (error) {
                 VoiceError.Silent -> Unit
@@ -64,6 +68,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     private var languageCode = ""
     private var passwordField = false
     private val stateListeners = mutableListOf<(VoiceInputSession.State) -> Unit>()
+    private val levelListeners = mutableListOf<(Float) -> Unit>()
 
     val toggleCallback = View.OnClickListener { toggle() }
 
@@ -100,6 +105,11 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     internal fun addStateListener(listener: (VoiceInputSession.State) -> Unit) {
         stateListeners += listener
         listener(inputFlow.state)
+    }
+
+    /** Microphone level, only while a backend that owns the PCM is capturing. */
+    internal fun addAudioLevelListener(listener: (Float) -> Unit) {
+        levelListeners += listener
     }
 
     fun shouldShowVoiceInput(capFlags: CapabilityFlags): Boolean {
@@ -142,6 +152,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     fun close() {
         inputFlow.close()
         stateListeners.clear()
+        levelListeners.clear()
     }
 
     private fun start() {

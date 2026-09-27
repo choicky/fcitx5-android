@@ -32,6 +32,12 @@ internal interface VoiceBackend {
         /** `null` or blank means nothing is committed. */
         fun onFinal(token: Long, text: String?)
         fun onError(token: Long, error: VoiceError)
+
+        /**
+         * Optional microphone loudness (0..1) for the voice panel. Only backends that own the
+         * PCM (Fcitx AudioRecord) report it; recognition never depends on it.
+         */
+        fun onAudioLevel(token: Long, level: Float) {}
     }
 }
 

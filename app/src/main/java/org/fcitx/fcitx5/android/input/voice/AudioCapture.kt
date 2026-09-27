@@ -40,12 +40,14 @@ internal class AudioCapture private constructor(private val record: AudioRecord)
         } else null
 
     /**
-     * Reads 20 ms chunks while [keepGoing] holds, folding them into [stats] and handing each
-     * non-empty chunk to [onChunk]. Returns `null` when stopped, or a failure detail.
+     * Reads 20 ms chunks while [keepGoing] holds, folding them into [stats], reporting each
+     * chunk's [AudioLevel] to [onLevel] and handing it to [onChunk].
+     * Returns `null` when stopped, or a failure detail.
      */
     fun pump(
         stats: CaptureStats,
         keepGoing: () -> Boolean,
+        onLevel: ((Float) -> Unit)? = null,
         onChunk: (buffer: ShortArray, count: Int) -> Unit = { _, _ -> }
     ): String? {
         val buffer = ShortArray(SAMPLE_RATE / READS_PER_SECOND)
@@ -58,7 +60,10 @@ internal class AudioCapture private constructor(private val record: AudioRecord)
                 stats.recordSilenced(isClientSilenced())
                 nextSilenceCheck = stats.samples + SAMPLE_RATE / 4
             }
-            if (count > 0) onChunk(buffer, count)
+            if (count > 0) {
+                onLevel?.invoke(AudioLevel.of(buffer, count))
+                onChunk(buffer, count)
+            }
         }
         return null
     }

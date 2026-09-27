@@ -24,7 +24,6 @@ import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView.GestureType
 import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView.OnGestureListener
 import org.fcitx.fcitx5.android.input.popup.PopupAction
 import org.fcitx.fcitx5.android.input.popup.PopupActionListener
-import org.fcitx.fcitx5.android.input.voice.VoiceInputSession
 import splitties.dimensions.dp
 import splitties.views.dsl.constraintlayout.above
 import splitties.views.dsl.constraintlayout.below
@@ -522,12 +521,10 @@ abstract class BaseKeyboard(
     }
 
     /** Space held after its long press, and whether releasing now would cancel voice input. */
-    protected open fun onSpaceVoiceGesture(held: Boolean, cancelArmed: Boolean) {
-        // do nothing by default
-    }
+    var spaceVoiceGestureListener: ((held: Boolean, cancelArmed: Boolean) -> Unit)? = null
 
-    internal open fun onVoiceStateUpdate(state: VoiceInputSession.State) {
-        // do nothing by default
+    private fun onSpaceVoiceGesture(held: Boolean, cancelArmed: Boolean) {
+        spaceVoiceGestureListener?.invoke(held, cancelArmed)
     }
 
     open fun onDetach() {

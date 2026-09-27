@@ -126,7 +126,7 @@ internal class DoubaoAsrBackend(
             failure = opened.pump(stats, keepGoing = {
                 isActive && !closed && !stopRequested &&
                         SystemClock.elapsedRealtime() - startedAt <= MAX_SESSION_MS
-            }) { buffer, count ->
+            }, onLevel = { level -> post { events.onAudioLevel(token, level) } }) { buffer, count ->
                 // pcm_s16le
                 for (i in 0 until count) {
                     val v = buffer[i].toInt()

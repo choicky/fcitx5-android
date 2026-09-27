@@ -17,6 +17,7 @@ internal class VoiceInputFlow(private val output: Output) : VoiceBackend.Events 
         fun commit(text: String)
         fun stateChanged(state: VoiceInputSession.State)
         fun reportError(error: VoiceError)
+        fun audioLevel(level: Float) {}
     }
 
     private val session = VoiceInputSession()
@@ -102,6 +103,10 @@ internal class VoiceInputFlow(private val output: Output) : VoiceBackend.Events 
         output.clearComposing()
         output.reportError(error)
         notifyState()
+    }
+
+    override fun onAudioLevel(token: Long, level: Float) {
+        if (session.accepts(token)) output.audioLevel(level)
     }
 
     private fun releaseBackend() {

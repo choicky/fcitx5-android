@@ -68,7 +68,7 @@ internal class CaptureProbeBackend(
             failure = opened.pump(stats, keepGoing = {
                 isActive && !stopRequested &&
                         SystemClock.elapsedRealtime() - startedAt <= MAX_SESSION_MS
-            })
+            }, onLevel = { level -> post { events.onAudioLevel(token, level) } })
         } catch (e: Exception) {
             failure = "${e.javaClass.simpleName}: ${e.message}"
         } finally {

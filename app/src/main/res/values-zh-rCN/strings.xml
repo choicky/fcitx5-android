@@ -304,6 +304,8 @@
     <string name="voice_hint_release_to_finish">松开结束 · 上滑取消</string>
     <string name="voice_hint_release_to_cancel">松开取消</string>
     <string name="voice_hint_processing">识别中…</string>
+    <string name="voice_panel_cancel">取消</string>
+    <string name="voice_panel_finish">完成</string>
     <string name="hide_keyboard">隐藏键盘</string>
     <string name="private_mode">隐私模式（点击以切换工具栏）</string>
     <string name="hide_toolbar">隐藏工具栏</string>
