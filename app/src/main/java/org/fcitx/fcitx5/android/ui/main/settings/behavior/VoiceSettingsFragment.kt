@@ -674,6 +674,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         when (protocol) {
             SelfHostedProtocol.SherpaOnnx -> R.string.voice_selfhosted_sherpa
             SelfHostedProtocol.FunAsr2Pass -> R.string.voice_selfhosted_funasr
+            SelfHostedProtocol.FunAsrNano -> R.string.voice_selfhosted_nano
         }
     )
 

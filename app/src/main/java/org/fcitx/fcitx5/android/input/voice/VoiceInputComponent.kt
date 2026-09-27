@@ -147,6 +147,12 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                     FunAsr2PassClient(NetworkAsrBackend.http, instance.url, token, listener)
                 }
             }
+            SelfHostedProtocol.FunAsrNano -> {
+                val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
+                NetworkAsrBackend(service.lifecycleScope, "Self-hosted Fun-ASR-Nano") { listener ->
+                    FunAsrNanoServerClient(NetworkAsrBackend.http, instance.url, token, listener)
+                }
+            }
         }
         is VoiceBackendKind.LocalAsr -> LocalAsrBackend(
             service.lifecycleScope,

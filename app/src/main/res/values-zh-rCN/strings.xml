@@ -409,9 +409,10 @@
     <string name="voice_disabled">未启用</string>
     <string name="voice_selfhosted_sherpa">sherpa-onnx 流式服务器</string>
     <string name="voice_selfhosted_funasr">FunASR 2-pass 服务器</string>
+    <string name="voice_selfhosted_nano">Fun-ASR-Nano 服务器</string>
     <string name="voice_selfhosted_server">自建服务器</string>
     <string name="voice_selfhosted_add">添加自建服务器</string>
-    <string name="voice_selfhosted_note">语音会发送到你填写的服务器。支持：sherpa-onnx 流式服务器、FunASR 实时服务器（2pass 模式）。</string>
+    <string name="voice_selfhosted_note">语音会发送到你填写的服务器。支持：sherpa-onnx 流式服务器、FunASR 实时服务器（2pass 模式）、Fun-ASR-Nano 流式服务器。</string>
     <string name="voice_selfhosted_name">名称</string>
     <string name="voice_selfhosted_url">地址，例如 wss://asr.example.org/</string>
     <string name="voice_selfhosted_token">访问令牌（可选，用于反向代理）</string>
