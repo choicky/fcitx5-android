@@ -353,10 +353,10 @@
     <string name="voice_section_system">Built-in system ASR</string>
     <string name="voice_section_local">On-device ASR (offline)</string>
     <string name="voice_model_a">A: streaming Zipformer Chinese INT8 (research model)</string>
-    <string name="voice_model_b">B: FunASR Nano INT8 (research model)</string>
+    <string name="voice_model_b">FunASR Nano INT8 (research model)</string>
     <string name="voice_model_a_note">Research model for personal testing only. No license is declared for the weights: downloadable in test builds only, not cleared for redistribution or public release. About 168 MB, streaming, Chinese.</string>
     <string name="voice_model_b_note">Research model. License basis: Apache-2.0 as declared upstream, but the ONNX exporter repository has no LICENSE file. About 1 GB; used about 2 GB of memory in testing; speech longer than about 34–39 seconds produced an empty result.</string>
-    <string name="voice_model_c">C: streaming Zipformer Chinese–English INT8 (experimental candidate)</string>
+    <string name="voice_model_c">Streaming Zipformer Chinese–English INT8 (experimental candidate)</string>
     <string name="voice_model_c_note">Candidate under evaluation. Apache-2.0 as declared by the upstream author; training data not published. About 199 MB, streaming. Not yet verified on phones and not a recommended model.</string>
     <string name="voice_model_download_confirm_c">About %1$d MB will be downloaded from Hugging Face (csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20, a pinned revision), and every file is checked against its SHA-256.\n\nLicense: Apache-2.0, declared by the sherpa-onnx mirror and by the upstream author (pfluo/k2fsa-zipformer-chinese-english-mixed). The training data is not published.\n\nThis model has not been verified on phones yet.</string>
     <string name="voice_model_progress">Installing · %1$d%% · tap to cancel</string>

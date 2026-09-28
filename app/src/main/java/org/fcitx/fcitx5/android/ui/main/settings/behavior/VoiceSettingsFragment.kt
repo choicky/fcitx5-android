@@ -232,7 +232,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                     if (row.status in INSTALLED) {
                         enable = ModelRowPreference.Enable(
                             selection.isEnabled(AsrServiceId.Local(model)),
-                            getString(R.string.voice_model_enable, modelShortName(model))
+                            getString(R.string.voice_model_enable, modelLabel(model))
                         ) { on -> view?.post { setModelEnabled(model, on) } }
                     }
                 })
@@ -476,13 +476,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     }
 
     private fun modelRowKey(model: LocalAsrModel) = "voice_model_row_${model.name}"
-
-    /** "A", "B" or "C": test identifiers, not product names. */
-    private fun modelShortName(model: LocalAsrModel) = when (model) {
-        LocalAsrModel.ZipformerZh -> "A"
-        LocalAsrModel.FunAsrNano -> "B"
-        LocalAsrModel.ZipformerBilingual -> "C"
-    }
 
     /**
      * A task's progress changes only that model's row summary, on the same Preference, so the
