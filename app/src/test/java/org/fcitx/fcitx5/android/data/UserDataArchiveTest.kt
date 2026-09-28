@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.data
 
+import org.fcitx.fcitx5.android.utils.extract
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -26,8 +27,9 @@ class UserDataArchiveTest {
     private val external = root.resolve("external").apply {
         resolve("local-asr/model").mkdirs()
         resolve("local-asr/model/encoder.onnx").writeText("weights")
-        resolve("data").mkdirs()
+        resolve("data/sub").mkdirs()
         resolve("data/user.dict").writeText("dict")
+        resolve("data/sub/deep.txt").writeText("deep")
     }
 
     /** Preferences as an upgrade from the earlier version leaves them. */
@@ -72,6 +74,23 @@ wss://h/asr?secretid=AKIDold</string><boolean name="show_voice_input_button" val
         assertTrue(prefs.contains("show_voice_input_button"))
         assertEquals("dict", zip["external/data/user.dict"])
         assertTrue(zip.keys.none { it.contains("local-asr") })
+    }
+
+    @Test
+    fun entryNamesUseSlashesAndTheImportRestoresTheTree() {
+        upgradedPrefs()
+        val dest = ByteArrayOutputStream()
+        UserDataArchive.write(dest, removeLegacy, trees()) { }
+        val zip = entries(dest.toByteArray())
+        // independent of File.separator (a backslash on Windows)
+        assertTrue(zip.keys.toString(), zip.keys.none { it.contains('\\') })
+        assertTrue(zip.keys.containsAll(listOf("external/", "external/data/", "external/data/sub/", "external/data/sub/deep.txt")))
+        // the import path (UserDataManager.import) extracts with ZipInputStream.extract
+        val restored = Files.createTempDirectory("import").toFile()
+        ZipInputStream(ByteArrayInputStream(dest.toByteArray())).use { it.extract(restored) }
+        assertEquals("deep", restored.resolve("external/data/sub/deep.txt").readText())
+        assertEquals("dict", restored.resolve("external/data/user.dict").readText())
+        assertFalse(restored.resolve("external/local-asr").exists())
     }
 
     @Test

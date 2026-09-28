@@ -37,7 +37,7 @@ internal class CredentialStore(private val dir: File, private val cipher: Secret
      * after a restore to another device, where the Keystore key does not exist).
      */
     fun read(provider: String): Map<String, String>? {
-        val f = file(provider)
+        val f = FileReplace.recover(file(provider))
         if (!f.isFile) return null
         return runCatching { decode(cipher.decrypt(f.readBytes(), provider.toByteArray())) }
             .getOrNull()
@@ -48,17 +48,19 @@ internal class CredentialStore(private val dir: File, private val cipher: Secret
         val f = file(provider)
         val tmp = File(dir, "${f.name}.tmp")
         tmp.writeBytes(cipher.encrypt(encode(fields), provider.toByteArray()))
-        if (!tmp.renameTo(f)) {
+        // on failure the previously stored credentials stay
+        if (!FileReplace.replace(tmp, FileReplace.recover(f))) {
             tmp.delete()
             error("could not store credentials")
         }
     }
 
     /** Whether something is stored; reading it may still fail (see [read]). */
-    fun has(provider: String): Boolean = file(provider).isFile
+    fun has(provider: String): Boolean = FileReplace.recover(file(provider)).isFile
 
     fun clear(provider: String) {
-        file(provider).delete()
+        // an interrupted replacement's backup goes too, or it would come back
+        FileReplace.recover(file(provider)).delete()
     }
 
     companion object {

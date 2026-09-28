@@ -66,24 +66,20 @@ internal object ErrorRedaction {
  */
 internal class LastErrorRecord(private val file: () -> File) {
 
-    fun read(): Pair<String, String>? = runCatching { file().readText() }.getOrNull()
+    fun read(): Pair<String, String>? = runCatching { FileReplace.recover(file()).readText() }.getOrNull()
         ?.split('\n', limit = 2)
         ?.takeIf { it.size == 2 && it[0].isNotEmpty() }
         ?.let { it[0] to it[1] }
 
-    fun write(value: Pair<String, String>?) {
-        runCatching {
-            val target = file()
-            if (value == null) {
-                target.delete()
-                return
-            }
-            val (service, detail) = value
-            target.parentFile?.mkdirs()
-            val tmp = File(target.path + ".tmp")
-            // service keys never contain a newline; the detail is redacted again on the way in
-            tmp.writeText(service.replace('\n', ' ') + "\n" + ErrorRedaction.redact(detail.replace('\n', ' ')))
-            if (!tmp.renameTo(target)) tmp.delete()
-        }
-    }
+    /** Returns false if the record could not be written; the previous record then stays. */
+    fun write(value: Pair<String, String>?): Boolean = runCatching {
+        val target = FileReplace.recover(file())
+        if (value == null) return@runCatching !target.exists() || target.delete()
+        val (service, detail) = value
+        target.parentFile?.mkdirs()
+        val tmp = File(target.path + ".tmp")
+        // service keys never contain a newline; the detail is redacted again on the way in
+        tmp.writeText(service.replace('\n', ' ') + "\n" + ErrorRedaction.redact(detail.replace('\n', ' ')))
+        FileReplace.replace(tmp, target).also { if (!it) tmp.delete() }
+    }.getOrDefault(false)
 }
