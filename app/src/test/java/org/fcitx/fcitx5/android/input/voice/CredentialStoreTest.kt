@@ -53,6 +53,27 @@ class CredentialStoreTest {
     }
 
     @Test
+    fun savingAgainReplacesTheStoredCredentials() {
+        // the second write replaces an existing file, which File.renameTo cannot do on Windows
+        store.write("qwen", mapOf("api_key" to "first"))
+        store.write("qwen", mapOf("api_key" to "second"))
+        assertEquals("second", store.read("qwen")!!["api_key"])
+        assertTrue(dir.walkTopDown().none { it.name.endsWith(".tmp") || it.name.endsWith(".bak") })
+    }
+
+    @Test
+    fun clearingAlsoDropsTheBackupOfAnInterruptedReplacement() {
+        store.write("qwen", mapOf("api_key" to "first"))
+        val stored = dir.walkTopDown().first { it.isFile && it.name.startsWith("qwen") }
+        // interrupted after moving the stored file aside
+        assertTrue(stored.renameTo(java.io.File(stored.path + ".bak")))
+        assertEquals("first", store.read("qwen")!!["api_key"])
+        store.clear("qwen")
+        assertNull(store.read("qwen"))
+        assertFalse(store.has("qwen"))
+    }
+
+    @Test
     fun secretsAreNotStoredInPlainText() {
         store.write("doubao", mapOf("api_key" to "PLAINTEXT-SECRET-VALUE"))
         val raw = dir.resolve("doubao.bin").readBytes().toString(Charsets.ISO_8859_1)

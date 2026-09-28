@@ -7,6 +7,7 @@ package org.fcitx.fcitx5.android.input.voice
 
 import android.content.Context
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import timber.log.Timber
 import java.io.File
 
 /** Reads and writes the D034 selection; migrates the earlier Auto/Local/System setting once. */
@@ -109,7 +110,8 @@ internal class VoiceSelectionStore(
         }
         set(value) {
             dropLegacyLastError()
-            lastErrorRecord.write(value)
+            // only a diagnostic: a failed write is logged, the voice session is not affected
+            if (!lastErrorRecord.write(value)) Timber.w("could not store the last voice error")
         }
 
     private fun dropLegacyLastError() {

@@ -30,13 +30,16 @@ internal object UserDataArchive {
     private fun writeFileTree(tree: Tree, dest: ZipOutputStream) {
         val srcDir = tree.dir
         dest.putNextEntry(ZipEntry("${tree.prefix}/"))
-        srcDir.walkTopDown().onEnter { it == srcDir || it.relativeTo(srcDir).path !in tree.excludedDirs }.forEach { f ->
-            val related = f.relativeTo(srcDir)
-            if (related.path != "") {
+        // zip entry names always use '/', whatever File.separator is (a backslash on Windows)
+        srcDir.walkTopDown().onEnter {
+            it == srcDir || it.relativeTo(srcDir).invariantSeparatorsPath !in tree.excludedDirs
+        }.forEach { f ->
+            val related = f.relativeTo(srcDir).invariantSeparatorsPath
+            if (related != "") {
                 if (f.isDirectory) {
-                    dest.putNextEntry(ZipEntry("${tree.prefix}/${related.path}/"))
+                    dest.putNextEntry(ZipEntry("${tree.prefix}/$related/"))
                 } else if (f.isFile) {
-                    dest.putNextEntry(ZipEntry("${tree.prefix}/${related.path}"))
+                    dest.putNextEntry(ZipEntry("${tree.prefix}/$related"))
                     f.inputStream().use { it.copyTo(dest) }
                 }
             }
