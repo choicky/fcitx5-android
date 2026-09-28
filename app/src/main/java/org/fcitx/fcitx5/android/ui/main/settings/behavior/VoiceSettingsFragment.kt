@@ -29,8 +29,10 @@ import org.fcitx.fcitx5.android.input.voice.LocalAsrEngines
 import org.fcitx.fcitx5.android.input.voice.InstallFailure
 import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
 import org.fcitx.fcitx5.android.input.voice.LocalModels
+import org.fcitx.fcitx5.android.input.voice.ModelAction
 import org.fcitx.fcitx5.android.input.voice.ModelCatalogEntry
 import org.fcitx.fcitx5.android.input.voice.ModelJobs
+import org.fcitx.fcitx5.android.input.voice.ModelStatus
 import org.fcitx.fcitx5.android.input.voice.ModelTasks
 import org.fcitx.fcitx5.android.input.voice.QwenAsrConfig
 import org.fcitx.fcitx5.android.input.voice.TencentAsrConfig
@@ -43,6 +45,7 @@ import org.fcitx.fcitx5.android.input.voice.UnavailableReason
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.fcitx.fcitx5.android.input.voice.applyRecommendation
 import org.fcitx.fcitx5.android.input.voice.endpointProblem
+import org.fcitx.fcitx5.android.input.voice.modelRow
 import org.fcitx.fcitx5.android.input.voice.modelSourceProblem
 import org.fcitx.fcitx5.android.input.voice.recommend
 import org.fcitx.fcitx5.android.input.voice.resolveCurrentService
@@ -190,7 +193,11 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
 
         screen.addCategory(R.string.voice_section_local) {
-            addSwitch(getString(R.string.voice_enable_local), null, selection.isEnabled(AsrServiceId.Local)) {
+            addSwitch(
+                getString(R.string.voice_enable_local),
+                getString(R.string.voice_enable_local_summary),
+                selection.isEnabled(AsrServiceId.Local)
+            ) {
                 store.save(store.load().withEnabled(AsrServiceId.Local, it))
             }
             val current = store.localModel
@@ -337,28 +344,67 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     private fun megabytes(bytes: Long) = (bytes + 999_999) / 1_000_000
 
+    private fun modelRowOf(entry: ModelCatalogEntry) = modelRow(
+        installed = modelInstalled(entry.model),
+        task = ModelJobs.state(entry.model),
+        busy = ModelJobs.isRunning(entry.model),
+        stagedBytes = stagedBytes(entry.model),
+        downloadOffered = entry.downloadOffered(BuildConfig.DEBUG),
+        selected = store.localModel == entry.model
+    )
+
+    /** The status and the next step first; source, licence and limits are in the details. */
     private fun modelSummary(entry: ModelCatalogEntry): String {
-        val state = when (val job = ModelJobs.state(entry.model)) {
-            is ModelTasks.State.Running -> getString(
-                R.string.voice_model_progress,
-                (job.done * 100 / job.total.coerceAtLeast(1)).toInt(),
-                job.done / 1_000_000,
-                megabytes(job.total)
+        val row = modelRowOf(entry)
+        val size = megabytes(entry.totalBytes)
+        val status = when (row.status) {
+            ModelStatus.NotInstalled -> getString(
+                if (ModelAction.Download in row.actions) R.string.voice_model_status_not_installed
+                else R.string.voice_model_status_not_installed_import,
+                size
             )
-            is ModelTasks.State.Failed -> getString(R.string.voice_model_failed, failureText(job))
-            ModelTasks.State.Cancelling -> getString(R.string.voice_model_cancelling)
-            else -> getString(
-                if (modelInstalled(entry.model)) R.string.voice_model_installed
-                else R.string.voice_model_not_installed
+            ModelStatus.Partial -> getString(
+                R.string.voice_model_status_partial, stagedBytes(entry.model) / 1_000_000, size
             )
+            ModelStatus.Running -> (ModelJobs.state(entry.model) as? ModelTasks.State.Running)?.let {
+                getString(
+                    R.string.voice_model_progress,
+                    (it.done * 100 / it.total.coerceAtLeast(1)).toInt(),
+                    it.done / 1_000_000,
+                    megabytes(it.total)
+                )
+            } ?: getString(R.string.voice_model_progress, 0, 0, size)
+            ModelStatus.Stopping -> getString(R.string.voice_model_cancelling)
+            ModelStatus.Failed -> getString(
+                R.string.voice_model_status_failed,
+                (ModelJobs.state(entry.model) as? ModelTasks.State.Failed)?.let(::failureText).orEmpty()
+            )
+            ModelStatus.Installed -> getString(R.string.voice_model_status_installed)
+            ModelStatus.InUse -> getString(R.string.voice_model_status_in_use)
         }
-        val staged = stagedBytes(entry.model).takeIf { it > 0 && !ModelJobs.isRunning(entry.model) }
-            ?.let { "\n" + getString(R.string.voice_model_staged, megabytes(it)) }.orEmpty()
+        return status + "\n" + modelTag(entry.model)
+    }
+
+    private fun modelTag(model: LocalAsrModel) = getString(
+        when (model) {
+            LocalAsrModel.ZipformerZh -> R.string.voice_model_a_tag
+            LocalAsrModel.FunAsrNano -> R.string.voice_model_b_tag
+            LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c_tag
+        }
+    )
+
+    /** Version, size, source, licence and limits; the full disclosure stays in the confirmation. */
+    private fun showModelDetails(entry: ModelCatalogEntry) {
         val source = entry.sourceLabel?.takeIf { entry.downloadOffered(BuildConfig.DEBUG) }
-            ?.let { "\n" + getString(R.string.voice_model_source, it) }.orEmpty()
-        return getString(
-            R.string.voice_model_summary, entry.version, megabytes(entry.totalBytes), state
-        ) + staged + source + "\n" + modelNote(entry.model)
+            ?.let { getString(R.string.voice_model_source, it) + "\n" }.orEmpty()
+        AlertDialog.Builder(requireContext())
+            .setTitle(modelLabel(entry.model))
+            .setMessage(
+                getString(R.string.voice_model_details_message, entry.version, megabytes(entry.totalBytes)) +
+                        "\n" + source + "\n" + modelNote(entry.model)
+            )
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     /** A model whose previous download is still stopping cannot start another one yet. */
@@ -409,44 +455,72 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             render()
         }
 
-    /** Model Manager actions; only what the licence gate and the current state allow. */
+    /**
+     * Model Manager actions: exactly those that apply to the model's state (see [modelRow]), as a
+     * list under the model name. Details are one of the actions, never a dialog message, which
+     * would hide the list.
+     */
     private fun modelActions(entry: ModelCatalogEntry) {
         val ctx = requireContext()
         val model = entry.model
-        val installed = modelInstalled(model)
-        val actions = mutableListOf<Pair<String, () -> Unit>>()
-        if (ModelJobs.isRunning(model)) {
-            actions += getString(R.string.voice_model_cancel) to { ModelJobs.cancel(model) }
-        } else {
-            // A is downloadable only in test builds (personal-testing exception, D037)
-            if (entry.downloadOffered(BuildConfig.DEBUG)) {
-                actions += getString(R.string.voice_model_download, megabytes(entry.totalBytes)) to {
-                    confirmDownload(entry)
-                }
-                actions += getString(R.string.voice_model_download_other) to { chooseSource(entry) }
+        val actions = modelRowOf(entry).actions
+        val labels = actions.map { action ->
+            when (action) {
+                ModelAction.Download -> stagedBytes(model).takeIf { it > 0 }?.let {
+                    getString(R.string.voice_model_resume, megabytes(entry.totalBytes - it))
+                } ?: getString(R.string.voice_model_download, megabytes(entry.totalBytes))
+                ModelAction.DownloadFrom -> getString(R.string.voice_model_download_other)
+                ModelAction.Import -> getString(R.string.voice_model_import)
+                ModelAction.Discard -> getString(R.string.voice_model_discard)
+                ModelAction.Cancel -> getString(R.string.voice_model_cancel)
+                ModelAction.Use -> getString(R.string.voice_model_use)
+                ModelAction.Remove -> getString(R.string.voice_model_remove)
+                ModelAction.Details -> getString(R.string.voice_model_details)
             }
-            actions += getString(R.string.voice_model_import) to {
-                pendingImport = entry
-                importLauncher.launch(arrayOf("*/*"))
-            }
-            if (installed) {
-                actions += getString(R.string.voice_model_use) to {
-                    store.localModel = model
-                    render()
+        }
+        ActionListDialog.create(ctx, modelLabel(model), labels) { which ->
+            when (actions[which]) {
+                ModelAction.Download -> confirmDownload(entry)
+                ModelAction.DownloadFrom -> chooseSource(entry)
+                ModelAction.Import -> {
+                    pendingImport = entry
+                    importLauncher.launch(arrayOf("*/*"))
                 }
-                actions += getString(R.string.voice_model_remove) to { confirmRemove(entry) }
-            } else if (stagedBytes(model) > 0) {
-                actions += getString(R.string.voice_model_discard) to {
+                ModelAction.Discard -> {
                     if (ModelJobs.isRunning(model)) startedOrBusy(false) else LocalModels.remove(ctx, model)
                     render()
                 }
+                ModelAction.Cancel -> ModelJobs.cancel(model)
+                ModelAction.Use -> useModel(model)
+                ModelAction.Remove -> confirmRemove(entry)
+                ModelAction.Details -> showModelDetails(entry)
             }
+        }.show()
+    }
+
+    /**
+     * Choosing the on-device model is separate from enabling Local ASR and from making Local the
+     * current service; when either is missing, say so and offer both in one step.
+     */
+    private fun useModel(model: LocalAsrModel) {
+        store.localModel = model
+        render()
+        val selection = store.load()
+        if (selection.isEnabled(AsrServiceId.Local) && selection.current == AsrServiceId.Local) {
+            requireContext().toast(getString(R.string.voice_model_now_used, modelLabel(model)))
+            return
         }
-        AlertDialog.Builder(ctx)
+        AlertDialog.Builder(requireContext())
             .setTitle(modelLabel(model))
-            .setMessage(modelNote(model))
-            .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
-            .setNegativeButton(android.R.string.cancel, null)
+            .setMessage(R.string.voice_model_use_next)
+            .setPositiveButton(R.string.voice_model_use_local_now) { _, _ ->
+                store.save(
+                    store.load().withEnabled(AsrServiceId.Local, true)
+                        .copy(current = AsrServiceId.Local, recommendationDone = true)
+                )
+                render()
+            }
+            .setNegativeButton(R.string.voice_model_not_now, null)
             .show()
     }
 
