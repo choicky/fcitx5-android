@@ -10,25 +10,64 @@ import okhttp3.Request
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.net.URI
 
 /**
- * Model file sources for [LocalModelInstaller]. Downloads use HTTPS from the catalog's pinned
- * upstream revision; whatever arrives is still checked against the pinned SHA-256.
+ * Why a model source address cannot be used: files are fetched as `<base>/<path>` over HTTPS;
+ * plain HTTP only in debug builds (for a computer on the local network).
+ */
+internal fun modelSourceProblem(base: String, allowCleartext: Boolean): EndpointProblem? {
+    val uri = runCatching { URI(base.trim()) }.getOrNull() ?: return EndpointProblem.Invalid
+    if (uri.host.isNullOrEmpty() || uri.rawQuery != null || uri.rawFragment != null) return EndpointProblem.Invalid
+    return when (uri.scheme?.lowercase()) {
+        "https" -> null
+        "http" -> if (allowCleartext) null else EndpointProblem.Cleartext
+        else -> EndpointProblem.Invalid
+    }
+}
+
+/**
+ * Model file sources for [LocalModelInstaller]. Whatever arrives is checked against the pinned
+ * SHA-256, whichever address it came from.
  */
 internal object ModelSources {
 
-    /** Only for entries whose licence evidence allows an app-offered download. */
-    fun download(client: OkHttpClient, entry: ModelCatalogEntry): (ModelFile) -> InputStream? {
-        requireNotNull(entry.downloadBase) { "${entry.model} is not offered for download" }
-        return { file ->
-            val url = entry.downloadUrl(file)!!
-            require(url.startsWith("https://")) { "downloads must use HTTPS" }
-            val response = client.newCall(Request.Builder().url(url).build()).execute()
-            if (!response.isSuccessful) {
+    /**
+     * Files from [base]: the catalog's pinned upstream revision, or an address the user entered
+     * (for example a mirror of that revision). A staged partial file resumes with an HTTP Range
+     * request; a server that ignores it sends the whole file again.
+     */
+    fun download(
+        client: OkHttpClient,
+        entry: ModelCatalogEntry,
+        base: String? = entry.downloadBase,
+        allowCleartext: Boolean = false
+    ): ModelFileSource {
+        requireNotNull(base) { "${entry.model} has no download source" }
+        require(modelSourceProblem(base, allowCleartext) == null) { "unsupported model source" }
+        val trimmed = base.trim()
+        fun fetch(file: ModelFile, from: Long) = client.newCall(
+            Request.Builder().url(entry.downloadUrl(file, trimmed)!!).apply {
+                if (from > 0) header("Range", "bytes=$from-")
+            }.build()
+        ).execute()
+        return { file, resumeFrom ->
+            var response = fetch(file, resumeFrom)
+            val resumed = resumeFrom > 0 && response.code == 206 &&
+                    response.header("Content-Range")?.startsWith("bytes $resumeFrom-") == true
+            // a range the server cannot serve as asked: the whole file instead
+            if (resumeFrom > 0 && !resumed && (response.code == 206 || response.code == 416)) {
                 response.close()
-                throw IOException("HTTP ${response.code}")
+                response = fetch(file, 0)
             }
-            response.body!!.byteStream()
+            when {
+                resumed -> ModelStream(response.body!!.byteStream(), resumeFrom)
+                response.code == 200 -> ModelStream(response.body!!.byteStream(), 0)
+                else -> {
+                    response.close()
+                    throw IOException("HTTP ${response.code}")
+                }
+            }
         }
     }
 
