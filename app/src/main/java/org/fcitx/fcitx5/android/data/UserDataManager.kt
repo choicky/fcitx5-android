@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToStream
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
 import org.fcitx.fcitx5.android.utils.Const
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.errorRuntime
@@ -36,9 +37,14 @@ object UserDataManager {
         val exportTime: Long
     )
 
-    private fun writeFileTree(srcDir: File, destPrefix: String, dest: ZipOutputStream) {
+    private fun writeFileTree(
+        srcDir: File,
+        destPrefix: String,
+        dest: ZipOutputStream,
+        excludedDirs: Set<String> = emptySet()
+    ) {
         dest.putNextEntry(ZipEntry("$destPrefix/"))
-        srcDir.walkTopDown().forEach { f ->
+        srcDir.walkTopDown().onEnter { it == srcDir || it.relativeTo(srcDir).path !in excludedDirs }.forEach { f ->
             val related = f.relativeTo(srcDir)
             if (related.path != "") {
                 if (f.isDirectory) {
@@ -63,8 +69,9 @@ object UserDataManager {
             writeFileTree(sharedPrefsDir, "shared_prefs", zipStream)
             // databases
             writeFileTree(dataBasesDir, "databases", zipStream)
-            // external
-            writeFileTree(externalDir, "external", zipStream)
+            // external, without Local ASR models pushed there with adb (large, and their
+            // licences may not allow sharing them)
+            writeFileTree(externalDir, "external", zipStream, setOf(LocalAsrModel.ROOT_DIR))
             // recently_used moved to SharedPreference and shoud not be exported
             // metadata
             zipStream.putNextEntry(ZipEntry("metadata.json"))
