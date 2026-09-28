@@ -113,8 +113,7 @@ internal class VoiceSelectionStore(
         }
 
     private fun dropLegacyLastError() {
-        val legacy = prefs.internal.voiceLastError
-        if (legacy.getValue().isNotEmpty()) legacy.setValue("")
+        prefs.purgeLegacyVoiceLastError()
     }
 
     var lastUsedService: String

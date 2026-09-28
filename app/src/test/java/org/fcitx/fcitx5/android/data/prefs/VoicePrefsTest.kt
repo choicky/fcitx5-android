@@ -12,6 +12,7 @@ import org.fcitx.fcitx5.android.input.voice.VoiceSelection
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -19,8 +20,8 @@ import java.lang.reflect.Proxy
 
 class VoicePrefsTest {
 
-    /** SharedPreferences backed by [values]; edits apply immediately. */
-    private fun prefs(values: MutableMap<String, Any>): SharedPreferences {
+    /** SharedPreferences backed by [values]; edits apply immediately unless [commitFails]. */
+    private fun prefs(values: MutableMap<String, Any>, commitFails: Boolean = false): SharedPreferences {
         val editor = Proxy.newProxyInstance(
             javaClass.classLoader, arrayOf(SharedPreferences.Editor::class.java)
         ) { proxy, method, args ->
@@ -29,8 +30,12 @@ class VoicePrefsTest {
                     values[args!![0] as String] = args[1]
                     proxy
                 }
+                "remove" -> {
+                    if (!commitFails) values.remove(args!![0] as String)
+                    proxy
+                }
                 "apply" -> Unit
-                "commit" -> true
+                "commit" -> !commitFails
                 else -> throw UnsupportedOperationException(method.name)
             }
         } as SharedPreferences.Editor
@@ -120,12 +125,33 @@ class VoicePrefsTest {
         val values = mutableMapOf<String, Any>("voice_last_error" to "tencent\nwss://h/asr?secretid=AKIDold")
         val store = store(values)
         assertEquals(null, store.lastError)
-        assertEquals("", values["voice_last_error"])
+        assertFalse(values.containsKey("voice_last_error"))
 
         store.lastError = "tencent" to "Expected HTTP 101 from wss://asr.cloud.tencent.com/asr/v2/1?secretid=AKIDx&signature=s"
-        assertEquals("", values["voice_last_error"])
+        assertFalse(values.containsKey("voice_last_error"))
         val stored = lastErrorFile.readText()
         assertFalse(stored, stored.contains("AKIDx"))
         assertEquals("tencent" to "Expected HTTP 101 from wss://asr.cloud.tencent.com/asr/v2/1?***", store.lastError)
+    }
+
+    /** Upgrade, then export before anything reads the voice settings (UserDataManager.export). */
+    @Test
+    fun legacyErrorIsRemovedSynchronouslyBeforeExportWithoutTouchingOtherPreferences() {
+        val values = mutableMapOf<String, Any>(
+            "voice_last_error" to "qwen\nraw detail",
+            "voice_asr_provider" to "System",
+            "show_voice_input_button" to true
+        )
+        assertTrue(AppPrefs(prefs(values)).purgeLegacyVoiceLastError())
+        assertEquals(mapOf<String, Any>("voice_asr_provider" to "System", "show_voice_input_button" to true), values)
+        // nothing to remove: no write at all
+        assertTrue(AppPrefs(prefs(values, commitFails = true)).purgeLegacyVoiceLastError())
+    }
+
+    @Test
+    fun aRemovalThatCannotBeWrittenIsReported() {
+        val values = mutableMapOf<String, Any>("voice_last_error" to "qwen\nraw detail")
+        assertFalse(AppPrefs(prefs(values, commitFails = true)).purgeLegacyVoiceLastError())
+        assertTrue(values.containsKey("voice_last_error"))
     }
 }

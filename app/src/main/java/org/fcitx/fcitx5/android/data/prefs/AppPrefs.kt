@@ -467,8 +467,19 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         }
     }
 
+    /**
+     * Removes the pre-redaction voice failure detail (`voice_last_error`, written before
+     * LastErrorRecord existed) with a synchronous commit, so that an export right after an
+     * upgrade cannot archive it. No other preference is touched. False if the removal could
+     * not be written.
+     */
+    fun purgeLegacyVoiceLastError() = removeSynchronously(sharedPreferences, internal.voiceLastError.key)
+
     companion object {
         private var instance: AppPrefs? = null
+
+        internal fun removeSynchronously(prefs: SharedPreferences, key: String) =
+            !prefs.contains(key) || prefs.edit().remove(key).commit()
 
         /**
          * MUST call before use
