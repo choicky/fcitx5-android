@@ -60,7 +60,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val voiceLegacyAsrProvider = string("voice_asr_provider", "")
         // the service the most recent session actually used
         val voiceLastUsedService = string("voice_last_used_service", "")
-        // "<service key>\n<detail>" of the most recent service failure (no secrets)
+        // no longer written: the last failure moved to the no-backup directory (LastErrorRecord);
+        // kept so an earlier value can be cleared
         val voiceLastError = string("voice_last_error", "")
     }
 

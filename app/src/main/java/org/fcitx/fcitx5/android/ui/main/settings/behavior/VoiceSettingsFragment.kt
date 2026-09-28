@@ -58,7 +58,7 @@ import org.fcitx.fcitx5.android.utils.toast
 class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     private val prefs = AppPrefs.getInstance()
-    private val store = VoiceSelectionStore(prefs)
+    private val store = VoiceSelectionStore(prefs) { VoiceSelectionStore.lastErrorFile(requireContext()) }
     private val credentials by lazy { KeystoreSecretCipher.store(requireContext()) }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {

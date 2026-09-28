@@ -186,7 +186,10 @@ internal class LocalAsrBackend(
             return
         }
         failure?.let {
-            fail(token, events, "capture: $it")
+            // the microphone failed, not the model
+            val safe = ErrorRedaction.redact(it)
+            Timber.w("Local ASR capture failed: $safe")
+            post { events.onError(token, VoiceError.Capture(safe)) }
             return
         }
         // end of input: wait for the model if it is still loading, then finalize
@@ -222,8 +225,9 @@ internal class LocalAsrBackend(
     }
 
     private fun fail(token: Long, events: VoiceBackend.Events, detail: String) {
-        Timber.w("Local ASR failed: $detail")
-        post { events.onError(token, VoiceError.Service(detail)) }
+        val safe = ErrorRedaction.redact(detail)
+        Timber.w("Local ASR failed: $safe")
+        post { events.onError(token, VoiceError.Service(safe)) }
     }
 
     /** Events for a cancelled session are dropped. */

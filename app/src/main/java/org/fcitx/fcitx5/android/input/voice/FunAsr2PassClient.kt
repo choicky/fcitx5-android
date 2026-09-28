@@ -14,7 +14,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -99,7 +98,8 @@ internal object FunAsr2PassProtocol {
 
 /** One session against a FunASR 2-pass WebSocket server (self-hosted). */
 internal class FunAsr2PassClient(
-    private val client: OkHttpClient,
+    /** An [okhttp3.OkHttpClient] in the app. */
+    private val client: WebSocket.Factory,
     private val url: String,
     private val bearerToken: String?,
     private val listener: NetworkAsrClient.Listener
@@ -107,6 +107,8 @@ internal class FunAsr2PassClient(
 
     private val transcript = FunAsr2PassProtocol.Transcript()
     private val chunker = Pcm16Chunker(FunAsr2PassProtocol.PACKET_BYTES)
+
+    @Volatile
     private var socket: WebSocket? = null
 
     @Volatile
@@ -122,10 +124,9 @@ internal class FunAsr2PassClient(
             header("Sec-WebSocket-Protocol", FunAsr2PassProtocol.SUBPROTOCOL)
             bearerToken?.takeIf { it.isNotEmpty() }?.let { header("Authorization", "Bearer $it") }
         }.build()
-        socket = client.newWebSocket(request, object : WebSocketListener() {
+        val ws = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 // the protocol has no start acknowledgement: an accepted WebSocket is ready
-                webSocket.send(FunAsr2PassProtocol.start())
                 listener.onEstablished()
             }
 
@@ -148,6 +149,11 @@ internal class FunAsr2PassClient(
                 fail("${t.javaClass.simpleName}: ${t.message}$status")
             }
         })
+        // OkHttp sends queued messages in order once the handshake completes. The configuration
+        // is queued here, before [socket] exposes the connection to audio, so it is always the
+        // first packet; sending it from onOpen raced with audio queued during the handshake.
+        ws.send(FunAsr2PassProtocol.start())
+        socket = ws
     }
 
     override fun send(pcm: ShortArray, count: Int) {

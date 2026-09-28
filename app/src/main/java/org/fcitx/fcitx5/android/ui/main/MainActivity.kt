@@ -138,7 +138,7 @@ class MainActivity : AppCompatActivity() {
 
     /** One-time disclosure before voice input first uses Android system speech recognition. */
     private fun authorizeSystemAsr() {
-        val store = VoiceSelectionStore(AppPrefs.getInstance())
+        val store = VoiceSelectionStore(AppPrefs.getInstance()) { VoiceSelectionStore.lastErrorFile(this) }
         var allowed = false
         fun answer(allow: Boolean) {
             allowed = allow

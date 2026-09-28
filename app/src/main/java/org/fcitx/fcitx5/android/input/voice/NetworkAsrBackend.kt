@@ -27,6 +27,8 @@ internal class NetworkAsrBackend(
     private val label: String,
     /** How long to wait for the final result after the end of input. */
     private val finalTimeoutMs: Long = DEFAULT_FINAL_TIMEOUT_MS,
+    /** Credential values that must never appear in a logged, shown or stored detail. */
+    private val secrets: Collection<String> = emptyList(),
     private val newClient: (NetworkAsrClient.Listener) -> NetworkAsrClient
 ) : VoiceBackend {
 
@@ -117,18 +119,20 @@ internal class NetworkAsrBackend(
         Timber.i("$label capture released: ${stats.summary()}")
         if (closed) return
         failure?.let {
-            post { fail("capture: $it") }
+            // the microphone failed, not the service: no D035 fallback for this
+            post { fail(it, capture = true) }
             return
         }
         session.finishInput()
         post { if (!closed) mainHandler.postDelayed(finalTimeout, finalTimeoutMs) }
     }
 
-    private fun fail(detail: String) {
+    private fun fail(detail: String, capture: Boolean = false) {
         val events = events ?: return
-        Timber.w("$label failed: $detail")
+        val safe = ErrorRedaction.redact(detail, secrets)
+        Timber.w("$label ${if (capture) "capture failed" else "failed"}: $safe")
         release()
-        events.onError(token, VoiceError.Service(detail))
+        events.onError(token, if (capture) VoiceError.Capture(safe) else VoiceError.Service(safe))
     }
 
     private fun release() {

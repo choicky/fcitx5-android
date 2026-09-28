@@ -11,7 +11,10 @@ import org.fcitx.fcitx5.android.input.voice.SystemAsrAuthorization
 import org.fcitx.fcitx5.android.input.voice.VoiceSelection
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.lang.reflect.Proxy
 
 class VoicePrefsTest {
@@ -44,7 +47,13 @@ class VoicePrefsTest {
         } as SharedPreferences
     }
 
-    private fun store(values: MutableMap<String, Any>) = VoiceSelectionStore(AppPrefs(prefs(values)))
+    @get:Rule
+    val tmp = TemporaryFolder()
+
+    private val lastErrorFile by lazy { tmp.root.resolve("voice/last-error") }
+
+    private fun store(values: MutableMap<String, Any>) =
+        VoiceSelectionStore(AppPrefs(prefs(values))) { lastErrorFile }
 
     @Test
     fun freshInstallHasNoCurrentServiceAndPendingRecommendation() {
@@ -102,5 +111,21 @@ class VoicePrefsTest {
         assertEquals(160, store(values).lastError!!.second.length)
         store(values).lastError = null
         assertEquals(null, store(values).lastError)
+        assertFalse(lastErrorFile.exists())
+    }
+
+    @Test
+    fun lastErrorStaysOutOfSharedPreferencesAndIsRedacted() {
+        // a value written by the earlier version, which kept raw details in preferences
+        val values = mutableMapOf<String, Any>("voice_last_error" to "tencent\nwss://h/asr?secretid=AKIDold")
+        val store = store(values)
+        assertEquals(null, store.lastError)
+        assertEquals("", values["voice_last_error"])
+
+        store.lastError = "tencent" to "Expected HTTP 101 from wss://asr.cloud.tencent.com/asr/v2/1?secretid=AKIDx&signature=s"
+        assertEquals("", values["voice_last_error"])
+        val stored = lastErrorFile.readText()
+        assertFalse(stored, stored.contains("AKIDx"))
+        assertEquals("tencent" to "Expected HTTP 101 from wss://asr.cloud.tencent.com/asr/v2/1?***", store.lastError)
     }
 }
