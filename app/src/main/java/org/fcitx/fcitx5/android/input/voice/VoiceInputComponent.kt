@@ -64,7 +64,8 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         }
 
         override fun fellBack(error: VoiceError) {
-            selectionStore.lastUsedService = AsrServiceId.Local.key
+            // the change of recipient is shown and recorded as the service actually used
+            fallbackService?.let { selectionStore.lastUsedService = it.key }
             service.toast(R.string.voice_fell_back_to_local)
         }
 
@@ -110,13 +111,14 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             external = selectionStore.externalServices(credentials, allowCleartext = BuildConfig.DEBUG)
         )
 
-    /** The configured Local model and whether its files are in place; nothing is loaded. */
-    private fun localStatus(): LocalStatus {
-        val model = selectionStore.localModel
-        val filesPresent = model != null &&
-                model.missingFiles(localAsrModelDir(model)).isEmpty()
-        return LocalStatus(LocalAsrEngines.AVAILABLE, model, filesPresent)
-    }
+    /** Which on-device models are completely installed; nothing is loaded. */
+    private fun localStatus() = LocalStatus(
+        LocalAsrEngines.AVAILABLE,
+        LocalAsrModel.entries.filterTo(mutableSetOf()) { it.missingFiles(localAsrModelDir(it)).isEmpty() }
+    )
+
+    /** The Local service of the current session's fallback backend, if it has one. */
+    private var fallbackService: AsrServiceId? = null
 
     private fun VoiceBackendKind.create(): VoiceBackend = when (this) {
         VoiceBackendKind.System -> SystemAsrBackend(service)
@@ -295,6 +297,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         selectionStore.lastError = null
         // D035: a selected external service may fall back to a production Local model only
         val fallbackKind = fallbackTarget(selected, selectionStore.load(), localStatus())
+        fallbackService = (fallbackKind as? VoiceBackendKind.LocalAsr)?.let { AsrServiceId.Local(it.model) }
         val token = inputFlow.begin() ?: return
         service.lifecycleScope.launch {
             // Fcitx InputContext::reset dispatches the engine ResetEvent. The pinned Pinyin
@@ -315,7 +318,6 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 UnavailableReason.Disabled -> R.string.voice_current_disabled
                 UnavailableReason.NoSystemRecognizer -> R.string.voice_input_unavailable
                 UnavailableReason.NoLocalRuntime -> R.string.voice_local_no_runtime
-                UnavailableReason.NoLocalModel -> R.string.voice_local_no_model
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable
                 UnavailableReason.MissingCredentials -> R.string.voice_missing_credentials
                 UnavailableReason.InstanceMissing -> R.string.voice_instance_missing

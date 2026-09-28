@@ -13,6 +13,8 @@ import org.fcitx.fcitx5.android.input.voice.ModelAction.Import
 import org.fcitx.fcitx5.android.input.voice.ModelAction.Remove
 import org.fcitx.fcitx5.android.input.voice.ModelAction.Use
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ModelRowsTest {
@@ -23,8 +25,9 @@ class ModelRowsTest {
         busy: Boolean = false,
         staged: Long = 0,
         offered: Boolean = true,
-        selected: Boolean = false
-    ) = modelRow(installed, task, busy, staged, offered, selected)
+        enabled: Boolean = false,
+        current: Boolean = false
+    ) = modelRow(installed, task, busy, { check(!busy) { "staged bytes read while busy" }; staged }, offered, enabled, current)
 
     @Test
     fun notInstalledInATestBuildOffersDownloadsAndImport() {
@@ -44,9 +47,26 @@ class ModelRowsTest {
     }
 
     @Test
-    fun installedOffersUseAndRemove() {
+    fun installedEnabledAndInUseAreDistinct() {
+        // installing selects nothing
         assertEquals(ModelRow(ModelStatus.Installed, listOf(Use, Remove, Details)), row(installed = true))
-        assertEquals(ModelRow(ModelStatus.InUse, listOf(Remove, Details)), row(installed = true, selected = true))
+        assertEquals(ModelRow(ModelStatus.Enabled, listOf(Use, Remove, Details)), row(installed = true, enabled = true))
+        assertEquals(ModelRow(ModelStatus.InUse, listOf(Remove, Details)), row(installed = true, enabled = true, current = true))
+        // selected but disabled: not in use, Use is offered again
+        assertEquals(ModelStatus.Installed, row(installed = true, current = true).status)
+    }
+
+    @Test
+    fun anUninstalledModelIsNeverShownAsUsable() {
+        // enabled or current from an earlier install, now removed, partial or failed
+        for (staged in listOf(0L, 5L)) {
+            val r = row(staged = staged, enabled = true, current = true)
+            assertTrue(r.status in setOf(ModelStatus.NotInstalled, ModelStatus.Partial))
+            assertFalse(Use in r.actions)
+        }
+        val failed = row(task = ModelTasks.State.Failed(InstallFailure.Mismatch("x"), "x"), enabled = true)
+        assertEquals(ModelStatus.Failed, failed.status)
+        assertFalse(Use in failed.actions)
     }
 
     @Test
@@ -60,7 +80,7 @@ class ModelRowsTest {
 
     @Test
     fun everyRowHasAtLeastOneActionBesidesDetails() {
-        listOf(row(), row(offered = false), row(busy = true), row(installed = true), row(installed = true, selected = true), row(staged = 1))
+        listOf(row(), row(offered = false), row(busy = true), row(installed = true), row(installed = true, enabled = true, current = true), row(staged = 1))
             .forEach { assert(it.actions.any { a -> a != Details }) { it.toString() } }
     }
 }

@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -54,9 +55,9 @@ internal object LocalModels {
 internal object ModelJobs {
 
     private val main = Handler(Looper.getMainLooper())
-    private val listeners = mutableSetOf<() -> Unit>()
-    private val tasks = ModelTasks(CoroutineScope(SupervisorJob() + Dispatchers.IO)) {
-        main.post { synchronized(this) { listeners.toList() }.forEach { it() } }
+    private val listeners = mutableSetOf<(LocalAsrModel) -> Unit>()
+    private val tasks = ModelTasks(CoroutineScope(SupervisorJob() + Dispatchers.IO)) { model ->
+        main.post { synchronized(this) { listeners.toList() }.forEach { it(model) } }
     }
 
     private val http by lazy {
@@ -68,9 +69,15 @@ internal object ModelJobs {
 
     fun state(model: LocalAsrModel): ModelTasks.State? = tasks.state(model)
 
-    fun addListener(listener: () -> Unit) = synchronized(this) { listeners += listener }
+    /** Called on the main thread with the model whose task state changed. */
+    fun addListener(listener: (LocalAsrModel) -> Unit) = synchronized(this) { listeners += listener }
 
-    fun removeListener(listener: () -> Unit) = synchronized(this) { listeners -= listener }
+    fun removeListener(listener: (LocalAsrModel) -> Unit) = synchronized(this) { listeners -= listener }
+
+    /** Runs [work] as [model]'s task, for UI tests that need progress without a download. */
+    @VisibleForTesting
+    internal fun startForTest(model: LocalAsrModel, total: Long, work: (ModelTasks.Handle) -> Unit) =
+        tasks.start(model, total, work)
 
     /** Occupied until the worker has exited, also while a cancelled download is stopping. */
     fun isRunning(model: LocalAsrModel) = tasks.isBusy(model)

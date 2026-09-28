@@ -16,6 +16,8 @@ import android.widget.RadioGroup
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.annotation.VisibleForTesting
+import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
@@ -32,6 +34,7 @@ import org.fcitx.fcitx5.android.input.voice.LocalModels
 import org.fcitx.fcitx5.android.input.voice.ModelAction
 import org.fcitx.fcitx5.android.input.voice.ModelCatalogEntry
 import org.fcitx.fcitx5.android.input.voice.ModelJobs
+import org.fcitx.fcitx5.android.input.voice.ModelRow
 import org.fcitx.fcitx5.android.input.voice.ModelStatus
 import org.fcitx.fcitx5.android.input.voice.ModelTasks
 import org.fcitx.fcitx5.android.input.voice.QwenAsrConfig
@@ -42,6 +45,7 @@ import org.fcitx.fcitx5.android.input.voice.SelfHostedInstance
 import org.fcitx.fcitx5.android.input.voice.SelfHostedProtocol
 import org.fcitx.fcitx5.android.input.voice.SystemAsrAuthorization
 import org.fcitx.fcitx5.android.input.voice.UnavailableReason
+import org.fcitx.fcitx5.android.input.voice.VoiceSelection
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.fcitx.fcitx5.android.input.voice.applyRecommendation
 import org.fcitx.fcitx5.android.input.voice.endpointProblem
@@ -53,6 +57,7 @@ import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.ui.main.modified.MySwitchPreference
 import org.fcitx.fcitx5.android.utils.addCategory
 import org.fcitx.fcitx5.android.utils.addPreference
+import org.fcitx.fcitx5.android.utils.setup
 import org.fcitx.fcitx5.android.utils.toast
 
 /**
@@ -75,6 +80,14 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         render()
     }
 
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // PreferenceGroupAdapter's stable ids are per Preference object: a rebuilt screen is all
+        // new ids, which the default item animator cross-fades as removals and insertions (the
+        // page went blank). Rebuilds happen only on real changes now, and without animation.
+        listView.itemAnimator = null
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         pendingImport?.let { outState.putString(PENDING_IMPORT, it.model.name) }
@@ -88,14 +101,12 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     private fun systemAvailable() = SpeechRecognizer.isRecognitionAvailable(requireContext())
 
-    private fun localStatus(): LocalStatus {
-        val model = store.localModel
-        return LocalStatus(LocalAsrEngines.AVAILABLE, model, model?.let(::modelInstalled) == true)
-    }
+    private fun localStatus() =
+        LocalStatus(LocalAsrEngines.AVAILABLE, LocalAsrModel.entries.filterTo(mutableSetOf(), ::modelInstalled))
 
     private fun label(service: AsrServiceId): String = when (service) {
         AsrServiceId.System -> getString(R.string.asr_provider_system)
-        AsrServiceId.Local -> getString(R.string.asr_provider_local)
+        is AsrServiceId.Local -> getString(R.string.asr_service_local_model, modelLabel(service.model))
         AsrServiceId.Doubao -> getString(R.string.asr_service_doubao)
         AsrServiceId.Qwen -> getString(R.string.asr_service_qwen)
         AsrServiceId.Tencent -> getString(R.string.asr_service_tencent)
@@ -114,7 +125,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 UnavailableReason.Disabled -> R.string.voice_current_disabled
                 UnavailableReason.NoSystemRecognizer -> R.string.voice_input_unavailable
                 UnavailableReason.NoLocalRuntime -> R.string.voice_local_no_runtime
-                UnavailableReason.NoLocalModel -> R.string.voice_local_no_model
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable
                 UnavailableReason.MissingCredentials -> R.string.voice_missing_credentials
                 UnavailableReason.InstanceMissing -> R.string.voice_instance_missing
@@ -141,11 +151,20 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
     )
 
+    /** Full rebuilds of the screen; progress must not cause them (see [onModelChanged]). */
+    @VisibleForTesting
+    internal var renderCount = 0
+        private set
+
+    /** The row status each model row was built with; a change of status needs a rebuild. */
+    private val renderedStatus = mutableMapOf<LocalAsrModel, ModelStatus>()
+
     private fun render() {
         // dialog callbacks and posted updates can arrive after the screen is gone
         if (!isAdded) return
         val screen = preferenceScreen ?: return
         val ctx = requireContext()
+        renderCount++
         screen.removeAll()
         val selection = store.load()
         val authorization = store.systemAuthorization
@@ -193,21 +212,25 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
 
         screen.addCategory(R.string.voice_section_local) {
-            addSwitch(
-                getString(R.string.voice_enable_local),
-                getString(R.string.voice_enable_local_summary),
-                selection.isEnabled(AsrServiceId.Local)
-            ) {
-                store.save(store.load().withEnabled(AsrServiceId.Local, it))
-            }
-            val current = store.localModel
-            addPreference(
-                getString(R.string.voice_local_model),
-                if (!LocalAsrEngines.AVAILABLE) getString(R.string.voice_local_no_runtime)
-                else current?.let(::modelLabel) ?: getString(R.string.voice_local_model_none)
-            ) { chooseLocalModel() }
+            if (!LocalAsrEngines.AVAILABLE) addPreference(getString(R.string.voice_local_no_runtime))
+            // per model: the row (status, next step, actions) and, once installed, its own
+            // enable switch; installing enables and selects nothing
             ModelCatalogEntry.entries.forEach { entry ->
-                addPreference(modelLabel(entry.model), modelSummary(entry)) { modelActions(entry) }
+                val model = entry.model
+                val row = modelRowOf(entry, selection)
+                renderedStatus[model] = row.status
+                addPreference(Preference(ctx).apply {
+                    key = modelRowKey(model)
+                    isPersistent = false
+                    setup(modelLabel(model), modelSummary(entry, row)) { modelActions(entry) }
+                })
+                if (row.status in INSTALLED) {
+                    addSwitch(
+                        getString(R.string.voice_model_enable, modelShortName(model)),
+                        getString(R.string.voice_model_enable_summary),
+                        selection.isEnabled(AsrServiceId.Local(model))
+                    ) { setModelEnabled(model, it) }
+                }
             }
         }
 
@@ -311,11 +334,16 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         })
     }
 
-    /** Only enabled services can be current; the saved choice is never changed silently. */
+    /**
+     * Only enabled services can be current; the saved choice is never changed silently. Each
+     * on-device model is listed on its own, and only when it is installed and can run here.
+     */
     private fun chooseCurrent() {
         val selection = store.load()
+        val local = localStatus()
         val enabled = (AsrServiceId.entries + store.instances.map { it.service })
             .filter { selection.isEnabled(it) }
+            .filter { it !is AsrServiceId.Local || local.usable(it.model, selection) }
         if (enabled.isEmpty()) {
             requireContext().toast(R.string.voice_no_enabled_services)
             return
@@ -344,18 +372,23 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     private fun megabytes(bytes: Long) = (bytes + 999_999) / 1_000_000
 
-    private fun modelRowOf(entry: ModelCatalogEntry) = modelRow(
-        installed = modelInstalled(entry.model),
-        task = ModelJobs.state(entry.model),
-        busy = ModelJobs.isRunning(entry.model),
-        stagedBytes = stagedBytes(entry.model),
-        downloadOffered = entry.downloadOffered(BuildConfig.DEBUG),
-        selected = store.localModel == entry.model
-    )
+    private fun modelRowOf(entry: ModelCatalogEntry, selection: VoiceSelection = store.load()): ModelRow {
+        val model = entry.model
+        val busy = ModelJobs.isRunning(model)
+        return modelRow(
+            // no file checks while a task runs: its model is not installed until it finishes
+            installed = !busy && modelInstalled(model),
+            task = ModelJobs.state(model),
+            busy = busy,
+            stagedBytes = { stagedBytes(model) },
+            downloadOffered = entry.downloadOffered(BuildConfig.DEBUG),
+            enabled = selection.isEnabled(AsrServiceId.Local(model)),
+            current = selection.current == AsrServiceId.Local(model)
+        )
+    }
 
     /** The status and the next step first; source, licence and limits are in the details. */
-    private fun modelSummary(entry: ModelCatalogEntry): String {
-        val row = modelRowOf(entry)
+    private fun modelSummary(entry: ModelCatalogEntry, row: ModelRow = modelRowOf(entry)): String {
         val size = megabytes(entry.totalBytes)
         val status = when (row.status) {
             ModelStatus.NotInstalled -> getString(
@@ -380,9 +413,42 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 (ModelJobs.state(entry.model) as? ModelTasks.State.Failed)?.let(::failureText).orEmpty()
             )
             ModelStatus.Installed -> getString(R.string.voice_model_status_installed)
+            ModelStatus.Enabled -> getString(R.string.voice_model_status_enabled)
             ModelStatus.InUse -> getString(R.string.voice_model_status_in_use)
         }
         return status + "\n" + modelTag(entry.model)
+    }
+
+    private fun modelRowKey(model: LocalAsrModel) = "voice_model_row_${model.name}"
+
+    /** "A", "B" or "C": test identifiers, not product names. */
+    private fun modelShortName(model: LocalAsrModel) = when (model) {
+        LocalAsrModel.ZipformerZh -> "A"
+        LocalAsrModel.FunAsrNano -> "B"
+        LocalAsrModel.ZipformerBilingual -> "C"
+    }
+
+    /**
+     * A task's progress changes only that model's row summary, on the same Preference, so the
+     * list keeps its items, ids and scroll position. A change of the row's status (started,
+     * finished, failed, cancelled) changes its actions and switch, so the screen is rebuilt once.
+     */
+    private fun onModelChanged(model: LocalAsrModel) {
+        if (!isAdded) return
+        val entry = ModelCatalogEntry.of(model)
+        val row = modelRowOf(entry)
+        val preference = findPreference<Preference>(modelRowKey(model))
+        if (preference == null || renderedStatus[model] != row.status) {
+            render()
+            return
+        }
+        preference.summary = modelSummary(entry, row)
+    }
+
+    private fun setModelEnabled(model: LocalAsrModel, on: Boolean) {
+        // disabling the current model keeps it selected; the current service says it is disabled
+        store.save(store.load().withEnabled(AsrServiceId.Local(model), on))
+        render()
     }
 
     private fun modelTag(model: LocalAsrModel) = getString(
@@ -422,29 +488,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         else -> failed.detail
     }
 
-    /** Only models that are installed can be the current Local model. */
-    private fun chooseLocalModel() {
-        if (!LocalAsrEngines.AVAILABLE) {
-            requireContext().toast(R.string.voice_local_no_runtime)
-            return
-        }
-        val models = LocalAsrModel.entries.filter(::modelInstalled)
-        if (models.isEmpty()) {
-            requireContext().toast(R.string.voice_model_none_installed)
-            return
-        }
-        val labels = models.map { modelLabel(it) }.toTypedArray()
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.voice_local_model)
-            .setSingleChoiceItems(labels, models.indexOf(store.localModel)) { dialog, which ->
-                store.localModel = models[which]
-                dialog.dismiss()
-                render()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
     private var pendingImport: ModelCatalogEntry? = null
 
     private val importLauncher =
@@ -473,7 +516,10 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 ModelAction.Import -> getString(R.string.voice_model_import)
                 ModelAction.Discard -> getString(R.string.voice_model_discard)
                 ModelAction.Cancel -> getString(R.string.voice_model_cancel)
-                ModelAction.Use -> getString(R.string.voice_model_use)
+                ModelAction.Use -> getString(
+                    if (store.load().isEnabled(AsrServiceId.Local(model))) R.string.voice_model_use
+                    else R.string.voice_model_enable_and_use
+                )
                 ModelAction.Remove -> getString(R.string.voice_model_remove)
                 ModelAction.Details -> getString(R.string.voice_model_details)
             }
@@ -499,29 +545,14 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     }
 
     /**
-     * Choosing the on-device model is separate from enabling Local ASR and from making Local the
-     * current service; when either is missing, say so and offer both in one step.
+     * The explicit "Use": enable this model if needed and make it the current service. Only an
+     * installed model offers it; another model or service is never selected silently.
      */
     private fun useModel(model: LocalAsrModel) {
-        store.localModel = model
+        val service = AsrServiceId.Local(model)
+        store.save(store.load().withEnabled(service, true).copy(current = service, recommendationDone = true))
         render()
-        val selection = store.load()
-        if (selection.isEnabled(AsrServiceId.Local) && selection.current == AsrServiceId.Local) {
-            requireContext().toast(getString(R.string.voice_model_now_used, modelLabel(model)))
-            return
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(modelLabel(model))
-            .setMessage(R.string.voice_model_use_next)
-            .setPositiveButton(R.string.voice_model_use_local_now) { _, _ ->
-                store.save(
-                    store.load().withEnabled(AsrServiceId.Local, true)
-                        .copy(current = AsrServiceId.Local, recommendationDone = true)
-                )
-                render()
-            }
-            .setNegativeButton(R.string.voice_model_not_now, null)
-            .show()
+        requireContext().toast(getString(R.string.voice_model_now_used, modelLabel(model)))
     }
 
     private fun confirmDownload(entry: ModelCatalogEntry) {
@@ -602,13 +633,16 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 // a session that already loaded the model keeps its open files until it ends;
                 // an adb-pushed copy is removed too, or recognition would keep using it
                 LocalModels.remove(requireContext(), entry.model)
+                // a removed model is no longer enabled; if it was current it stays selected and
+                // the current service says it is not installed, so nothing else runs silently
+                store.save(store.load().withEnabled(AsrServiceId.Local(entry.model), false))
                 render()
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
-    private val jobListener: () -> Unit = { render() }
+    private val jobListener: (LocalAsrModel) -> Unit = { onModelChanged(it) }
 
     override fun onStart() {
         super.onStart()
@@ -900,6 +934,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     }
 
     private companion object {
+        private val INSTALLED = setOf(ModelStatus.Installed, ModelStatus.Enabled, ModelStatus.InUse)
         const val PENDING_IMPORT = "pending_model_import"
     }
 }
