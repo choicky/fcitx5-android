@@ -83,7 +83,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         // the file picker may outlive this instance (e.g. after a configuration change)
         pendingImport = savedInstanceState?.getString(PENDING_IMPORT)
-            ?.let { name -> LocalAsrModel.entries.firstOrNull { it.name == name } }
+            ?.let { name -> ModelCatalogEntry.entries.firstOrNull { it.model.name == name } }
             ?.let(ModelCatalogEntry::of)
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext())
         render()
@@ -111,7 +111,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private fun systemAvailable() = SpeechRecognizer.isRecognitionAvailable(requireContext())
 
     private fun localStatus() =
-        LocalStatus(LocalAsrEngines.AVAILABLE, LocalAsrModel.entries.filterTo(mutableSetOf(), ::modelInstalled))
+        LocalStatus(LocalAsrEngines.AVAILABLE, LocalAsrModel.userVisibleEntries.filterTo(mutableSetOf(), ::modelInstalled))
 
     private fun label(service: AsrServiceId): String = when (service) {
         AsrServiceId.System -> getString(R.string.asr_provider_system)
@@ -133,6 +133,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         is AsrResolution.CurrentUnavailable -> getString(
             when (resolution.reason) {
                 UnavailableReason.Disabled -> R.string.voice_reason_disabled
+                UnavailableReason.RetiredLocalModel -> R.string.voice_reason_retired_model
                 UnavailableReason.NoSystemRecognizer -> R.string.voice_reason_no_system
                 UnavailableReason.NoLocalRuntime -> R.string.voice_reason_no_runtime
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_reason_model_missing
@@ -147,17 +148,17 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     private fun modelLabel(model: LocalAsrModel) = getString(
         when (model) {
-            LocalAsrModel.ZipformerZh -> R.string.voice_model_a
-            LocalAsrModel.FunAsrNano -> R.string.voice_model_b
             LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c
+            LocalAsrModel.FunAsrNano -> R.string.voice_model_b
+            LocalAsrModel.ZipformerZh -> R.string.voice_model_a
         }
     )
 
     private fun modelNote(model: LocalAsrModel) = getString(
         when (model) {
-            LocalAsrModel.ZipformerZh -> R.string.voice_model_a_note
-            LocalAsrModel.FunAsrNano -> R.string.voice_model_b_note
             LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c_note
+            LocalAsrModel.FunAsrNano -> R.string.voice_model_b_note
+            LocalAsrModel.ZipformerZh -> R.string.voice_model_a_note
         }
     )
 

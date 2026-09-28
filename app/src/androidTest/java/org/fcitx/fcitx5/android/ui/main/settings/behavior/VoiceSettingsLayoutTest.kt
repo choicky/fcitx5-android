@@ -97,10 +97,10 @@ class VoiceSettingsLayoutTest {
             val category = onMain { fragment.category(R.string.voice_section_local) }
             assertEquals(app.getString(R.string.voice_section_local), category.title)
             val rows = onMain { category.children().filterIsInstance<ModelRowPreference>() }
-            assertEquals(LocalAsrModel.entries.size, rows.size)
+            assertEquals(LocalAsrModel.userVisibleEntries.size, rows.size)
             // no separate switch rows: at most the "no runtime" note besides the model rows
             assertTrue(onMain { category.preferenceCount } <= rows.size + 1)
-            for (model in LocalAsrModel.entries) {
+            for (model in LocalAsrModel.userVisibleEntries) {
                 val row = onMain { fragment.findPreference<ModelRowPreference>("voice_model_row_${model.name}") }
                 assertNotNull(row)
                 // "installed" only after verification: the same check the row uses
@@ -163,6 +163,18 @@ class VoiceSettingsLayoutTest {
             }
             assertEquals(3, rows.size)
             rows.forEach { assertTrue(it.summary.toString() in allowed) }
+
+            val switchTitles = listOf(
+                R.string.voice_enable_doubao,
+                R.string.voice_enable_qwen,
+                R.string.voice_enable_tencent
+            ).map(app::getString).toSet()
+            val switches = onMain {
+                fragment.category(R.string.voice_section_cloud).children()
+                    .filter { it.title.toString() in switchTitles }
+            }
+            assertEquals(3, switches.size)
+            assertTrue(switches.none { it.title.toString().startsWith("启用") || it.title.toString().startsWith("Use ") })
         } finally {
             activity.finish()
         }

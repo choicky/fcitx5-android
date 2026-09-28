@@ -16,7 +16,7 @@ import org.junit.Test
 class AsrSelectionTest {
 
     // any research model; the tests do not imply a formal Local choice
-    private val model = LocalAsrModel.entries.first()
+    private val model = LocalAsrModel.userVisibleEntries.first()
     private val localService = AsrServiceId.Local(model)
     private val localReady = LocalStatus(runtimeAvailable = true, installed = setOf(model))
     private val noLocal = LocalStatus(runtimeAvailable = true, installed = emptySet())
@@ -210,7 +210,21 @@ class AsrSelectionTest {
     @Test
     fun serviceKeysRoundTrip() {
         AsrServiceId.entries.forEach { assertEquals(it, AsrServiceId.parse(it.key)) }
+        assertEquals(AsrServiceId.Local(LocalAsrModel.ZipformerZh), AsrServiceId.parse("local:ZipformerZh"))
         assertNull(AsrServiceId.parse("auto"))
+    }
+
+    @Test
+    fun retiredAStaysSelectedButCanNeverStartOrBeListed() {
+        val a = AsrServiceId.Local(LocalAsrModel.ZipformerZh)
+        val selection = VoiceSelection(a, setOf(a), recommendationDone = true)
+        assertFalse(AsrServiceId.entries.contains(a))
+        assertEquals(
+            AsrResolution.CurrentUnavailable(a, UnavailableReason.RetiredLocalModel),
+            resolveCurrentService(selection, LocalStatus(true, LocalAsrModel.entries.toSet()), Allowed, systemNotQueried)
+        )
+        assertEquals(VoiceStartStep.Unavailable(AsrResolution.CurrentUnavailable(a, UnavailableReason.RetiredLocalModel)),
+            voiceStartStep(AsrResolution.CurrentUnavailable(a, UnavailableReason.RetiredLocalModel), true))
     }
 
     @Test
@@ -250,17 +264,18 @@ class AsrSelectionTest {
 
     @Test
     fun eachLocalModelIsItsOwnService() {
-        val services = LocalAsrModel.entries.map(AsrServiceId::Local)
+        val services = LocalAsrModel.userVisibleEntries.map(AsrServiceId::Local)
         assertTrue(AsrServiceId.entries.containsAll(services))
         services.forEach { assertEquals(it, AsrServiceId.parse(it.key)) }
-        assertEquals(LocalAsrModel.entries.size, services.map { it.key }.toSet().size)
+        assertEquals(LocalAsrModel.userVisibleEntries.size, services.map { it.key }.toSet().size)
+        assertFalse(AsrServiceId.entries.contains(AsrServiceId.Local(LocalAsrModel.ZipformerZh)))
         // the single Local service's key is only read by the migration
         assertNull(AsrServiceId.parse(AsrServiceId.LEGACY_LOCAL_KEY))
     }
 
     @Test
     fun onlyAnEnabledInstalledModelIsUsable() {
-        val (a, b) = LocalAsrModel.entries
+        val (a, b) = LocalAsrModel.userVisibleEntries
         val selection = VoiceSelection(null, setOf(AsrServiceId.Local(a), AsrServiceId.Local(b)), true)
         val status = LocalStatus(runtimeAvailable = true, installed = setOf(a))
         assertTrue(status.usable(a, selection))
@@ -274,7 +289,7 @@ class AsrSelectionTest {
 
     @Test
     fun theCurrentModelRunsAloneAndOthersDoNotStandIn() {
-        val (a, b) = LocalAsrModel.entries
+        val (a, b) = LocalAsrModel.userVisibleEntries
         val both = VoiceSelection(AsrServiceId.Local(b), setOf(AsrServiceId.Local(a), AsrServiceId.Local(b)), true)
         val onlyA = LocalStatus(runtimeAvailable = true, installed = setOf(a))
         // B selected but removed: reported, not replaced by the installed and enabled A
@@ -293,13 +308,13 @@ class AsrSelectionTest {
         )
         // research models are never a fallback target
         val all = LocalStatus(runtimeAvailable = true, installed = LocalAsrModel.entries.toSet())
-        val qwen = VoiceSelection(AsrServiceId.Qwen, setOf(AsrServiceId.Qwen) + LocalAsrModel.entries.map(AsrServiceId::Local), true)
+        val qwen = VoiceSelection(AsrServiceId.Qwen, setOf(AsrServiceId.Qwen) + LocalAsrModel.userVisibleEntries.map(AsrServiceId::Local), true)
         assertNull(fallbackTarget(AsrServiceId.Qwen, qwen, all))
     }
 
     @Test
     fun migrationFromTheSingleLocalServiceKeepsTheEffectiveConfiguration() {
-        val (a, b) = LocalAsrModel.entries
+        val (a, b) = LocalAsrModel.userVisibleEntries
         // enabled Local with a model, selected: that model, enabled and selected
         assertEquals(AsrServiceId.Local(b) to setOf<AsrServiceId>(AsrServiceId.Local(b)), migrateLocalModels("local", true, b))
         // Local enabled with a model, another service selected: only the model is enabled
