@@ -13,6 +13,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -24,8 +25,10 @@ import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.voice.AsrResolution
 import org.fcitx.fcitx5.android.input.voice.AsrServiceId
+import org.fcitx.fcitx5.android.input.voice.CloudStatus
 import org.fcitx.fcitx5.android.input.voice.DoubaoCredentials
 import org.fcitx.fcitx5.android.input.voice.EndpointProblem
+import org.fcitx.fcitx5.android.input.voice.ExternalServices
 import org.fcitx.fcitx5.android.input.voice.KeystoreSecretCipher
 import org.fcitx.fcitx5.android.input.voice.LocalAsrEngines
 import org.fcitx.fcitx5.android.input.voice.InstallFailure
@@ -43,16 +46,22 @@ import org.fcitx.fcitx5.android.input.voice.LocalStatus
 import org.fcitx.fcitx5.android.input.voice.Recommendation
 import org.fcitx.fcitx5.android.input.voice.SelfHostedInstance
 import org.fcitx.fcitx5.android.input.voice.SelfHostedProtocol
+import org.fcitx.fcitx5.android.input.voice.SystemAction
 import org.fcitx.fcitx5.android.input.voice.SystemAsrAuthorization
+import org.fcitx.fcitx5.android.input.voice.SystemRow
+import org.fcitx.fcitx5.android.input.voice.SystemStatus
 import org.fcitx.fcitx5.android.input.voice.UnavailableReason
 import org.fcitx.fcitx5.android.input.voice.VoiceSelection
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.fcitx.fcitx5.android.input.voice.applyRecommendation
+import org.fcitx.fcitx5.android.input.voice.cloudStatus
 import org.fcitx.fcitx5.android.input.voice.endpointProblem
 import org.fcitx.fcitx5.android.input.voice.modelRow
 import org.fcitx.fcitx5.android.input.voice.modelSourceProblem
 import org.fcitx.fcitx5.android.input.voice.recommend
 import org.fcitx.fcitx5.android.input.voice.resolveCurrentService
+import org.fcitx.fcitx5.android.input.voice.selectableServices
+import org.fcitx.fcitx5.android.input.voice.systemRow
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.ui.main.modified.MySwitchPreference
 import org.fcitx.fcitx5.android.utils.addCategory
@@ -117,23 +126,24 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private fun external() =
         store.externalServices(credentials, allowCleartext = BuildConfig.DEBUG)
 
-    private fun stateText(resolution: AsrResolution): String = getString(
-        when (resolution) {
-            is AsrResolution.Ready -> R.string.voice_state_ready
-            AsrResolution.NeedsSystemAuthorization -> R.string.voice_state_needs_authorization
-            is AsrResolution.CurrentUnavailable -> when (resolution.reason) {
-                UnavailableReason.Disabled -> R.string.voice_current_disabled
-                UnavailableReason.NoSystemRecognizer -> R.string.voice_input_unavailable
-                UnavailableReason.NoLocalRuntime -> R.string.voice_local_no_runtime
-                UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable
-                UnavailableReason.MissingCredentials -> R.string.voice_missing_credentials
-                UnavailableReason.InstanceMissing -> R.string.voice_instance_missing
-                UnavailableReason.InvalidEndpoint -> R.string.voice_endpoint_invalid
-                UnavailableReason.CleartextEndpoint -> R.string.voice_endpoint_cleartext
+    /** A short reason why the selected service cannot run now; nothing when it is ready. */
+    private fun reasonText(resolution: AsrResolution): String? = when (resolution) {
+        is AsrResolution.Ready -> null
+        AsrResolution.NeedsSystemAuthorization -> getString(R.string.voice_reason_needs_permission)
+        is AsrResolution.CurrentUnavailable -> getString(
+            when (resolution.reason) {
+                UnavailableReason.Disabled -> R.string.voice_reason_disabled
+                UnavailableReason.NoSystemRecognizer -> R.string.voice_reason_no_system
+                UnavailableReason.NoLocalRuntime -> R.string.voice_reason_no_runtime
+                UnavailableReason.LocalModelFilesMissing -> R.string.voice_reason_model_missing
+                UnavailableReason.MissingCredentials -> R.string.voice_reason_no_credentials
+                UnavailableReason.InstanceMissing -> R.string.voice_reason_instance_missing
+                UnavailableReason.InvalidEndpoint -> R.string.voice_reason_invalid_endpoint
+                UnavailableReason.CleartextEndpoint -> R.string.voice_reason_cleartext
             }
-            is AsrResolution.NeedsRecommendation, AsrResolution.NoService -> R.string.voice_current_none
-        }
-    )
+        )
+        is AsrResolution.NeedsRecommendation, AsrResolution.NoService -> null
+    }
 
     private fun modelLabel(model: LocalAsrModel) = getString(
         when (model) {
@@ -168,18 +178,21 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         screen.removeAll()
         val selection = store.load()
         val authorization = store.systemAuthorization
+        val external = external()
         val resolution =
-            resolveCurrentService(
-                selection, localStatus(), authorization, ::systemAvailable, external()
-            )
+            resolveCurrentService(selection, localStatus(), authorization, ::systemAvailable, external)
 
         screen.addCategory(R.string.voice_current_section) {
+            // the selected service itself is the row; it stays shown (with why) when unusable
             val current = selection.current
             val lastError = store.lastError?.takeIf { it.first == current?.key }?.second
-            val summary = if (current == null) getString(R.string.voice_current_none)
-            else getString(R.string.voice_current_summary, label(current), stateText(resolution)) +
-                    (lastError?.let { "\n" + getString(R.string.voice_last_error, it) } ?: "")
-            addPreference(getString(R.string.asr_provider), summary) { chooseCurrent() }
+            val title = current?.let(::label) ?: getString(R.string.voice_current_none)
+            val state = listOfNotNull(
+                reasonText(resolution),
+                getString(if (current == null) R.string.voice_current_choose else R.string.voice_current_change)
+            ).joinToString(" · ")
+            val summary = state + (lastError?.let { "\n" + getString(R.string.voice_last_error, it) } ?: "")
+            addPreference(title, summary) { chooseCurrent() }
             val lastUsed = AsrServiceId.parse(store.lastUsedService)
             if (lastUsed != null && lastUsed != current) {
                 addPreference(getString(R.string.voice_last_used, label(lastUsed)))
@@ -193,90 +206,49 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
 
         screen.addCategory(R.string.voice_section_system) {
-            addSwitch(getString(R.string.voice_enable_system), null, selection.isEnabled(AsrServiceId.System)) {
-                store.save(store.load().withEnabled(AsrServiceId.System, it))
-            }
-            addPreference(MySwitchPreference(ctx).apply {
-                key = prefs.voice.systemAsrAllowed.key
-                setTitle(R.string.allow_system_asr)
-                setSummary(R.string.allow_system_asr_summary)
-                isIconSpaceReserved = false
-                isSingleLineTitle = false
-                setDefaultValue(false)
-                setOnPreferenceChangeListener { _, _ ->
-                    // toggling the switch answers the disclosure: the recommendation stops asking
-                    prefs.internal.voiceSystemAsrAnswered.setValue(true)
-                    true
-                }
+            // one row for enablement and the disclosure answer; they stay separate states
+            val row = systemRow(
+                selection.isEnabled(AsrServiceId.System), authorization, systemAvailable(),
+                selection.current == AsrServiceId.System
+            )
+            addPreference(Preference(ctx).apply {
+                key = SYSTEM_ROW_KEY
+                isPersistent = false
+                setup(getString(R.string.asr_provider_system), systemSummary(row.status)) { systemActions(row) }
             })
         }
 
         screen.addCategory(R.string.voice_section_local) {
             if (!LocalAsrEngines.AVAILABLE) addPreference(getString(R.string.voice_local_no_runtime))
-            // per model: the row (status, next step, actions) and, once installed, its own
-            // enable switch; installing enables and selects nothing
+            // one row per model: status and next step, actions on tap, and once installed its
+            // own enable switch in the row; installing enables and selects nothing
             ModelCatalogEntry.entries.forEach { entry ->
                 val model = entry.model
                 val row = modelRowOf(entry, selection)
                 renderedStatus[model] = row.status
-                addPreference(Preference(ctx).apply {
+                addPreference(ModelRowPreference(ctx).apply {
                     key = modelRowKey(model)
-                    isPersistent = false
                     setup(modelLabel(model), modelSummary(entry, row)) { modelActions(entry) }
+                    if (row.status in INSTALLED) {
+                        enable = ModelRowPreference.Enable(
+                            selection.isEnabled(AsrServiceId.Local(model)),
+                            getString(R.string.voice_model_enable, modelShortName(model))
+                        ) { on -> view?.post { setModelEnabled(model, on) } }
+                    }
                 })
-                if (row.status in INSTALLED) {
-                    addSwitch(
-                        getString(R.string.voice_model_enable, modelShortName(model)),
-                        getString(R.string.voice_model_enable_summary),
-                        selection.isEnabled(AsrServiceId.Local(model))
-                    ) { setModelEnabled(model, it) }
-                }
             }
         }
 
         screen.addCategory(R.string.voice_section_cloud) {
-            addSwitch(
-                getString(R.string.voice_enable_doubao),
-                getString(R.string.voice_byok_note),
-                selection.isEnabled(AsrServiceId.Doubao)
-            ) {
-                store.save(store.load().withEnabled(AsrServiceId.Doubao, it))
+            addCloud(AsrServiceId.Doubao, R.string.voice_enable_doubao, R.string.voice_doubao_credentials, selection, external) {
+                editDoubaoCredentials()
             }
-            addPreference(
-                getString(R.string.voice_doubao_credentials),
-                getString(
-                    if (credentials.has(DoubaoCredentials.PROVIDER)) R.string.voice_credentials_set
-                    else R.string.voice_credentials_missing
-                )
-            ) { editDoubaoCredentials() }
-            addSwitch(
-                getString(R.string.voice_enable_qwen),
-                getString(R.string.voice_byok_note_qwen),
-                selection.isEnabled(AsrServiceId.Qwen)
-            ) {
-                store.save(store.load().withEnabled(AsrServiceId.Qwen, it))
+            addCloud(AsrServiceId.Qwen, R.string.voice_enable_qwen, R.string.voice_qwen_credentials, selection, external) {
+                editQwenCredentials()
             }
-            addPreference(
-                getString(R.string.voice_qwen_credentials),
-                getString(
-                    if (credentials.has(QwenAsrConfig.PROVIDER)) R.string.voice_credentials_set
-                    else R.string.voice_credentials_missing
-                )
-            ) { editQwenCredentials() }
-            addSwitch(
-                getString(R.string.voice_enable_tencent),
-                getString(R.string.voice_byok_note_tencent),
-                selection.isEnabled(AsrServiceId.Tencent)
-            ) {
-                store.save(store.load().withEnabled(AsrServiceId.Tencent, it))
+            addCloud(AsrServiceId.Tencent, R.string.voice_enable_tencent, R.string.voice_tencent_credentials, selection, external) {
+                editTencentCredentials()
             }
-            addPreference(
-                getString(R.string.voice_tencent_credentials),
-                getString(
-                    if (credentials.has(TencentAsrConfig.PROVIDER)) R.string.voice_credentials_set
-                    else R.string.voice_credentials_missing
-                )
-            ) { editTencentCredentials() }
         }
 
         screen.addCategory(R.string.voice_section_selfhosted) {
@@ -335,15 +307,105 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     }
 
     /**
-     * Only enabled services can be current; the saved choice is never changed silently. Each
-     * on-device model is listed on its own, and only when it is installed and can run here.
+     * A cloud provider: its enable switch with a short status, then its credential row. What is
+     * stored where and who receives the audio is explained in the credential form, before
+     * anything is entered; enabling a provider without credentials opens that form.
+     */
+    private fun PreferenceCategory.addCloud(
+        service: AsrServiceId,
+        enableTitle: Int,
+        credentialsTitle: Int,
+        selection: VoiceSelection,
+        external: ExternalServices,
+        edit: () -> Unit
+    ) {
+        val configured = external.configured(service)
+        val status = cloudStatus(selection.isEnabled(service), configured, selection.current == service)
+        val summary = getString(
+            when (status) {
+                CloudStatus.NeedsCredentials -> R.string.voice_cloud_needs_credentials
+                CloudStatus.EnableToSelect -> R.string.voice_cloud_enable_to_select
+                CloudStatus.Selectable -> R.string.voice_cloud_selectable
+                CloudStatus.InUse -> R.string.voice_status_in_use
+            }
+        )
+        addSwitch(getString(enableTitle), summary, selection.isEnabled(service)) { on ->
+            store.save(store.load().withEnabled(service, on))
+            if (on && !configured) view?.post { edit() }
+        }
+        addPreference(
+            getString(credentialsTitle),
+            getString(if (configured) R.string.voice_credentials_set else R.string.voice_credentials_missing)
+        ) { edit() }
+    }
+
+    /** Status and next step, then the disclosure: the device's service decides, it may go online. */
+    private fun systemSummary(status: SystemStatus): String = getString(
+        when (status) {
+            SystemStatus.Disabled -> R.string.voice_system_disabled
+            SystemStatus.Unavailable -> R.string.voice_system_unavailable
+            SystemStatus.NeedsPermission -> R.string.voice_system_needs_permission
+            SystemStatus.Ready -> R.string.voice_system_ready
+            SystemStatus.InUse -> R.string.voice_status_in_use
+        }
+    ) + "\n" + getString(R.string.voice_system_note)
+
+    private fun systemActions(row: SystemRow) {
+        val labels = row.actions.map { action ->
+            getString(
+                when (action) {
+                    SystemAction.Enable -> R.string.voice_system_enable
+                    SystemAction.Allow -> R.string.voice_system_allow
+                    SystemAction.Disable -> R.string.voice_system_disable
+                    SystemAction.Revoke -> R.string.voice_system_revoke
+                }
+            )
+        }
+        ActionListDialog.create(requireContext(), getString(R.string.asr_provider_system), labels) { which ->
+            when (row.actions[which]) {
+                SystemAction.Enable -> {
+                    store.save(store.load().withEnabled(AsrServiceId.System, true))
+                    // enabling asks for the missing permission right away; a decline keeps it
+                    // enabled but not allowed, which the row says
+                    if (store.systemAuthorization != SystemAsrAuthorization.Allowed) askSystemPermission()
+                    else render()
+                }
+                SystemAction.Allow -> askSystemPermission()
+                SystemAction.Disable -> {
+                    // a disabled current service stays selected; the current row says so
+                    store.save(store.load().withEnabled(AsrServiceId.System, false))
+                    render()
+                }
+                SystemAction.Revoke -> {
+                    store.setSystemAllowed(false)
+                    render()
+                }
+            }
+        }.show()
+    }
+
+    /** The System ASR disclosure asked from its row: it answers permission, it selects nothing. */
+    private fun askSystemPermission() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.system_asr_disclosure_title)
+            .setMessage(R.string.system_asr_disclosure_message)
+            .setNegativeButton(R.string.system_asr_decline) { _, _ -> store.setSystemAllowed(false) }
+            .setPositiveButton(R.string.system_asr_allow) { _, _ -> store.setSystemAllowed(true) }
+            .setOnDismissListener { render() }
+            .show()
+    }
+
+    /**
+     * Only enabled services that can run now are listed (a cloud provider needs credentials, a
+     * model must be installed); the saved choice is never changed silently, and stays shown in
+     * the current row with its reason when it is no longer listed.
      */
     private fun chooseCurrent() {
         val selection = store.load()
-        val local = localStatus()
-        val enabled = (AsrServiceId.entries + store.instances.map { it.service })
-            .filter { selection.isEnabled(it) }
-            .filter { it !is AsrServiceId.Local || local.usable(it.model, selection) }
+        val enabled = selectableServices(
+            AsrServiceId.entries + store.instances.map { it.service },
+            selection, localStatus(), store.systemAuthorization, ::systemAvailable, external()
+        )
         if (enabled.isEmpty()) {
             requireContext().toast(R.string.voice_no_enabled_services)
             return
@@ -387,10 +449,10 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         )
     }
 
-    /** The status and the next step first; source, licence and limits are in the details. */
+    /** One short line: status and next step. Source, licence, size and limits are in the details. */
     private fun modelSummary(entry: ModelCatalogEntry, row: ModelRow = modelRowOf(entry)): String {
         val size = megabytes(entry.totalBytes)
-        val status = when (row.status) {
+        return when (row.status) {
             ModelStatus.NotInstalled -> getString(
                 if (ModelAction.Download in row.actions) R.string.voice_model_status_not_installed
                 else R.string.voice_model_status_not_installed_import,
@@ -400,13 +462,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 R.string.voice_model_status_partial, stagedBytes(entry.model) / 1_000_000, size
             )
             ModelStatus.Running -> (ModelJobs.state(entry.model) as? ModelTasks.State.Running)?.let {
-                getString(
-                    R.string.voice_model_progress,
-                    (it.done * 100 / it.total.coerceAtLeast(1)).toInt(),
-                    it.done / 1_000_000,
-                    megabytes(it.total)
-                )
-            } ?: getString(R.string.voice_model_progress, 0, 0, size)
+                getString(R.string.voice_model_progress, (it.done * 100 / it.total.coerceAtLeast(1)).toInt())
+            } ?: getString(R.string.voice_model_progress, 0)
             ModelStatus.Stopping -> getString(R.string.voice_model_cancelling)
             ModelStatus.Failed -> getString(
                 R.string.voice_model_status_failed,
@@ -414,9 +471,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             )
             ModelStatus.Installed -> getString(R.string.voice_model_status_installed)
             ModelStatus.Enabled -> getString(R.string.voice_model_status_enabled)
-            ModelStatus.InUse -> getString(R.string.voice_model_status_in_use)
+            ModelStatus.InUse -> getString(R.string.voice_status_in_use)
         }
-        return status + "\n" + modelTag(entry.model)
     }
 
     private fun modelRowKey(model: LocalAsrModel) = "voice_model_row_${model.name}"
@@ -450,14 +506,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         store.save(store.load().withEnabled(AsrServiceId.Local(model), on))
         render()
     }
-
-    private fun modelTag(model: LocalAsrModel) = getString(
-        when (model) {
-            LocalAsrModel.ZipformerZh -> R.string.voice_model_a_tag
-            LocalAsrModel.FunAsrNano -> R.string.voice_model_b_tag
-            LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c_tag
-        }
-    )
 
     /** Version, size, source, licence and limits; the full disclosure stays in the confirmation. */
     private fun showModelDetails(entry: ModelCatalogEntry) {
@@ -665,11 +713,13 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     /**
      * Direct BYOK (D028): a provider's own credentials, stored encrypted on this device only and
-     * never shown back; leaving a secret field empty keeps the stored value.
+     * never shown back; leaving a secret field empty keeps the stored value. [note] says where
+     * the key is kept and who receives the audio, above the fields.
      */
     private fun editCredentials(
         provider: String,
         title: Int,
+        note: Int,
         hint: Int,
         fields: List<CredentialField>,
         isComplete: (Map<String, String>) -> Boolean
@@ -716,8 +766,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
         AlertDialog.Builder(ctx)
             .setTitle(title)
-            .setMessage(hint)
-            .setView(form)
+            .setMessage(getString(note) + "\n\n" + getString(hint))
+            .setView(ScrollView(ctx).apply { addView(form) })
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 val values = readers.associate { (key, read) -> key to read() }
                     .filterValues { it.isNotEmpty() }
@@ -746,6 +796,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private fun editDoubaoCredentials() = editCredentials(
         DoubaoCredentials.PROVIDER,
         R.string.voice_doubao_credentials,
+        R.string.voice_byok_note,
         R.string.voice_doubao_credentials_hint,
         listOf(
             CredentialField(DoubaoCredentials.API_KEY, R.string.voice_doubao_api_key, secret = true),
@@ -761,6 +812,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private fun editQwenCredentials() = editCredentials(
         QwenAsrConfig.PROVIDER,
         R.string.voice_qwen_credentials,
+        R.string.voice_byok_note_qwen,
         R.string.voice_qwen_credentials_hint,
         listOf(
             CredentialField(QwenAsrConfig.API_KEY, R.string.voice_qwen_api_key, secret = true),
@@ -784,6 +836,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private fun editTencentCredentials() = editCredentials(
         TencentAsrConfig.PROVIDER,
         R.string.voice_tencent_credentials,
+        R.string.voice_byok_note_tencent,
         R.string.voice_tencent_credentials_hint,
         listOf(
             CredentialField(TencentAsrConfig.APP_ID, R.string.voice_tencent_app_id),
@@ -936,5 +989,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private companion object {
         private val INSTALLED = setOf(ModelStatus.Installed, ModelStatus.Enabled, ModelStatus.InUse)
         const val PENDING_IMPORT = "pending_model_import"
+        const val SYSTEM_ROW_KEY = "voice_system_row"
     }
 }

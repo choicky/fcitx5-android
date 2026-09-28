@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The enable switch at the end of a Local model row; the rest of the row opens its actions. -->
+<Switch xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/voice_model_switch"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:minWidth="48dp"
+    android:minHeight="48dp" />
