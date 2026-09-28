@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToStream
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
 import org.fcitx.fcitx5.android.utils.Const
 import org.fcitx.fcitx5.android.utils.appContext
@@ -23,7 +24,6 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 object UserDataManager {
 
@@ -37,26 +37,6 @@ object UserDataManager {
         val exportTime: Long
     )
 
-    private fun writeFileTree(
-        srcDir: File,
-        destPrefix: String,
-        dest: ZipOutputStream,
-        excludedDirs: Set<String> = emptySet()
-    ) {
-        dest.putNextEntry(ZipEntry("$destPrefix/"))
-        srcDir.walkTopDown().onEnter { it == srcDir || it.relativeTo(srcDir).path !in excludedDirs }.forEach { f ->
-            val related = f.relativeTo(srcDir)
-            if (related.path != "") {
-                if (f.isDirectory) {
-                    dest.putNextEntry(ZipEntry("$destPrefix/${related.path}/"))
-                } else if (f.isFile) {
-                    dest.putNextEntry(ZipEntry("$destPrefix/${related.path}"))
-                    f.inputStream().use { it.copyTo(dest) }
-                }
-            }
-        }
-    }
-
     private val sharedPrefsDir = File(appContext.applicationInfo.dataDir, "shared_prefs")
     private val dataBasesDir = File(appContext.applicationInfo.dataDir, "databases")
     private val externalDir = appContext.getExternalFilesDir(null)!!
@@ -64,15 +44,20 @@ object UserDataManager {
 
     @OptIn(ExperimentalSerializationApi::class)
     fun export(dest: OutputStream, timestamp: Long = System.currentTimeMillis()) = runCatching {
-        ZipOutputStream(dest.buffered()).use { zipStream ->
-            // shared_prefs
-            writeFileTree(sharedPrefsDir, "shared_prefs", zipStream)
-            // databases
-            writeFileTree(dataBasesDir, "databases", zipStream)
-            // external, without Local ASR models pushed there with adb (large, and their
-            // licences may not allow sharing them)
-            writeFileTree(externalDir, "external", zipStream, setOf(LocalAsrModel.ROOT_DIR))
-            // recently_used moved to SharedPreference and shoud not be exported
+        UserDataArchive.write(
+            dest,
+            // an earlier version kept raw voice failure details in preferences: removed and
+            // committed before shared_prefs is read, or the export fails
+            prepare = { AppPrefs.getInstance().purgeLegacyVoiceLastError() },
+            trees = listOf(
+                UserDataArchive.Tree(sharedPrefsDir, "shared_prefs"),
+                UserDataArchive.Tree(dataBasesDir, "databases"),
+                // without Local ASR models pushed there with adb (large, and their licences
+                // may not allow sharing them)
+                UserDataArchive.Tree(externalDir, "external", setOf(LocalAsrModel.ROOT_DIR))
+                // recently_used moved to SharedPreference and shoud not be exported
+            )
+        ) { zipStream ->
             // metadata
             zipStream.putNextEntry(ZipEntry("metadata.json"))
             val pkgInfo = appContext.packageManager.getPackageInfo(appContext.packageName, 0)
