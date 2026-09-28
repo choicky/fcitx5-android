@@ -84,7 +84,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         // the file picker may outlive this instance (e.g. after a configuration change)
         pendingImport = savedInstanceState?.getString(PENDING_IMPORT)
             ?.let { name -> ModelCatalogEntry.entries.firstOrNull { it.model.name == name } }
-            ?.let(ModelCatalogEntry::of)
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext())
         render()
     }
