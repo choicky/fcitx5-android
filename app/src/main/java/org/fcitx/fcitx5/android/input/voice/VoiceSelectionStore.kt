@@ -60,9 +60,17 @@ internal class VoiceSelectionStore(
     /** Record the System ASR disclosure answer and what it means for the selection. */
     fun answerSystemDisclosure(allowed: Boolean) {
         val selection = load()
+        setSystemAllowed(allowed)
+        save(selection.afterSystemDisclosure(allowed))
+    }
+
+    /**
+     * Give or withdraw System ASR permission from its settings row; the selection is unchanged.
+     * Either way the disclosure counts as answered, so the recommendation does not ask again.
+     */
+    fun setSystemAllowed(allowed: Boolean) {
         prefs.voice.systemAsrAllowed.setValue(allowed)
         prefs.internal.voiceSystemAsrAnswered.setValue(true)
-        save(selection.afterSystemDisclosure(allowed))
     }
 
     var instances: List<SelfHostedInstance>
