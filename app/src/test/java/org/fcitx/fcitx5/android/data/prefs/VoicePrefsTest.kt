@@ -72,12 +72,10 @@ class VoicePrefsTest {
         val system = mutableMapOf<String, Any>("voice_asr_provider" to "System")
         assertEquals(AsrServiceId.System, store(system).load().current)
 
+        // the Developer research selection becomes that model's own service, enabled and current
         val local = mutableMapOf<String, Any>("voice_asr_provider" to "Local", "voice_local_asr" to "FunAsrNano")
-        store(local).run {
-            assertEquals(AsrServiceId.Local, load().current)
-            // the Developer research selection becomes the configured Local model
-            assertEquals(LocalAsrModel.FunAsrNano, localModel)
-        }
+        val nano = AsrServiceId.Local(LocalAsrModel.FunAsrNano)
+        assertEquals(VoiceSelection(nano, setOf(nano), true), store(local).load())
 
         // old Auto after a decline: remembered, nothing selected
         val declined = mutableMapOf<String, Any>(
@@ -86,8 +84,45 @@ class VoicePrefsTest {
         assertEquals(VoiceSelection(null, emptySet(), true), store(declined).load())
 
         // migration runs once: later edits are not overwritten by the legacy value
-        store(system).save(VoiceSelection(AsrServiceId.Local, setOf(AsrServiceId.Local), true))
-        assertEquals(AsrServiceId.Local, store(system).load().current)
+        store(system).save(VoiceSelection(nano, setOf(nano), true))
+        assertEquals(nano, store(system).load().current)
+    }
+
+    /** An install that already had the single Local service (switch + model, current "local"). */
+    @Test
+    fun theSingleLocalServiceMigratesToItsModelOnce() {
+        val zh = AsrServiceId.Local(LocalAsrModel.ZipformerZh)
+        val values = mutableMapOf<String, Any>(
+            "voice_selection_migrated" to true,
+            "voice_current_service" to "local",
+            "voice_local_enabled" to true,
+            "voice_local_model" to "ZipformerZh",
+            "voice_system_enabled" to true,
+            "voice_enabled_external" to "doubao",
+            "voice_recommendation_done" to true
+        )
+        assertEquals(
+            VoiceSelection(zh, setOf(AsrServiceId.System, AsrServiceId.Doubao, zh), true),
+            store(values).load()
+        )
+        assertEquals("local:ZipformerZh", values["voice_enabled_local_models"])
+        // once: a later change stays
+        store(values).save(VoiceSelection(AsrServiceId.Doubao, setOf(AsrServiceId.Doubao), true))
+        assertEquals(VoiceSelection(AsrServiceId.Doubao, setOf(AsrServiceId.Doubao), true), store(values).load())
+    }
+
+    @Test
+    fun aDisabledSingleLocalServiceStaysDisabled() {
+        val values = mutableMapOf<String, Any>(
+            "voice_selection_migrated" to true,
+            "voice_current_service" to "local",
+            "voice_local_enabled" to false,
+            "voice_local_model" to "FunAsrNano",
+            "voice_recommendation_done" to true
+        )
+        val nano = AsrServiceId.Local(LocalAsrModel.FunAsrNano)
+        // still selected, not enabled: shown as disabled, nothing else chosen
+        assertEquals(VoiceSelection(nano, emptySet(), true), store(values).load())
     }
 
     @Test

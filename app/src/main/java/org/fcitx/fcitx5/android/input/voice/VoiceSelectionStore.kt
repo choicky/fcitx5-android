@@ -30,7 +30,9 @@ internal class VoiceSelectionStore(
         val internal = prefs.internal
         val enabled = buildSet {
             if (internal.voiceSystemEnabled.getValue()) add(AsrServiceId.System)
-            if (internal.voiceLocalEnabled.getValue()) add(AsrServiceId.Local)
+            internal.voiceEnabledLocalModels.getValue().split(',')
+                .mapNotNull { AsrServiceId.parse(it) }
+                .filterTo(this) { it is AsrServiceId.Local }
             internal.voiceEnabledExternal.getValue().split(',')
                 .mapNotNull { AsrServiceId.parse(it) }
                 .filterTo(this) { it.external }
@@ -46,17 +48,14 @@ internal class VoiceSelectionStore(
         val internal = prefs.internal
         internal.voiceCurrentService.setValue(selection.current?.key ?: "")
         internal.voiceSystemEnabled.setValue(selection.isEnabled(AsrServiceId.System))
-        internal.voiceLocalEnabled.setValue(selection.isEnabled(AsrServiceId.Local))
+        internal.voiceEnabledLocalModels.setValue(
+            selection.enabled.filterIsInstance<AsrServiceId.Local>().joinToString(",") { it.key }
+        )
         internal.voiceEnabledExternal.setValue(
             selection.enabled.filter { it.external }.joinToString(",") { it.key }
         )
         internal.voiceRecommendationDone.setValue(selection.recommendationDone)
     }
-
-    /** The configured Local model; no formal model exists, so this is a research model (D037). */
-    var localModel: LocalAsrModel?
-        get() = localAsrModel(prefs.internal.voiceLocalModel.getValue())
-        set(value) = prefs.internal.voiceLocalModel.setValue(value?.name ?: "")
 
     /** Record the System ASR disclosure answer and what it means for the selection. */
     fun answerSystemDisclosure(allowed: Boolean) {
@@ -124,14 +123,26 @@ internal class VoiceSelectionStore(
 
     private fun migrate() {
         val internal = prefs.internal
-        if (internal.voiceSelectionMigrated.getValue()) return
-        val legacy = internal.voiceLegacyAsrProvider.getValue().ifEmpty { null }
-        save(migrateLegacyProvider(legacy, systemAuthorization))
-        // the Developer A/B research selection becomes the configured Local model
-        if (internal.voiceLocalModel.getValue().isEmpty()) {
-            localAsrModel(internal.voiceLocalAsr.getValue())?.let { localModel = it }
+        if (!internal.voiceSelectionMigrated.getValue()) {
+            // from the Auto/Local/System setting (fb3b0c26); an old Local becomes the Developer
+            // screen's research model
+            val legacy = internal.voiceLegacyAsrProvider.getValue().ifEmpty { null }
+            save(migrateLegacyProvider(legacy, systemAuthorization, localAsrModel(internal.voiceLocalAsr.getValue())))
+            internal.voiceSelectionMigrated.setValue(true)
+            internal.voiceLocalModelsMigrated.setValue(true)
+            return
         }
-        internal.voiceSelectionMigrated.setValue(true)
+        if (!internal.voiceLocalModelsMigrated.getValue()) {
+            // from one Local service (switch + configured model) to one service per model
+            val (current, local) = migrateLocalModels(
+                internal.voiceCurrentService.getValue(),
+                internal.voiceLocalEnabled.getValue(),
+                localAsrModel(internal.voiceLocalModel.getValue())
+            )
+            internal.voiceCurrentService.setValue(current?.key ?: "")
+            internal.voiceEnabledLocalModels.setValue(local.joinToString(",") { it.key })
+            internal.voiceLocalModelsMigrated.setValue(true)
+        }
     }
 
     companion object {

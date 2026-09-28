@@ -17,8 +17,9 @@ class AsrSelectionTest {
 
     // any research model; the tests do not imply a formal Local choice
     private val model = LocalAsrModel.entries.first()
-    private val localReady = LocalStatus(runtimeAvailable = true, model = model, filesPresent = true)
-    private val noLocal = LocalStatus(runtimeAvailable = true, model = null, filesPresent = false)
+    private val localService = AsrServiceId.Local(model)
+    private val localReady = LocalStatus(runtimeAvailable = true, installed = setOf(model))
+    private val noLocal = LocalStatus(runtimeAvailable = true, installed = emptySet())
 
     private fun selection(
         current: AsrServiceId?,
@@ -29,7 +30,7 @@ class AsrSelectionTest {
         current,
         buildSet {
             if (system) add(AsrServiceId.System)
-            if (local) add(AsrServiceId.Local)
+            if (local) add(localService)
         },
         done
     )
@@ -55,8 +56,8 @@ class AsrSelectionTest {
     @Test
     fun selectedLocalIsUsedWithoutQueryingSystem() {
         assertEquals(
-            AsrResolution.Ready(AsrServiceId.Local, VoiceBackendKind.LocalAsr(model)),
-            resolveCurrentService(selection(AsrServiceId.Local), localReady, NotAsked, systemNotQueried)
+            AsrResolution.Ready(localService, VoiceBackendKind.LocalAsr(model)),
+            resolveCurrentService(selection(localService), localReady, NotAsked, systemNotQueried)
         )
     }
 
@@ -75,11 +76,10 @@ class AsrSelectionTest {
 
     @Test
     fun localReportsItsOwnUnavailabilityWithoutSwitching() {
-        val local = selection(AsrServiceId.Local)
-        fun unavailable(reason: UnavailableReason) = AsrResolution.CurrentUnavailable(AsrServiceId.Local, reason)
-        assertEquals(unavailable(UnavailableReason.NoLocalModel), resolve(local, noLocal))
+        val local = selection(localService)
+        fun unavailable(reason: UnavailableReason) = AsrResolution.CurrentUnavailable(localService, reason)
+        assertEquals(unavailable(UnavailableReason.LocalModelFilesMissing), resolve(local, noLocal))
         assertEquals(unavailable(UnavailableReason.NoLocalRuntime), resolve(local, localReady.copy(runtimeAvailable = false)))
-        assertEquals(unavailable(UnavailableReason.LocalModelFilesMissing), resolve(local, localReady.copy(filesPresent = false)))
     }
 
     @Test
@@ -89,8 +89,8 @@ class AsrSelectionTest {
             resolve(selection(AsrServiceId.System, system = false))
         )
         assertEquals(
-            AsrResolution.CurrentUnavailable(AsrServiceId.Local, UnavailableReason.Disabled),
-            resolve(selection(AsrServiceId.Local, local = false))
+            AsrResolution.CurrentUnavailable(localService, UnavailableReason.Disabled),
+            resolve(selection(localService, local = false))
         )
     }
 
@@ -148,10 +148,12 @@ class AsrSelectionTest {
             VoiceSelection(AsrServiceId.System, setOf(AsrServiceId.System), true),
             migrateLegacyProvider("System", NotAsked)
         )
+        // an old Local becomes the Developer screen's research model, or nothing without one
         assertEquals(
-            VoiceSelection(AsrServiceId.Local, setOf(AsrServiceId.Local), true),
-            migrateLegacyProvider("Local", Allowed)
+            VoiceSelection(localService, setOf(localService), true),
+            migrateLegacyProvider("Local", Allowed, model)
         )
+        assertEquals(VoiceSelection(null, emptySet(), true), migrateLegacyProvider("Local", Allowed))
         // old Auto: keep an allowed System, remember a decline, otherwise recommend on first use
         assertEquals(AsrServiceId.System, migrateLegacyProvider("Auto", Allowed).current)
         assertEquals(VoiceSelection(null, emptySet(), true), migrateLegacyProvider("Auto", Declined))
@@ -161,12 +163,12 @@ class AsrSelectionTest {
 
     @Test
     fun triggerFollowsResolution() {
-        assertTrue(resolve(selection(AsrServiceId.Local), systemAvailable = false).offersTrigger)
+        assertTrue(resolve(selection(localService), systemAvailable = false).offersTrigger)
         assertTrue(AsrResolution.NeedsSystemAuthorization.offersTrigger)
         assertTrue(AsrResolution.NeedsRecommendation(Recommendation.AskSystemAuthorization).offersTrigger)
         assertFalse(AsrResolution.NeedsRecommendation(Recommendation.Nothing).offersTrigger)
         assertFalse(AsrResolution.NoService.offersTrigger)
-        assertFalse(AsrResolution.CurrentUnavailable(AsrServiceId.Local, UnavailableReason.NoLocalModel).offersTrigger)
+        assertFalse(AsrResolution.CurrentUnavailable(localService, UnavailableReason.LocalModelFilesMissing).offersTrigger)
     }
 
     @Test
@@ -197,7 +199,7 @@ class AsrSelectionTest {
 
     @Test
     fun systemAsrNeverStartsWithoutAuthorization() {
-        val currents = listOf(null, AsrServiceId.System, AsrServiceId.Local)
+        val currents = listOf(null, AsrServiceId.System, localService)
         for (current in currents) for (done in listOf(true, false)) for (auth in listOf(NotAsked, Declined))
             for (local in listOf(localReady, noLocal)) for (available in listOf(true, false)) for (granted in listOf(true, false)) {
                 val step = voiceStartStep(resolve(selection(current, done = done), local, auth, available), granted)
@@ -239,7 +241,7 @@ class AsrSelectionTest {
 
     @Test
     fun externalServiceFallsBackOnlyToAProductionLocalModel() {
-        val doubao = VoiceSelection(AsrServiceId.Doubao, setOf(AsrServiceId.Doubao, AsrServiceId.Local), true)
+        val doubao = VoiceSelection(AsrServiceId.Doubao, setOf(AsrServiceId.Doubao, localService), true)
         // research models are not production: no fallback
         assertNull(fallbackTarget(AsrServiceId.Doubao, doubao, localReady))
         // never to System, even when System is enabled and allowed
@@ -247,10 +249,75 @@ class AsrSelectionTest {
     }
 
     @Test
+    fun eachLocalModelIsItsOwnService() {
+        val services = LocalAsrModel.entries.map(AsrServiceId::Local)
+        assertTrue(AsrServiceId.entries.containsAll(services))
+        services.forEach { assertEquals(it, AsrServiceId.parse(it.key)) }
+        assertEquals(LocalAsrModel.entries.size, services.map { it.key }.toSet().size)
+        // the single Local service's key is only read by the migration
+        assertNull(AsrServiceId.parse(AsrServiceId.LEGACY_LOCAL_KEY))
+    }
+
+    @Test
+    fun onlyAnEnabledInstalledModelIsUsable() {
+        val (a, b) = LocalAsrModel.entries
+        val selection = VoiceSelection(null, setOf(AsrServiceId.Local(a), AsrServiceId.Local(b)), true)
+        val status = LocalStatus(runtimeAvailable = true, installed = setOf(a))
+        assertTrue(status.usable(a, selection))
+        // enabled but not installed (downloading, partial, failed verification, removed)
+        assertFalse(status.usable(b, selection))
+        // installed but not enabled
+        assertFalse(status.usable(a, VoiceSelection(null, emptySet(), true)))
+        // a build without the runtime
+        assertFalse(status.copy(runtimeAvailable = false).usable(a, selection))
+    }
+
+    @Test
+    fun theCurrentModelRunsAloneAndOthersDoNotStandIn() {
+        val (a, b) = LocalAsrModel.entries
+        val both = VoiceSelection(AsrServiceId.Local(b), setOf(AsrServiceId.Local(a), AsrServiceId.Local(b)), true)
+        val onlyA = LocalStatus(runtimeAvailable = true, installed = setOf(a))
+        // B selected but removed: reported, not replaced by the installed and enabled A
+        assertEquals(
+            AsrResolution.CurrentUnavailable(AsrServiceId.Local(b), UnavailableReason.LocalModelFilesMissing),
+            resolve(both, onlyA)
+        )
+        assertEquals(
+            AsrResolution.Ready(AsrServiceId.Local(a), VoiceBackendKind.LocalAsr(a)),
+            resolve(both.copy(current = AsrServiceId.Local(a)), onlyA)
+        )
+        // disabling the current model keeps it selected and says so
+        assertEquals(
+            AsrResolution.CurrentUnavailable(AsrServiceId.Local(a), UnavailableReason.Disabled),
+            resolve(both.copy(current = AsrServiceId.Local(a)).withEnabled(AsrServiceId.Local(a), false), onlyA)
+        )
+        // research models are never a fallback target
+        val all = LocalStatus(runtimeAvailable = true, installed = LocalAsrModel.entries.toSet())
+        val qwen = VoiceSelection(AsrServiceId.Qwen, setOf(AsrServiceId.Qwen) + LocalAsrModel.entries.map(AsrServiceId::Local), true)
+        assertNull(fallbackTarget(AsrServiceId.Qwen, qwen, all))
+    }
+
+    @Test
+    fun migrationFromTheSingleLocalServiceKeepsTheEffectiveConfiguration() {
+        val (a, b) = LocalAsrModel.entries
+        // enabled Local with a model, selected: that model, enabled and selected
+        assertEquals(AsrServiceId.Local(b) to setOf<AsrServiceId>(AsrServiceId.Local(b)), migrateLocalModels("local", true, b))
+        // Local enabled with a model, another service selected: only the model is enabled
+        assertEquals(AsrServiceId.Doubao to setOf<AsrServiceId>(AsrServiceId.Local(a)), migrateLocalModels("doubao", true, a))
+        // Local disabled: nothing enabled; a current Local stays selected and shows as disabled
+        assertEquals(AsrServiceId.Local(a) to emptySet<AsrServiceId>(), migrateLocalModels("local", false, a))
+        // Local selected without a model could not run: no selection, nothing enabled
+        assertEquals(null to emptySet<AsrServiceId>(), migrateLocalModels("local", true, null))
+        assertEquals(null to emptySet<AsrServiceId>(), migrateLocalModels("", false, null))
+        // other models are never enabled by the migration
+        assertEquals(setOf<AsrServiceId>(AsrServiceId.Local(a)), migrateLocalModels("system", true, a).second)
+    }
+
+    @Test
     fun neverSelectsDoubaoWithoutTheUser() {
         // the recommendation and the migration never pick a network service
         for (auth in SystemAsrAuthorization.entries) for (legacy in listOf(null, "Auto", "System", "Local", "bogus")) {
-            val migrated = migrateLegacyProvider(legacy, auth)
+            val migrated = migrateLegacyProvider(legacy, auth, model)
             assertFalse(migrated.current == AsrServiceId.Doubao)
             assertFalse(AsrServiceId.Doubao in migrated.enabled)
             val recommended = migrated.applyRecommendation(recommend(auth) { true })
@@ -310,7 +377,7 @@ class AsrSelectionTest {
     @Test
     fun selfHostedFallsBackOnlyToProductionLocal() {
         val s = AsrServiceId.SelfHosted("abc123")
-        assertNull(fallbackTarget(s, VoiceSelection(s, setOf(s, AsrServiceId.Local, AsrServiceId.System), true), localReady))
+        assertNull(fallbackTarget(s, VoiceSelection(s, setOf(s, localService, AsrServiceId.System), true), localReady))
     }
 
     @Test

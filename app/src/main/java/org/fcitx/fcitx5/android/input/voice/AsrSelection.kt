@@ -21,9 +21,13 @@ internal sealed interface AsrServiceId {
         override val external = false
     }
 
-    data object Local : AsrServiceId {
-        override val key = "local"
-        override val external = false
+    /**
+     * One installed on-device model. Each model is enabled and selected on its own, like a
+     * cloud provider; a session runs only the selected model.
+     */
+    data class Local(val model: LocalAsrModel) : AsrServiceId {
+        override val key get() = LOCAL_PREFIX + model.name
+        override val external get() = false
     }
 
     /** Managed Cloud: Doubao / Seed-ASR 2.0 with the user's own Volcengine credentials. */
@@ -52,9 +56,17 @@ internal sealed interface AsrServiceId {
 
     companion object {
         private const val PREFIX = "selfhosted:"
+        private const val LOCAL_PREFIX = "local:"
+
+        /**
+         * The single Local service before models were enabled one by one; only read by
+         * [migrateLocalModels].
+         */
+        const val LEGACY_LOCAL_KEY = "local"
 
         /** The fixed services; self-hosted instances are listed by their store. */
-        val entries: List<AsrServiceId> = listOf(System, Local, Doubao, Qwen, Tencent)
+        val entries: List<AsrServiceId> =
+            listOf(System) + LocalAsrModel.entries.map(::Local) + listOf(Doubao, Qwen, Tencent)
 
         fun parse(key: String): AsrServiceId? =
             if (key.startsWith(PREFIX)) {
@@ -116,15 +128,21 @@ internal data class VoiceSelection(
         copy(enabled = if (on) enabled + service else enabled - service)
 }
 
-/** What the Local service can offer right now; no model is loaded to find out. */
+/**
+ * What on-device recognition can offer right now: the runtime and which models are completely
+ * installed (a partial or unverified download is not installed). No model is loaded to find out.
+ */
 internal data class LocalStatus(
     val runtimeAvailable: Boolean,
-    val model: LocalAsrModel?,
-    val filesPresent: Boolean
-)
+    val installed: Set<LocalAsrModel>
+) {
+    /** Selectable as a current service: enabled, installed, and this build can run it. */
+    fun usable(model: LocalAsrModel, selection: VoiceSelection) =
+        runtimeAvailable && model in installed && selection.isEnabled(AsrServiceId.Local(model))
+}
 
 internal enum class UnavailableReason {
-    Disabled, NoSystemRecognizer, NoLocalRuntime, NoLocalModel, LocalModelFilesMissing,
+    Disabled, NoSystemRecognizer, NoLocalRuntime, LocalModelFilesMissing,
     MissingCredentials, InstanceMissing, InvalidEndpoint, CleartextEndpoint
 }
 
@@ -209,17 +227,12 @@ internal fun resolveCurrentService(
             // an explicit choice asks again after a decline
             else -> AsrResolution.NeedsSystemAuthorization
         }
-        AsrServiceId.Local -> {
-            val model = local.model
-            when {
-                !local.runtimeAvailable ->
-                    AsrResolution.CurrentUnavailable(current, UnavailableReason.NoLocalRuntime)
-                model == null ->
-                    AsrResolution.CurrentUnavailable(current, UnavailableReason.NoLocalModel)
-                !local.filesPresent ->
-                    AsrResolution.CurrentUnavailable(current, UnavailableReason.LocalModelFilesMissing)
-                else -> AsrResolution.Ready(current, VoiceBackendKind.LocalAsr(model))
-            }
+        is AsrServiceId.Local -> when {
+            !local.runtimeAvailable ->
+                AsrResolution.CurrentUnavailable(current, UnavailableReason.NoLocalRuntime)
+            current.model !in local.installed ->
+                AsrResolution.CurrentUnavailable(current, UnavailableReason.LocalModelFilesMissing)
+            else -> AsrResolution.Ready(current, VoiceBackendKind.LocalAsr(current.model))
         }
         AsrServiceId.Doubao, AsrServiceId.Qwen, AsrServiceId.Tencent ->
             if (!external.configured(current)) {
@@ -250,8 +263,8 @@ internal fun resolveCurrentService(
 
 /**
  * D035: only a selected external (Managed Cloud / Self-hosted) service falls back, and only to
- * an enabled, installed production Local model. Research models (D037) and System ASR never
- * are fallback targets, so there is no target until a production Local model exists.
+ * an enabled, installed production Local model. Research models (D037, A/B/C) and System ASR
+ * never are fallback targets, so there is no target until a production Local model exists.
  */
 internal fun fallbackTarget(
     selected: AsrServiceId?,
@@ -259,11 +272,9 @@ internal fun fallbackTarget(
     local: LocalStatus
 ): VoiceBackendKind? {
     if (selected == null || !selected.external) return null
-    val model = local.model ?: return null
-    if (!selection.isEnabled(AsrServiceId.Local) || !local.runtimeAvailable || !local.filesPresent) {
-        return null
-    }
-    return if (model.production) VoiceBackendKind.LocalAsr(model) else null
+    return LocalAsrModel.entries
+        .firstOrNull { it.production && local.usable(it, selection) }
+        ?.let(VoiceBackendKind::LocalAsr)
 }
 
 /**
@@ -319,16 +330,20 @@ internal fun VoiceSelection.applyRecommendation(recommendation: Recommendation):
 /**
  * Migration from the earlier persisted Auto/Local/System setting (`fb3b0c26`). Never selects a
  * network service. An old Auto keeps System only when it was already allowed, remembers a
- * decline, and otherwise leaves the one-time recommendation to run on first use.
+ * decline, and otherwise leaves the one-time recommendation to run on first use. An old Local
+ * becomes the research model chosen in the Developer screen, or no selection without one.
  */
 internal fun migrateLegacyProvider(
     legacy: String?,
-    systemAuthorization: SystemAsrAuthorization
+    systemAuthorization: SystemAsrAuthorization,
+    localModel: LocalAsrModel? = null
 ): VoiceSelection {
     val none = VoiceSelection(null, emptySet(), recommendationDone = false)
     return when (legacy) {
         "System" -> VoiceSelection(AsrServiceId.System, setOf(AsrServiceId.System), recommendationDone = true)
-        "Local" -> VoiceSelection(AsrServiceId.Local, setOf(AsrServiceId.Local), recommendationDone = true)
+        "Local" -> localModel?.let(AsrServiceId::Local)
+            ?.let { VoiceSelection(it, setOf(it), recommendationDone = true) }
+            ?: none.copy(recommendationDone = true)
         // "Auto", unset, or anything unknown
         else -> when (systemAuthorization) {
             SystemAsrAuthorization.Allowed -> none.applyRecommendation(Recommendation.SelectSystem)
@@ -336,6 +351,24 @@ internal fun migrateLegacyProvider(
             SystemAsrAuthorization.NotAsked -> none
         }
     }
+}
+
+/**
+ * Migration from the single Local service (one "enable Local" switch plus one configured model,
+ * current key `local`) to one service per model. The effective configuration is kept: the
+ * configured model is enabled if Local was enabled, and a current Local becomes that model.
+ * A current Local without a configured model could not run before; it becomes no selection
+ * (the recommendation does not run again). Nothing new is enabled or selected.
+ */
+internal fun migrateLocalModels(
+    currentKey: String,
+    localEnabled: Boolean,
+    localModel: LocalAsrModel?
+): Pair<AsrServiceId?, Set<AsrServiceId>> {
+    val service = localModel?.let(AsrServiceId::Local)
+    val enabled = if (localEnabled && service != null) setOf<AsrServiceId>(service) else emptySet()
+    val current = if (currentKey == AsrServiceId.LEGACY_LOCAL_KEY) service else AsrServiceId.parse(currentKey)
+    return current to enabled
 }
 
 /** What tapping a voice trigger does next. */

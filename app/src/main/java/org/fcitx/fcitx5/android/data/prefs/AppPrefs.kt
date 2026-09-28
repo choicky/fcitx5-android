@@ -48,6 +48,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         // and whether the one-time recommendation ran (see VoiceSelectionStore)
         val voiceCurrentService = string("voice_current_service", "")
         val voiceSystemEnabled = bool("voice_system_enabled", false)
+        // the single "enable Local" switch and configured model, before one service per model;
+        // only read by the migration
         val voiceLocalEnabled = bool("voice_local_enabled", false)
         // enabled Managed Cloud / Self-hosted services, comma-separated keys
         val voiceEnabledExternal = string("voice_enabled_external", "")
@@ -56,6 +58,9 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val voiceRecommendationDone = bool("voice_recommendation_done", false)
         val voiceLocalModel = string("voice_local_model", "")
         val voiceSelectionMigrated = bool("voice_selection_migrated", false)
+        // "local:<model>" keys of the enabled on-device models
+        val voiceEnabledLocalModels = string("voice_enabled_local_models", "")
+        val voiceLocalModelsMigrated = bool("voice_local_models_migrated", false)
         // the earlier Auto/Local/System setting (fb3b0c26), read once for migration
         val voiceLegacyAsrProvider = string("voice_asr_provider", "")
         // the service the most recent session actually used
