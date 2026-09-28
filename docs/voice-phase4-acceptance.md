@@ -30,8 +30,9 @@ Run when a JDK and Android SDK are available:
 
 ```text
 ./gradlew :app:testDebugUnitTest --tests 'org.fcitx.fcitx5.android.input.voice.*' --tests 'org.fcitx.fcitx5.android.data.prefs.VoicePrefsTest'
-./gradlew :app:connectedDebugAndroidTest --tests 'org.fcitx.fcitx5.android.ui.main.settings.behavior.VoiceSettingsLayoutTest' --tests 'org.fcitx.fcitx5.android.ui.main.settings.behavior.VoiceSettingsProgressTest'
-./gradlew :app:assembleArm64Debug
+./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.fcitx.fcitx5.android.ui.main.settings.behavior.VoiceSettingsLayoutTest
+./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.fcitx.fcitx5.android.ui.main.settings.behavior.VoiceSettingsProgressTest
+BUILD_ABI=arm64-v8a ./gradlew :app:assembleDebug
 ```
 
 The tests cover A non-selection/non-start, old A current state, C/B ordering, System ASR

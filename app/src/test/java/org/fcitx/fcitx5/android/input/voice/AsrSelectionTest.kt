@@ -223,6 +223,7 @@ class AsrSelectionTest {
             AsrResolution.CurrentUnavailable(a, UnavailableReason.RetiredLocalModel),
             resolveCurrentService(selection, LocalStatus(true, LocalAsrModel.entries.toSet()), Allowed, systemNotQueried)
         )
+        assertFalse(LocalStatus(true, LocalAsrModel.entries.toSet()).usable(a.model, selection))
         assertEquals(VoiceStartStep.Unavailable(AsrResolution.CurrentUnavailable(a, UnavailableReason.RetiredLocalModel)),
             voiceStartStep(AsrResolution.CurrentUnavailable(a, UnavailableReason.RetiredLocalModel), true))
     }

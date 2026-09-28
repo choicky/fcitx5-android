@@ -140,7 +140,8 @@ internal data class LocalStatus(
 ) {
     /** Selectable as a current service: enabled, installed, and this build can run it. */
     fun usable(model: LocalAsrModel, selection: VoiceSelection) =
-        runtimeAvailable && model in installed && selection.isEnabled(AsrServiceId.Local(model))
+        runtimeAvailable && model in LocalAsrModel.userVisibleEntries &&
+                model in installed && selection.isEnabled(AsrServiceId.Local(model))
 }
 
 internal enum class UnavailableReason {
@@ -276,7 +277,7 @@ internal fun fallbackTarget(
     local: LocalStatus
 ): VoiceBackendKind? {
     if (selected == null || !selected.external) return null
-    return LocalAsrModel.entries
+    return LocalAsrModel.userVisibleEntries
         .firstOrNull { it.production && local.usable(it, selection) }
         ?.let(VoiceBackendKind::LocalAsr)
 }
