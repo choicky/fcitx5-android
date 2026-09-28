@@ -89,8 +89,11 @@ internal object ModelJobs {
      * From the catalog's pinned source, or from [base] the user entered; the pinned SHA-256
      * applies either way. Plain HTTP only in debug builds.
      */
-    fun download(context: Context, entry: ModelCatalogEntry, base: String? = entry.downloadBase) =
+    fun download(context: Context, entry: ModelCatalogEntry, base: String? = entry.downloadBase) {
+        // A's download is a test-build exception (D037); a release build never starts it
+        if (!entry.downloadOffered(BuildConfig.DEBUG)) return
         run(context, entry, ModelSources.download(http, entry, base, allowCleartext = BuildConfig.DEBUG), attempts = 3)
+    }
 
     /** Import files the user picked; they are matched by name and checked like a download. */
     fun import(context: Context, entry: ModelCatalogEntry, uris: List<Uri>) {
