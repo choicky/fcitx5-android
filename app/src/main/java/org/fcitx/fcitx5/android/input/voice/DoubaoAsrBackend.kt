@@ -36,6 +36,9 @@ internal class DoubaoCredentials(
     val isComplete: Boolean
         get() = apiKey.isNotEmpty() || (appKey.isNotEmpty() && accessKey.isNotEmpty())
 
+    /** Values that must never appear in a failure detail. */
+    val secrets get() = listOf(apiKey, appKey, accessKey)
+
     override fun toString() = "DoubaoCredentials(redacted)"
 
     companion object {
@@ -167,8 +170,9 @@ internal class DoubaoAsrBackend(
         }
         Timber.i("Doubao ASR capture released: ${stats.summary()}")
         if (closed) return
-        if (failure != null) {
-            post { finish(tracker.fail("capture: $failure")) }
+        failure?.let { detail ->
+            // the microphone failed, not the service: no D035 fallback for this
+            post { if (tracker.fail(detail) is DoubaoResultTracker.Outcome.Failed) failCapture(detail) }
             return
         }
         // end of input only: tail results keep arriving until the server's last package
@@ -243,9 +247,10 @@ internal class DoubaoAsrBackend(
                 events.onFinal(token, outcome.text)
             }
             is DoubaoResultTracker.Outcome.Failed -> {
-                Timber.w("Doubao ASR failed: ${outcome.detail}")
+                val safe = ErrorRedaction.redact(outcome.detail, credentials.secrets)
+                Timber.w("Doubao ASR failed: $safe")
                 release(graceful = false)
-                events.onError(token, VoiceError.Service(outcome.detail))
+                events.onError(token, VoiceError.Service(safe))
             }
             else -> Unit
         }
@@ -258,6 +263,14 @@ internal class DoubaoAsrBackend(
         job = null
         socket?.let { if (graceful) it.close(NORMAL_CLOSURE, null) else it.cancel() }
         socket = null
+    }
+
+    private fun failCapture(detail: String) {
+        val events = events ?: return
+        val safe = ErrorRedaction.redact(detail, credentials.secrets)
+        Timber.w("Doubao ASR capture failed: $safe")
+        release(graceful = false)
+        events.onError(token, VoiceError.Capture(safe))
     }
 
     private fun post(block: () -> Unit) {

@@ -5,10 +5,18 @@
 
 package org.fcitx.fcitx5.android.input.voice
 
+import android.content.Context
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import java.io.File
 
 /** Reads and writes the D034 selection; migrates the earlier Auto/Local/System setting once. */
-internal class VoiceSelectionStore(private val prefs: AppPrefs) {
+internal class VoiceSelectionStore(
+    private val prefs: AppPrefs,
+    /** Where [lastError] is kept; resolved on first use (a Context may not exist yet). */
+    lastErrorFile: () -> File
+) {
+
+    private val lastErrorRecord = LastErrorRecord(lastErrorFile)
 
     val systemAuthorization: SystemAsrAuthorization
         get() = SystemAsrAuthorization.of(
@@ -91,14 +99,23 @@ internal class VoiceSelectionStore(private val prefs: AppPrefs) {
 
     /**
      * The most recent failure of a service, shown in settings so an invalid or revoked key is
-     * visible after the toast is gone. Failure details never contain credentials.
+     * visible after the toast is gone. Details are redacted and kept outside shared preferences
+     * (not backed up or exported); a value from the earlier preference is discarded.
      */
     var lastError: Pair<String, String>?
-        get() = prefs.internal.voiceLastError.getValue().split('\n', limit = 2)
-            .takeIf { it.size == 2 && it[0].isNotEmpty() }?.let { it[0] to it[1] }
-        set(value) = prefs.internal.voiceLastError.setValue(
-            value?.let { (service, detail) -> service + "\n" + detail.take(160) } ?: ""
-        )
+        get() {
+            dropLegacyLastError()
+            return lastErrorRecord.read()
+        }
+        set(value) {
+            dropLegacyLastError()
+            lastErrorRecord.write(value)
+        }
+
+    private fun dropLegacyLastError() {
+        val legacy = prefs.internal.voiceLastError
+        if (legacy.getValue().isNotEmpty()) legacy.setValue("")
+    }
 
     var lastUsedService: String
         get() = prefs.internal.voiceLastUsedService.getValue()
@@ -114,5 +131,9 @@ internal class VoiceSelectionStore(private val prefs: AppPrefs) {
             localAsrModel(internal.voiceLocalAsr.getValue())?.let { localModel = it }
         }
         internal.voiceSelectionMigrated.setValue(true)
+    }
+
+    companion object {
+        fun lastErrorFile(context: Context) = context.noBackupFilesDir.resolve("voice/last-error")
     }
 }
