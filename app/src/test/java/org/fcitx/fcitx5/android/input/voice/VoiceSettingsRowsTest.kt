@@ -115,7 +115,23 @@ class VoiceSettingsRowsTest {
         // nothing enabled, nothing listed, even when everything is configured and installed
         assertEquals(
             emptyList<AsrServiceId>(),
-            selectable(emptySet(), LocalAsrModel.entries.toSet(), external = external(AsrServiceId.Doubao))
+            selectable(emptySet(), LocalAsrModel.userVisibleEntries.toSet(), external = external(AsrServiceId.Doubao))
+        )
+    }
+
+    @Test
+    fun retiredAIsExcludedEvenWhenACallerStillHasItsLegacyCandidate() {
+        assertEquals(
+            listOf(c),
+            selectable(setOf(a, c), installed = setOf(LocalAsrModel.ZipformerZh, LocalAsrModel.ZipformerBilingual))
+        )
+    }
+
+    @Test
+    fun localCatalogIsOrderedCThenB() {
+        assertEquals(
+            listOf(LocalAsrModel.ZipformerBilingual, LocalAsrModel.FunAsrNano),
+            ModelCatalogEntry.entries.map { it.model }
         )
     }
 

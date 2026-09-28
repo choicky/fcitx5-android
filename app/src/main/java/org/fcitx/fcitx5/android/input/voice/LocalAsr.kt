@@ -65,6 +65,9 @@ internal enum class LocalAsrModel(
 
     companion object {
         const val ROOT_DIR = "local-asr"
+
+        /** Models still understood for old preferences and files, in the current UI order. */
+        val userVisibleEntries = listOf(ZipformerBilingual, FunAsrNano)
     }
 }
 

@@ -114,7 +114,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     /** Which on-device models are completely installed; nothing is loaded. */
     private fun localStatus() = LocalStatus(
         LocalAsrEngines.AVAILABLE,
-        LocalAsrModel.entries.filterTo(mutableSetOf()) { it.missingFiles(localAsrModelDir(it)).isEmpty() }
+        LocalAsrModel.userVisibleEntries.filterTo(mutableSetOf()) { it.missingFiles(localAsrModelDir(it)).isEmpty() }
     )
 
     /** The Local service of the current session's fallback backend, if it has one. */
@@ -316,6 +316,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         val message = when (resolution) {
             is AsrResolution.CurrentUnavailable -> when (resolution.reason) {
                 UnavailableReason.Disabled -> R.string.voice_current_disabled
+                UnavailableReason.RetiredLocalModel -> R.string.voice_retired_model
                 UnavailableReason.NoSystemRecognizer -> R.string.voice_input_unavailable
                 UnavailableReason.NoLocalRuntime -> R.string.voice_local_no_runtime
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable

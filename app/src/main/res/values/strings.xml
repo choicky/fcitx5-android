@@ -323,6 +323,7 @@
     <string name="voice_current_change">Tap to change</string>
     <string name="voice_status_in_use">In use</string>
     <string name="voice_reason_disabled">Turned off</string>
+    <string name="voice_reason_retired_model">This model is no longer offered; choose another service</string>
     <string name="voice_reason_needs_permission">Asks for permission before first use</string>
     <string name="voice_reason_no_system">Not available on this device</string>
     <string name="voice_reason_no_runtime">Not included in this build</string>
@@ -349,7 +350,7 @@
     <string name="voice_run_recommendation_summary">Chooses a service for you once. Cloud and self-hosted services are never chosen automatically.</string>
     <string name="voice_choose_current">Choose the current service</string>
     <string name="voice_no_enabled_services">Turn on a speech recognition service first</string>
-    <string name="voice_section_system">System services</string>
+    <string name="voice_section_system">Built-in system ASR</string>
     <string name="voice_section_local">On-device ASR (offline)</string>
     <string name="voice_model_a">A: streaming Zipformer Chinese INT8 (research model)</string>
     <string name="voice_model_b">B: FunASR Nano INT8 (research model)</string>
@@ -396,12 +397,13 @@
     <string name="voice_model_discard">Discard partial download</string>
     <string name="voice_section_other">Other</string>
     <string name="voice_current_disabled">The selected speech recognition service is turned off</string>
+    <string name="voice_retired_model">The current local model is no longer offered. Choose another service in settings.</string>
     <string name="voice_local_no_runtime">This build does not include on-device speech recognition</string>
     <string name="voice_fell_back_to_local">The selected service could not start, so on-device recognition is used instead. Please say it again.</string>
     <string name="asr_service_doubao">Doubao (Volcengine Seed-ASR 2.0)</string>
     <string name="voice_missing_credentials">The selected cloud service has no credentials. Enter them in Voice input settings.</string>
     <string name="voice_section_cloud">Third-party cloud</string>
-    <string name="voice_enable_doubao">Use Doubao speech recognition</string>
+    <string name="voice_enable_doubao">Doubao speech recognition</string>
     <string name="voice_byok_note">Uses your own Volcengine credentials. They are stored encrypted on this device only. Your audio is sent directly to Volcengine (ByteDance) speech recognition at openspeech.bytedance.com; this app runs no relay server.</string>
     <string name="voice_doubao_credentials">Doubao credentials</string>
     <string name="voice_credentials_set">Set (key hidden)</string>
@@ -414,7 +416,7 @@
     <string name="voice_doubao_credentials_hint">Enter either an API key, or an app key with its access token.</string>
     <string name="voice_credentials_clear">Remove</string>
     <string name="asr_service_qwen">Alibaba Qwen (Model Studio real-time ASR)</string>
-    <string name="voice_enable_qwen">Use Qwen speech recognition</string>
+    <string name="voice_enable_qwen">Qwen speech recognition</string>
     <string name="voice_byok_note_qwen">Uses your own Alibaba Cloud Model Studio API key. It is stored encrypted on this device only. Your audio is sent directly to Alibaba Cloud Model Studio in the region you choose (Beijing or Singapore, maas.aliyuncs.com); this app runs no relay server.</string>
     <string name="voice_qwen_credentials">Qwen credentials</string>
     <string name="voice_qwen_credentials_hint">Enter your Model Studio API key and Workspace ID and choose the region. Alibaba recommends backend-issued temporary keys for mobile apps; here your own key is used directly.</string>
@@ -425,7 +427,7 @@
     <string name="voice_region_beijing">China (Beijing)</string>
     <string name="voice_region_singapore">Singapore</string>
     <string name="asr_service_tencent">Tencent Cloud real-time ASR</string>
-    <string name="voice_enable_tencent">Use Tencent speech recognition</string>
+    <string name="voice_enable_tencent">Tencent speech recognition</string>
     <string name="voice_byok_note_tencent">Uses your own Tencent Cloud API keys. The SecretKey is stored encrypted on this device only and signs each request on this device. Your audio is sent directly to Tencent Cloud speech recognition at asr.cloud.tencent.com; this app runs no relay server. Use a sub-account key limited to speech recognition.</string>
     <string name="voice_tencent_credentials">Tencent credentials</string>
     <string name="voice_tencent_credentials_hint">Enter the AppID, SecretId and SecretKey of a Tencent Cloud account (preferably a CAM sub-account allowed to use speech recognition only), and choose the engine.</string>
@@ -452,7 +454,7 @@
     <string name="voice_selfhosted_model">Model (OpenAI-compatible only, e.g. whisper-1)</string>
     <string name="voice_selfhosted_server">Self-hosted server</string>
     <string name="voice_selfhosted_add">Add a self-hosted server</string>
-    <string name="voice_selfhosted_note">Your audio is sent to the server you enter. Supported: the sherpa-onnx streaming server, the FunASR real-time server (2pass mode), the Fun-ASR-Nano streaming server, and an OpenAI-compatible /v1/audio/transcriptions endpoint (whole utterance after you stop).</string>
+    <string name="voice_selfhosted_note">Audio is sent to the server you enter; protocol and model types are shown when adding or editing it.</string>
     <string name="voice_selfhosted_name">Name</string>
     <string name="voice_selfhosted_url">Address, e.g. wss://asr.example.org/</string>
     <string name="voice_selfhosted_token">Access token (optional, for a reverse proxy)</string>

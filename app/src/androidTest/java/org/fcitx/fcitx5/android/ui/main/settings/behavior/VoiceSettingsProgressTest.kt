@@ -89,7 +89,7 @@ class VoiceSettingsProgressTest {
         val activity = openVoiceSettings()
         try {
             val fragment = activity.voiceSettings()
-            for (model in LocalAsrModel.entries) {
+            for (model in LocalAsrModel.userVisibleEntries) {
                 val go = CountDownLatch(1)
                 val end = CountDownLatch(1)
                 assertTrue(fakeTask(model, go, end))

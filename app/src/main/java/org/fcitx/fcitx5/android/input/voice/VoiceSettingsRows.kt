@@ -68,6 +68,9 @@ internal fun selectableServices(
     systemAvailable: () -> Boolean,
     external: ExternalServices
 ): List<AsrServiceId> = candidates.filter { service ->
+    // Keep legacy services readable in persisted state, but never expose them as choices.
+    service !is AsrServiceId.Local || service.model in LocalAsrModel.userVisibleEntries
+}.filter { service ->
     selection.isEnabled(service) &&
             when (resolveCurrentService(selection.copy(current = service), local, systemAuthorization, systemAvailable, external)) {
                 is AsrResolution.Ready, AsrResolution.NeedsSystemAuthorization -> true

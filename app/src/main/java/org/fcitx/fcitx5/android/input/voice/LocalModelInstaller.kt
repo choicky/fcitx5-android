@@ -103,7 +103,8 @@ internal data class ModelCatalogEntry(
             downloadBase = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/98590b7ed6443e77b714204da2757d75e1a642f4"
         )
 
-        val entries = listOf(ZipformerZh, FunAsrNano, ZipformerBilingual)
+        /** User-facing catalog. ZipformerZh remains above as historical metadata only. */
+        val entries = listOf(ZipformerBilingual, FunAsrNano)
 
         private val HF_RESOLVE = Regex("""https://huggingface\.co/([^/]+/[^/]+)/resolve/([0-9a-f]{40})/?""")
 

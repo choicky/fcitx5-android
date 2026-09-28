@@ -112,6 +112,21 @@ class VoicePrefsTest {
     }
 
     @Test
+    fun retiredASelectionIsPreservedWithoutMakingItRunnable() {
+        val a = AsrServiceId.Local(LocalAsrModel.ZipformerZh)
+        val values = mutableMapOf<String, Any>(
+            "voice_selection_migrated" to true,
+            "voice_local_models_migrated" to true,
+            "voice_current_service" to a.key,
+            "voice_enabled_local_models" to a.key,
+            "voice_recommendation_done" to true
+        )
+        assertEquals(VoiceSelection(a, setOf(a), true), store(values).load())
+        assertEquals(a.key, values["voice_current_service"])
+        assertEquals(a.key, values["voice_enabled_local_models"])
+    }
+
+    @Test
     fun aDisabledSingleLocalServiceStaysDisabled() {
         val values = mutableMapOf<String, Any>(
             "voice_selection_migrated" to true,

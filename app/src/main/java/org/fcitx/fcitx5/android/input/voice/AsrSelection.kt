@@ -66,13 +66,15 @@ internal sealed interface AsrServiceId {
 
         /** The fixed services; self-hosted instances are listed by their store. */
         val entries: List<AsrServiceId> =
-            listOf(System) + LocalAsrModel.entries.map(::Local) + listOf(Doubao, Qwen, Tencent)
+            listOf(System) + LocalAsrModel.userVisibleEntries.map(::Local) + listOf(Doubao, Qwen, Tencent)
 
         fun parse(key: String): AsrServiceId? =
             if (key.startsWith(PREFIX)) {
                 key.removePrefix(PREFIX).takeIf(SelfHostedInstance::isValidId)?.let(::SelfHosted)
             } else {
                 entries.firstOrNull { it.key == key }
+                    ?: key.takeIf { it == Local(LocalAsrModel.ZipformerZh).key }
+                        ?.let { Local(LocalAsrModel.ZipformerZh) }
             }
     }
 }
@@ -142,7 +144,7 @@ internal data class LocalStatus(
 }
 
 internal enum class UnavailableReason {
-    Disabled, NoSystemRecognizer, NoLocalRuntime, LocalModelFilesMissing,
+    Disabled, RetiredLocalModel, NoSystemRecognizer, NoLocalRuntime, LocalModelFilesMissing,
     MissingCredentials, InstanceMissing, InvalidEndpoint, CleartextEndpoint
 }
 
@@ -228,6 +230,8 @@ internal fun resolveCurrentService(
             else -> AsrResolution.NeedsSystemAuthorization
         }
         is AsrServiceId.Local -> when {
+            current.model !in LocalAsrModel.userVisibleEntries ->
+                AsrResolution.CurrentUnavailable(current, UnavailableReason.RetiredLocalModel)
             !local.runtimeAvailable ->
                 AsrResolution.CurrentUnavailable(current, UnavailableReason.NoLocalRuntime)
             current.model !in local.installed ->
