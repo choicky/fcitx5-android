@@ -105,10 +105,10 @@ class VoiceSettingsRowsTest {
     fun onlyEnabledUsableServicesAreListed() {
         val all = candidates.toSet()
         assertEquals(
-            listOf(AsrServiceId.System, a, c, AsrServiceId.Qwen, secure.service),
+            listOf(AsrServiceId.System, c, AsrServiceId.Qwen, secure.service),
             selectable(
                 all,
-                installed = setOf(LocalAsrModel.ZipformerZh, LocalAsrModel.ZipformerBilingual),
+                installed = setOf(LocalAsrModel.ZipformerBilingual),
                 external = external(AsrServiceId.Qwen)
             )
         )
@@ -147,7 +147,7 @@ class VoiceSettingsRowsTest {
     @Test
     fun localModelsNeedToBeInstalledAndEnabledEachOnTheirOwn() {
         // enabled but not installed: not listed; installed but not enabled: not listed
-        assertEquals(listOf(c), selectable(setOf(b, c), installed = setOf(LocalAsrModel.ZipformerZh, LocalAsrModel.ZipformerBilingual)))
+        assertEquals(listOf(c), selectable(setOf(b, c), installed = setOf(LocalAsrModel.ZipformerBilingual)))
     }
 
     @Test
