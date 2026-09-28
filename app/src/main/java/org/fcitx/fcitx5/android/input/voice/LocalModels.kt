@@ -17,9 +17,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import org.fcitx.fcitx5.android.BuildConfig
 import timber.log.Timber
 import java.io.File
-import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -33,16 +33,21 @@ internal object LocalModels {
 
     fun installer(context: Context) = LocalModelInstaller(root(context))
 
-    fun dir(context: Context, model: LocalAsrModel): File {
-        val installed = root(context).resolve(model.dirName)
-        if (model.missingFiles(installed).isEmpty()) return installed
-        val legacy = LocalAsrBackend.modelDir(context.getExternalFilesDir(null), model)
-        if (legacy != null && model.missingFiles(legacy).isEmpty()) return legacy
-        return installed
-    }
+    private fun legacyDir(context: Context, model: LocalAsrModel) =
+        LocalAsrBackend.modelDir(context.getExternalFilesDir(null), model)
+
+    fun dir(context: Context, model: LocalAsrModel): File =
+        installer(context).activeDir(model, legacyDir(context, model))
 
     fun isInstalled(context: Context, model: LocalAsrModel) =
         model.missingFiles(dir(context, model)).isEmpty()
+
+    /** Also removes an adb-pushed copy, which [dir] would otherwise keep using. */
+    fun remove(context: Context, model: LocalAsrModel) =
+        installer(context).remove(model, legacyDir(context, model))
+
+    /** Bytes of an unfinished download that a retry resumes from. */
+    fun stagedBytes(context: Context, model: LocalAsrModel) = installer(context).stagedBytes(model)
 }
 
 /**
@@ -80,8 +85,12 @@ internal object ModelJobs {
     @Synchronized
     fun isRunning(model: LocalAsrModel) = jobs[model]?.isActive == true
 
-    fun download(context: Context, entry: ModelCatalogEntry) =
-        run(context, entry, ModelSources.download(http, entry), attempts = 3)
+    /**
+     * From the catalog's pinned source, or from [base] the user entered; the pinned SHA-256
+     * applies either way. Plain HTTP only in debug builds.
+     */
+    fun download(context: Context, entry: ModelCatalogEntry, base: String? = entry.downloadBase) =
+        run(context, entry, ModelSources.download(http, entry, base, allowCleartext = BuildConfig.DEBUG), attempts = 3)
 
     /** Import files the user picked; they are matched by name and checked like a download. */
     fun import(context: Context, entry: ModelCatalogEntry, uris: List<Uri>) {
@@ -91,8 +100,8 @@ internal object ModelJobs {
                 if (it.moveToFirst()) it.getString(0) else null
             }
         }
-        val source: (ModelFile) -> InputStream? = { file ->
-            byName[file.path.substringAfterLast('/')]?.let(resolver::openInputStream)
+        val source: ModelFileSource = { file, _ ->
+            byName[file.path.substringAfterLast('/')]?.let(resolver::openInputStream)?.let { ModelStream(it) }
         }
         run(context, entry, source, attempts = 1)
     }
@@ -106,7 +115,7 @@ internal object ModelJobs {
     private fun run(
         context: Context,
         entry: ModelCatalogEntry,
-        source: (ModelFile) -> InputStream?,
+        source: ModelFileSource,
         attempts: Int
     ) {
         val model = entry.model
@@ -126,8 +135,9 @@ internal object ModelJobs {
                 model, result.fold(
                     { State.Finished },
                     {
-                        Timber.w("Local model ${model.name} install failed: ${it.message}")
-                        State.Failed(it as? InstallFailure, it.message.orEmpty())
+                        val detail = ErrorRedaction.redact(it.message.orEmpty())
+                        Timber.w("Local model ${model.name} install failed: $detail")
+                        State.Failed(it as? InstallFailure, detail)
                     }
                 )
             )

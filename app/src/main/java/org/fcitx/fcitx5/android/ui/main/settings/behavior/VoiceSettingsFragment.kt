@@ -42,6 +42,7 @@ import org.fcitx.fcitx5.android.input.voice.UnavailableReason
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.fcitx.fcitx5.android.input.voice.applyRecommendation
 import org.fcitx.fcitx5.android.input.voice.endpointProblem
+import org.fcitx.fcitx5.android.input.voice.modelSourceProblem
 import org.fcitx.fcitx5.android.input.voice.recommend
 import org.fcitx.fcitx5.android.input.voice.resolveCurrentService
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
@@ -339,7 +340,9 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val state = when (val job = ModelJobs.state(entry.model)) {
             is ModelJobs.State.Running -> getString(
                 R.string.voice_model_progress,
-                (job.done * 100 / job.total.coerceAtLeast(1)).toInt()
+                (job.done * 100 / job.total.coerceAtLeast(1)).toInt(),
+                job.done / 1_000_000,
+                megabytes(job.total)
             )
             is ModelJobs.State.Failed -> getString(R.string.voice_model_failed, failureText(job))
             else -> getString(
@@ -347,10 +350,16 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 else R.string.voice_model_not_installed
             )
         }
+        val staged = stagedBytes(entry.model).takeIf { it > 0 && !ModelJobs.isRunning(entry.model) }
+            ?.let { "\n" + getString(R.string.voice_model_staged, megabytes(it)) }.orEmpty()
+        val source = entry.sourceLabel?.takeIf { entry.downloadOffered(BuildConfig.DEBUG) }
+            ?.let { "\n" + getString(R.string.voice_model_source, it) }.orEmpty()
         return getString(
             R.string.voice_model_summary, entry.version, megabytes(entry.totalBytes), state
-        ) + "\n" + modelNote(entry.model)
+        ) + staged + source + "\n" + modelNote(entry.model)
     }
+
+    private fun stagedBytes(model: LocalAsrModel) = LocalModels.stagedBytes(requireContext(), model)
 
     private fun failureText(failed: ModelJobs.State.Failed): String = when (val r = failed.reason) {
         is InstallFailure.Cancelled -> getString(R.string.voice_model_cancelled)
@@ -402,10 +411,12 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         if (ModelJobs.isRunning(model)) {
             actions += getString(R.string.voice_model_cancel) to { ModelJobs.cancel(model) }
         } else {
-            if (entry.downloadBase != null) {
+            // A is downloadable only in test builds (personal-testing exception, D037)
+            if (entry.downloadOffered(BuildConfig.DEBUG)) {
                 actions += getString(R.string.voice_model_download, megabytes(entry.totalBytes)) to {
                     confirmDownload(entry)
                 }
+                actions += getString(R.string.voice_model_download_other) to { chooseSource(entry) }
             }
             actions += getString(R.string.voice_model_import) to {
                 pendingImport = entry
@@ -417,6 +428,11 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                     render()
                 }
                 actions += getString(R.string.voice_model_remove) to { confirmRemove(entry) }
+            } else if (stagedBytes(model) > 0) {
+                actions += getString(R.string.voice_model_discard) to {
+                    LocalModels.remove(ctx, model)
+                    render()
+                }
             }
         }
         AlertDialog.Builder(ctx)
@@ -432,8 +448,11 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             .setTitle(modelLabel(entry.model))
             .setMessage(
                 getString(
-                    if (entry.model == LocalAsrModel.ZipformerBilingual) R.string.voice_model_download_confirm_c
-                    else R.string.voice_model_download_confirm,
+                    when (entry.model) {
+                        LocalAsrModel.ZipformerZh -> R.string.voice_model_download_confirm_a
+                        LocalAsrModel.FunAsrNano -> R.string.voice_model_download_confirm
+                        LocalAsrModel.ZipformerBilingual -> R.string.voice_model_download_confirm_c
+                    },
                     megabytes(entry.totalBytes)
                 )
             )
@@ -445,13 +464,58 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             .show()
     }
 
+    /**
+     * The same files from an address the user enters (for example a mirror of the pinned
+     * revision when the upstream host is unreachable, or a computer on the local network for
+     * testing); the pinned SHA-256 still decides what is installed.
+     */
+    private fun chooseSource(entry: ModelCatalogEntry) {
+        val ctx = requireContext()
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val address = EditText(ctx).apply {
+            setText(entry.downloadBase.orEmpty())
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        }
+        val form = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(address)
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.voice_model_source_title)
+            .setMessage(R.string.voice_model_source_hint)
+            .setView(form)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val base = address.text.toString().trim().trimEnd('/')
+                when {
+                    modelSourceProblem(base, BuildConfig.DEBUG) != null ->
+                        ctx.toast(R.string.voice_model_source_invalid)
+                    base == entry.downloadBase -> confirmDownload(entry)
+                    else -> AlertDialog.Builder(ctx)
+                        .setTitle(modelLabel(entry.model))
+                        .setMessage(
+                            getString(R.string.voice_model_download_confirm_custom, megabytes(entry.totalBytes), base)
+                        )
+                        .setPositiveButton(android.R.string.ok) { _, _ ->
+                            ModelJobs.download(ctx, entry, base)
+                            render()
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun confirmRemove(entry: ModelCatalogEntry) {
         AlertDialog.Builder(requireContext())
             .setTitle(modelLabel(entry.model))
             .setMessage(R.string.voice_model_remove_confirm)
             .setPositiveButton(R.string.voice_model_remove) { _, _ ->
-                // a session that already loaded the model keeps its open files until it ends
-                LocalModels.installer(requireContext()).remove(entry.model)
+                // a session that already loaded the model keeps its open files until it ends;
+                // an adb-pushed copy is removed too, or recognition would keep using it
+                LocalModels.remove(requireContext(), entry.model)
                 render()
             }
             .setNegativeButton(android.R.string.cancel, null)
