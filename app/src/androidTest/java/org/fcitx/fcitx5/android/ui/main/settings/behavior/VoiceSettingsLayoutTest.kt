@@ -32,10 +32,10 @@ import org.junit.Test
 class VoiceSettingsLayoutTest {
 
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val context = instrumentation.targetContext
+    private val app = instrumentation.targetContext
 
     private fun openVoiceSettings(): MainActivity {
-        val intent = Intent(context, MainActivity::class.java)
+        val intent = Intent(app, MainActivity::class.java)
             .setAction(Intent.ACTION_RUN)
             .putExtra(MainActivity.EXTRA_SETTINGS_ROUTE, SettingsRoute.Voice)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -44,18 +44,19 @@ class VoiceSettingsLayoutTest {
 
     private fun MainActivity.voiceSettings(): VoiceSettingsFragment {
         val deadline = System.currentTimeMillis() + 10_000
-        while (true) {
-            var found: VoiceSettingsFragment? = null
+        var found: VoiceSettingsFragment? = null
+        while (found == null) {
+            check(System.currentTimeMillis() < deadline) { "timed out waiting for the Voice settings page" }
             instrumentation.runOnMainSync {
                 found = supportFragmentManager.fragments
                     .flatMap { it.childFragmentManager.fragments }
                     .filterIsInstance<VoiceSettingsFragment>()
                     .firstOrNull { it.isResumed }
             }
-            found?.let { instrumentation.waitForIdleSync(); return it }
-            check(System.currentTimeMillis() < deadline) { "timed out waiting for the Voice settings page" }
-            Thread.sleep(20)
+            if (found == null) Thread.sleep(20)
         }
+        instrumentation.waitForIdleSync()
+        return found!!
     }
 
     private fun <T> onMain(block: () -> T): T {
@@ -67,12 +68,12 @@ class VoiceSettingsLayoutTest {
 
     private fun VoiceSettingsFragment.category(title: Int): PreferenceCategory {
         val screen = preferenceScreen
-        return (0 until screen.preferenceCount).map(screen::getPreference)
+        return screen.children()
             .filterIsInstance<PreferenceCategory>()
-            .first { it.title == context.getString(title) }
+            .first { it.title == app.getString(title) }
     }
 
-    private fun PreferenceGroup.children() = (0 until preferenceCount).map(::getPreference)
+    private fun PreferenceGroup.children(): List<Preference> = (0 until preferenceCount).map { getPreference(it) }
 
     @Test
     fun systemAsrIsOneRowWithTheDisclosure() {
@@ -81,8 +82,8 @@ class VoiceSettingsLayoutTest {
             val fragment = activity.voiceSettings()
             val rows = onMain { fragment.category(R.string.voice_section_system).children() }
             assertEquals(1, rows.size)
-            assertEquals(context.getString(R.string.asr_provider_system), rows[0].title)
-            assertTrue(rows[0].summary.toString().endsWith(context.getString(R.string.voice_system_note)))
+            assertEquals(app.getString(R.string.asr_provider_system), rows[0].title)
+            assertTrue(rows[0].summary.toString().endsWith(app.getString(R.string.voice_system_note)))
         } finally {
             activity.finish()
         }
@@ -94,7 +95,7 @@ class VoiceSettingsLayoutTest {
         try {
             val fragment = activity.voiceSettings()
             val category = onMain { fragment.category(R.string.voice_section_local) }
-            assertEquals(context.getString(R.string.voice_section_local), category.title)
+            assertEquals(app.getString(R.string.voice_section_local), category.title)
             val rows = onMain { category.children().filterIsInstance<ModelRowPreference>() }
             assertEquals(LocalAsrModel.entries.size, rows.size)
             // no separate switch rows: at most the "no runtime" note besides the model rows
@@ -103,7 +104,7 @@ class VoiceSettingsLayoutTest {
                 val row = onMain { fragment.findPreference<ModelRowPreference>("voice_model_row_${model.name}") }
                 assertNotNull(row)
                 // "installed" only after verification: the same check the row uses
-                val installed = LocalModels.isInstalled(context, model)
+                val installed = LocalModels.isInstalled(app, model)
                 if (!installed) {
                     assertNull("$model is not installed but offers enabling", row!!.enable)
                     assertEquals(0, row.widgetLayoutResource)
@@ -152,10 +153,10 @@ class VoiceSettingsLayoutTest {
         try {
             val fragment = activity.voiceSettings()
             val titles = listOf(R.string.voice_doubao_credentials, R.string.voice_qwen_credentials, R.string.voice_tencent_credentials)
-                .map(context::getString)
+                .map { app.getString(it) }
             val allowed = setOf(
-                context.getString(R.string.voice_credentials_set),
-                context.getString(R.string.voice_credentials_missing)
+                app.getString(R.string.voice_credentials_set),
+                app.getString(R.string.voice_credentials_missing)
             )
             val rows: List<Preference> = onMain {
                 fragment.category(R.string.voice_section_cloud).children().filter { it.title in titles }
