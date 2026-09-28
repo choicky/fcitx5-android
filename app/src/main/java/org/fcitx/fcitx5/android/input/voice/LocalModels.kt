@@ -12,10 +12,7 @@ import android.os.Looper
 import android.provider.OpenableColumns
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import org.fcitx.fcitx5.android.BuildConfig
 import timber.log.Timber
@@ -56,17 +53,11 @@ internal object LocalModels {
  */
 internal object ModelJobs {
 
-    sealed interface State {
-        data class Running(val done: Long, val total: Long) : State
-        data class Failed(val reason: InstallFailure?, val detail: String) : State
-        data object Finished : State
-    }
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val main = Handler(Looper.getMainLooper())
-    private val jobs = mutableMapOf<LocalAsrModel, Job>()
-    private val states = mutableMapOf<LocalAsrModel, State>()
     private val listeners = mutableSetOf<() -> Unit>()
+    private val tasks = ModelTasks(CoroutineScope(SupervisorJob() + Dispatchers.IO)) {
+        main.post { synchronized(this) { listeners.toList() }.forEach { it() } }
+    }
 
     private val http by lazy {
         OkHttpClient.Builder()
@@ -75,28 +66,32 @@ internal object ModelJobs {
             .build()
     }
 
-    @Synchronized
-    fun state(model: LocalAsrModel): State? = states[model]
+    fun state(model: LocalAsrModel): ModelTasks.State? = tasks.state(model)
 
     fun addListener(listener: () -> Unit) = synchronized(this) { listeners += listener }
 
     fun removeListener(listener: () -> Unit) = synchronized(this) { listeners -= listener }
 
-    @Synchronized
-    fun isRunning(model: LocalAsrModel) = jobs[model]?.isActive == true
+    /** Occupied until the worker has exited, also while a cancelled download is stopping. */
+    fun isRunning(model: LocalAsrModel) = tasks.isBusy(model)
 
     /**
      * From the catalog's pinned source, or from [base] the user entered; the pinned SHA-256
      * applies either way. Plain HTTP only in debug builds.
      */
-    fun download(context: Context, entry: ModelCatalogEntry, base: String? = entry.downloadBase) {
+    fun download(context: Context, entry: ModelCatalogEntry, base: String? = entry.downloadBase): Boolean {
         // A's download is a test-build exception (D037); a release build never starts it
-        if (!entry.downloadOffered(BuildConfig.DEBUG)) return
-        run(context, entry, ModelSources.download(http, entry, base, allowCleartext = BuildConfig.DEBUG), attempts = 3)
+        if (!entry.downloadOffered(BuildConfig.DEBUG)) return false
+        return run(context, entry, attempts = 3) { handle ->
+            // cancelling also cancels the HTTP call, so a blocking read ends promptly
+            ModelSources.download(http, entry, base, allowCleartext = BuildConfig.DEBUG) { call ->
+                handle.onCancel(call::cancel)
+            }
+        }
     }
 
     /** Import files the user picked; they are matched by name and checked like a download. */
-    fun import(context: Context, entry: ModelCatalogEntry, uris: List<Uri>) {
+    fun import(context: Context, entry: ModelCatalogEntry, uris: List<Uri>): Boolean {
         val resolver = context.applicationContext.contentResolver
         val byName = uris.associateBy { uri ->
             resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
@@ -106,57 +101,31 @@ internal object ModelJobs {
         val source: ModelFileSource = { file, _ ->
             byName[file.path.substringAfterLast('/')]?.let(resolver::openInputStream)?.let { ModelStream(it) }
         }
-        run(context, entry, source, attempts = 1)
+        return run(context, entry, attempts = 1) { source }
     }
 
-    @Synchronized
-    fun cancel(model: LocalAsrModel) {
-        jobs[model]?.cancel()
-    }
+    fun cancel(model: LocalAsrModel) = tasks.cancel(model)
 
-    @Synchronized
+    /** False while the model is still occupied, for example by a download that is stopping. */
     private fun run(
         context: Context,
         entry: ModelCatalogEntry,
-        source: ModelFileSource,
-        attempts: Int
-    ) {
-        val model = entry.model
-        if (jobs[model]?.isActive == true) return
+        attempts: Int,
+        source: (ModelTasks.Handle) -> ModelFileSource
+    ): Boolean {
         val installer = LocalModels.installer(context.applicationContext)
-        update(model, State.Running(0, entry.totalBytes))
-        val job = scope.launch {
-            val result = runCatching {
+        return tasks.start(entry.model, entry.totalBytes) { handle ->
+            try {
                 installer.install(
-                    entry, source,
-                    onProgress = { done, total -> update(model, State.Running(done, total)) },
-                    cancelled = { !isActive },
+                    entry, source(handle),
+                    onProgress = handle::progress,
+                    cancelled = { handle.cancelled },
                     attempts = attempts
                 )
+            } catch (e: Exception) {
+                Timber.w("Local model ${entry.model.name} install failed: ${ErrorRedaction.redact(e.message.orEmpty())}")
+                throw e
             }
-            update(
-                model, result.fold(
-                    { State.Finished },
-                    {
-                        val detail = ErrorRedaction.redact(it.message.orEmpty())
-                        Timber.w("Local model ${model.name} install failed: $detail")
-                        State.Failed(it as? InstallFailure, detail)
-                    }
-                )
-            )
         }
-        jobs[model] = job
-    }
-
-    private fun update(model: LocalAsrModel, state: State) {
-        val notify = synchronized(this) {
-            val previous = states[model]
-            states[model] = state
-            // progress is reported at most once per percent
-            !(previous is State.Running && state is State.Running &&
-                    state.done * 100 / state.total.coerceAtLeast(1) ==
-                    previous.done * 100 / previous.total.coerceAtLeast(1))
-        }
-        if (notify) main.post { synchronized(this) { listeners.toList() }.forEach { it() } }
     }
 }

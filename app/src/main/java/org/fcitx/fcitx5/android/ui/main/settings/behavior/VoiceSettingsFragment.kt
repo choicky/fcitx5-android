@@ -31,6 +31,7 @@ import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
 import org.fcitx.fcitx5.android.input.voice.LocalModels
 import org.fcitx.fcitx5.android.input.voice.ModelCatalogEntry
 import org.fcitx.fcitx5.android.input.voice.ModelJobs
+import org.fcitx.fcitx5.android.input.voice.ModelTasks
 import org.fcitx.fcitx5.android.input.voice.QwenAsrConfig
 import org.fcitx.fcitx5.android.input.voice.TencentAsrConfig
 import org.fcitx.fcitx5.android.input.voice.LocalStatus
@@ -338,13 +339,14 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     private fun modelSummary(entry: ModelCatalogEntry): String {
         val state = when (val job = ModelJobs.state(entry.model)) {
-            is ModelJobs.State.Running -> getString(
+            is ModelTasks.State.Running -> getString(
                 R.string.voice_model_progress,
                 (job.done * 100 / job.total.coerceAtLeast(1)).toInt(),
                 job.done / 1_000_000,
                 megabytes(job.total)
             )
-            is ModelJobs.State.Failed -> getString(R.string.voice_model_failed, failureText(job))
+            is ModelTasks.State.Failed -> getString(R.string.voice_model_failed, failureText(job))
+            ModelTasks.State.Cancelling -> getString(R.string.voice_model_cancelling)
             else -> getString(
                 if (modelInstalled(entry.model)) R.string.voice_model_installed
                 else R.string.voice_model_not_installed
@@ -359,9 +361,14 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         ) + staged + source + "\n" + modelNote(entry.model)
     }
 
+    /** A model whose previous download is still stopping cannot start another one yet. */
+    private fun startedOrBusy(started: Boolean) {
+        if (!started) context?.toast(R.string.voice_model_busy)
+    }
+
     private fun stagedBytes(model: LocalAsrModel) = LocalModels.stagedBytes(requireContext(), model)
 
-    private fun failureText(failed: ModelJobs.State.Failed): String = when (val r = failed.reason) {
+    private fun failureText(failed: ModelTasks.State.Failed): String = when (val r = failed.reason) {
         is InstallFailure.Cancelled -> getString(R.string.voice_model_cancelled)
         is InstallFailure.NotEnoughSpace -> getString(R.string.voice_model_no_space, megabytes(r.needed))
         is InstallFailure.Missing -> getString(R.string.voice_model_missing_file, r.path)
@@ -398,7 +405,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             val entry = pendingImport ?: return@registerForActivityResult
             pendingImport = null
-            if (uris.isNotEmpty()) ModelJobs.import(requireContext(), entry, uris)
+            if (uris.isNotEmpty()) startedOrBusy(ModelJobs.import(requireContext(), entry, uris))
             render()
         }
 
@@ -430,7 +437,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 actions += getString(R.string.voice_model_remove) to { confirmRemove(entry) }
             } else if (stagedBytes(model) > 0) {
                 actions += getString(R.string.voice_model_discard) to {
-                    LocalModels.remove(ctx, model)
+                    if (ModelJobs.isRunning(model)) startedOrBusy(false) else LocalModels.remove(ctx, model)
                     render()
                 }
             }
@@ -457,7 +464,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 )
             )
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                ModelJobs.download(requireContext(), entry)
+                startedOrBusy(ModelJobs.download(requireContext(), entry))
                 render()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -497,7 +504,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                             getString(R.string.voice_model_download_confirm_custom, megabytes(entry.totalBytes), base)
                         )
                         .setPositiveButton(android.R.string.ok) { _, _ ->
-                            ModelJobs.download(ctx, entry, base)
+                            startedOrBusy(ModelJobs.download(ctx, entry, base))
                             render()
                         }
                         .setNegativeButton(android.R.string.cancel, null)
@@ -513,6 +520,11 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             .setTitle(modelLabel(entry.model))
             .setMessage(R.string.voice_model_remove_confirm)
             .setPositiveButton(R.string.voice_model_remove) { _, _ ->
+                // a download started meanwhile owns the staging directory: not removed under it
+                if (ModelJobs.isRunning(entry.model)) {
+                    startedOrBusy(false)
+                    return@setPositiveButton
+                }
                 // a session that already loaded the model keeps its open files until it ends;
                 // an adb-pushed copy is removed too, or recognition would keep using it
                 LocalModels.remove(requireContext(), entry.model)

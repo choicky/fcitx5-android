@@ -5,6 +5,7 @@
 
 package org.fcitx.fcitx5.android.input.voice
 
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -41,7 +42,9 @@ internal object ModelSources {
         client: OkHttpClient,
         entry: ModelCatalogEntry,
         base: String? = entry.downloadBase,
-        allowCleartext: Boolean = false
+        allowCleartext: Boolean = false,
+        /** Sees every call before it runs, e.g. to cancel it with its task. */
+        onCall: (Call) -> Unit = {}
     ): ModelFileSource {
         requireNotNull(base) { "${entry.model} has no download source" }
         require(modelSourceProblem(base, allowCleartext) == null) { "unsupported model source" }
@@ -50,7 +53,7 @@ internal object ModelSources {
             Request.Builder().url(entry.downloadUrl(file, trimmed)!!).apply {
                 if (from > 0) header("Range", "bytes=$from-")
             }.build()
-        ).execute()
+        ).also(onCall).execute()
         return { file, resumeFrom ->
             var response = fetch(file, resumeFrom)
             val resumed = resumeFrom > 0 && response.code == 206 &&

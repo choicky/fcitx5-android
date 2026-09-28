@@ -349,6 +349,8 @@
     <string name="voice_model_progress">安装中… %1$d%%（%2$d / %3$d MB）</string>
     <string name="voice_model_failed">失败：%1$s</string>
     <string name="voice_model_cancelled">已取消</string>
+    <string name="voice_model_cancelling">正在停止…</string>
+    <string name="voice_model_busy">此模型上一次的下载仍在停止中，请稍后再试</string>
     <string name="voice_model_no_space">存储空间不足（约需 %1$d MB）</string>
     <string name="voice_model_missing_file">缺少文件 %1$s</string>
     <string name="voice_model_mismatch">%1$s 与预期校验值不符</string>

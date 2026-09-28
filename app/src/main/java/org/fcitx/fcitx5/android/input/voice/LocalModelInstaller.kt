@@ -263,6 +263,11 @@ internal class LocalModelInstaller(private val root: File) {
                 }
             }
         } catch (e: IOException) {
+            // a cancelled download fails its blocking read on purpose
+            if (cancelled()) {
+                target.delete()
+                throw InstallFailure.Cancelled()
+            }
             // the bytes written so far stay staged, so a retry can resume after them
             throw InstallFailure.Io(file.path, e)
         } catch (e: InstallFailure) {

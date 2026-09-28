@@ -349,6 +349,8 @@
     <string name="voice_model_progress">Installing… %1$d%% (%2$d of %3$d MB)</string>
     <string name="voice_model_failed">Failed: %1$s</string>
     <string name="voice_model_cancelled">cancelled</string>
+    <string name="voice_model_cancelling">Stopping…</string>
+    <string name="voice_model_busy">The previous download of this model is still stopping; try again in a moment</string>
     <string name="voice_model_no_space">not enough storage (needs about %1$d MB)</string>
     <string name="voice_model_missing_file">missing file %1$s</string>
     <string name="voice_model_mismatch">%1$s does not match the expected checksum</string>
