@@ -41,6 +41,11 @@
     <string name="invalid_dict">Invalid dictionary type</string>
     <string name="whether_import_dict">Would you like to import this dictionary?</string>
     <string name="import_">Import</string>
+    <string name="download_dictionary">Download dictionary</string>
+    <string name="downloading">Downloading</string>
+    <string name="dictionary_license">License</string>
+    <string name="dictionary_source">Source</string>
+    <string name="dictionary_limitations">Limitations</string>
     <string name="synced">Synced!</string>
     <string name="loading">Loading</string>
     <string name="clipboard_listening">Clipboard listening</string>

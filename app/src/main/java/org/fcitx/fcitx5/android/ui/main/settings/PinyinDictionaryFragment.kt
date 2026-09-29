@@ -9,9 +9,11 @@ import android.app.NotificationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.content.DialogInterface
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.NotificationCompat
@@ -20,10 +22,17 @@ import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.reloadPinyinDict
+import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalog
+import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalogEntry
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictManager
 import org.fcitx.fcitx5.android.data.pinyin.dict.BuiltinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.LibIMEDictionary
@@ -38,6 +47,7 @@ import org.fcitx.fcitx5.android.utils.importErrorDialog
 import org.fcitx.fcitx5.android.utils.lazyRoute
 import org.fcitx.fcitx5.android.utils.notificationManager
 import org.fcitx.fcitx5.android.utils.queryFileName
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
 class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDictionary> {
@@ -51,6 +61,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     private val dustman = NaiveDustman<Boolean>()
 
     private val busy: AtomicBoolean = AtomicBoolean(false)
+
+    private val httpClient = OkHttpClient()
 
     private var uiInitialized = false
 
@@ -79,7 +91,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                 // set shouldShowFab to true to hide it when entering multi select mode
                 shouldShowFab = true
                 fab.setOnClickListener {
-                    launcher.launch("*/*")
+                    showAddOptions()
                 }
                 setViewModel(viewModel)
                 removable = { e -> e !is BuiltinDictionary }
@@ -140,6 +152,85 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         launcher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null)
                 importFromUri(uri)
+        }
+    }
+
+    private fun showAddOptions() {
+        AlertDialog.Builder(requireContext())
+            .setItems(arrayOf(getString(R.string.import_), getString(R.string.download_dictionary))) {
+                    _: DialogInterface, which: Int ->
+                if (which == 0) launcher.launch("*/*") else showCatalog()
+            }
+            .show()
+    }
+
+    private fun showCatalog() {
+        val entries = PinyinDictionaryCatalog.entries
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.download_dictionary)
+            .setItems(entries.map { "${it.displayName} · ${it.license}" }.toTypedArray()) {
+                    _: DialogInterface, which: Int ->
+                showCatalogEntry(entries[which])
+            }
+            .show()
+    }
+
+    private fun showCatalogEntry(entry: PinyinDictionaryCatalogEntry) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(entry.displayName)
+            .setMessage(
+                "${entry.version}\n\n" +
+                    "${getString(R.string.dictionary_license)}: ${entry.license}\n" +
+                    "${getString(R.string.dictionary_source)}: ${entry.sourceRepository}\n" +
+                    "${getString(R.string.dictionary_limitations)}: ${entry.limitations}"
+            )
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.download_dictionary) { _, _ ->
+                downloadCatalogEntry(entry)
+            }
+            .show()
+    }
+
+    private fun downloadCatalogEntry(entry: PinyinDictionaryCatalogEntry) {
+        val ctx = requireContext()
+        val nm = ctx.notificationManager
+        lifecycleScope.launch {
+            val id = IMPORT_ID++
+            NotificationCompat.Builder(ctx, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_baseline_library_books_24)
+                .setContentTitle(getString(R.string.pinyin_dict))
+                .setContentText("${getString(R.string.downloading)} ${entry.displayName}")
+                .setOngoing(true)
+                .setProgress(100, 0, true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .build().let { nm.notify(id, it) }
+            try {
+                val installed = withContext(Dispatchers.IO) {
+                    val request = Request.Builder().url(entry.url).build()
+                    val call = httpClient.newCall(request)
+                    currentCoroutineContext().job.invokeOnCompletion { call.cancel() }
+                    call.execute().use { response ->
+                        if (!response.isSuccessful) {
+                            throw IOException("HTTP ${response.code}")
+                        }
+                        response.body!!.byteStream().use { stream ->
+                            PinyinDictManager.installCatalogEntry(
+                                entry,
+                                stream,
+                                cancelled = { !currentCoroutineContext().isActive }
+                            ).getOrThrow()
+                        }
+                    }
+                }
+                ui.entries.indexOfFirst { it.name == installed.name }.let { index ->
+                    if (index >= 0) ui.updateItem(index, installed)
+                    else ui.addItem(item = installed)
+                }
+            } catch (e: Exception) {
+                if (isActive) ctx.importErrorDialog(e)
+            } finally {
+                nm.cancel(id)
+            }
         }
     }
 

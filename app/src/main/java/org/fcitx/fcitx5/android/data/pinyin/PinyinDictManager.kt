@@ -22,6 +22,9 @@ object PinyinDictManager {
         appContext.getExternalFilesDir(null)!!, "data/pinyin/dictionaries"
     ).also { it.mkdirs() }
 
+    internal val dictionaryDirectory: File
+        get() = pinyinDicDir
+
     private val builtinPinyinDictDir = File(
         DataManager.dataDir, "usr/share/fcitx5/pinyin/dictionaries"
     )
@@ -73,6 +76,19 @@ object PinyinDictManager {
         val new = importFromFile(tempFile)
         tempFile.delete()
         return new
+    }
+
+    fun installCatalogEntry(
+        entry: PinyinDictionaryCatalogEntry,
+        stream: InputStream,
+        cancelled: () -> Boolean = { false },
+        progress: (Long, Long) -> Unit = { _, _ -> }
+    ): Result<LibIMEDictionary> = runCatching {
+        val file = PinyinDictionaryInstaller(pinyinDicDir).install(
+            entry, stream, cancelled, progress
+        )
+        PinyinDictionary.new(file) as? LibIMEDictionary
+            ?: errorArg(R.string.exception_dict_filename, file.path)
     }
 
     fun sougouDictConv(src: String, dest: String) {
