@@ -17,7 +17,7 @@ class PinyinDictionaryCatalogTest {
         PinyinDictionaryCatalog.entries.forEach { entry ->
             assertTrue(entry.url.startsWith("https://"))
             assertEquals(64, entry.sha256.length)
-            assertEquals(64, entry.sourceRevision.length)
+            assertEquals(40, entry.sourceRevision.length)
             assertEquals(64, entry.sourceInputSha256.length)
             assertTrue(entry.size > 0)
             assertTrue(entry.license.isNotBlank())
