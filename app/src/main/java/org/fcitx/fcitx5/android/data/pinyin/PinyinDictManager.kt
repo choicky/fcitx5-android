@@ -80,12 +80,12 @@ object PinyinDictManager {
 
     internal fun installCatalogEntry(
         entry: PinyinDictionaryCatalogEntry,
-        stream: InputStream,
+        source: (Long) -> DictionaryStream?,
         cancelled: () -> Boolean = { false },
         progress: (Long, Long) -> Unit = { _, _ -> }
     ): Result<LibIMEDictionary> = runCatching {
         val file = PinyinDictionaryInstaller(pinyinDicDir).install(
-            entry, stream, cancelled, progress
+            entry, source, cancelled, progress
         )
         PinyinDictionary.new(file) as? LibIMEDictionary
             ?: errorArg(R.string.exception_dict_filename, file.path)
