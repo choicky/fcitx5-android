@@ -41,6 +41,11 @@
     <string name="invalid_dict">词典类型无效</string>
     <string name="whether_import_dict">您想导入这个词库吗？</string>
     <string name="import_">导入</string>
+    <string name="download_dictionary">下载词库</string>
+    <string name="downloading">正在下载</string>
+    <string name="dictionary_license">许可证</string>
+    <string name="dictionary_source">来源</string>
+    <string name="dictionary_limitations">限制</string>
     <string name="synced">已同步！</string>
     <string name="loading">加载中</string>
     <string name="clipboard_listening">记录剪贴板历史</string>
