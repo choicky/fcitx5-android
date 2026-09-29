@@ -12,6 +12,7 @@ on:
     branches:
       - moqi-test-apk
       - phase4-voice-poc
+      - phase5c-dictionary-manager
   workflow_dispatch:
 
 concurrency:
