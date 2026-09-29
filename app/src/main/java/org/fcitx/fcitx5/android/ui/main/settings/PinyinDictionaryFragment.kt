@@ -208,7 +208,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                 val installed = withContext(Dispatchers.IO) {
                     val request = Request.Builder().url(entry.url).build()
                     val call = httpClient.newCall(request)
-                    currentCoroutineContext().job.invokeOnCompletion { call.cancel() }
+                    val coroutineContext = currentCoroutineContext()
+                    coroutineContext.job.invokeOnCompletion { call.cancel() }
                     call.execute().use { response ->
                         if (!response.isSuccessful) {
                             throw IOException("HTTP ${response.code}")
@@ -217,7 +218,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                             PinyinDictManager.installCatalogEntry(
                                 entry,
                                 stream,
-                                cancelled = { !currentCoroutineContext().isActive }
+                                cancelled = { !coroutineContext.isActive }
                             ).getOrThrow()
                         }
                     }
