@@ -43,6 +43,7 @@
     <string name="import_">Import</string>
     <string name="download_dictionary">Download dictionary</string>
     <string name="downloading">Downloading</string>
+    <string name="pause_download">Pause</string>
     <string name="dictionary_license">License</string>
     <string name="dictionary_source">Source</string>
     <string name="dictionary_limitations">Limitations</string>

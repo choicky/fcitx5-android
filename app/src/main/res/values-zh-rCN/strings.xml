@@ -43,6 +43,7 @@
     <string name="import_">导入</string>
     <string name="download_dictionary">下载词库</string>
     <string name="downloading">正在下载</string>
+    <string name="pause_download">暂停</string>
     <string name="dictionary_license">许可证</string>
     <string name="dictionary_source">来源</string>
     <string name="dictionary_limitations">限制</string>

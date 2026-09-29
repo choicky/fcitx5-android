@@ -22,6 +22,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
@@ -34,6 +35,7 @@ import org.fcitx.fcitx5.android.core.reloadPinyinDict
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalog
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalogEntry
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictManager
+import org.fcitx.fcitx5.android.data.pinyin.DictionaryStream
 import org.fcitx.fcitx5.android.data.pinyin.dict.BuiltinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.LibIMEDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
@@ -63,6 +65,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     private val busy: AtomicBoolean = AtomicBoolean(false)
 
     private val httpClient = OkHttpClient()
+
+    private var dictionaryDownloadJob: Job? = null
 
     private var uiInitialized = false
 
@@ -194,7 +198,12 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     private fun downloadCatalogEntry(entry: PinyinDictionaryCatalogEntry) {
         val ctx = requireContext()
         val nm = ctx.notificationManager
-        lifecycleScope.launch {
+        val dialog = AlertDialog.Builder(ctx)
+            .setTitle(entry.displayName)
+            .setMessage(R.string.downloading)
+            .setNegativeButton(R.string.pause_download, null)
+            .create()
+        dictionaryDownloadJob = lifecycleScope.launch {
             val id = IMPORT_ID++
             NotificationCompat.Builder(ctx, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_baseline_library_books_24)
@@ -207,21 +216,25 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             try {
                 val installed = withContext(Dispatchers.IO) {
                     val request = Request.Builder().url(entry.url).build()
-                    val call = httpClient.newCall(request)
                     val coroutineContext = currentCoroutineContext()
-                    coroutineContext.job.invokeOnCompletion { call.cancel() }
-                    call.execute().use { response ->
-                        if (!response.isSuccessful) {
-                            throw IOException("HTTP ${response.code}")
-                        }
-                        response.body!!.byteStream().use { stream ->
-                            PinyinDictManager.installCatalogEntry(
-                                entry,
-                                stream,
-                                cancelled = { !coroutineContext.isActive }
-                            ).getOrThrow()
-                        }
-                    }
+                    PinyinDictManager.installCatalogEntry(
+                        entry,
+                        source = { offset ->
+                            val rangedRequest = request.newBuilder().apply {
+                                if (offset > 0) header("Range", "bytes=$offset-")
+                            }.build()
+                            val call = httpClient.newCall(rangedRequest)
+                            coroutineContext.job.invokeOnCompletion { call.cancel() }
+                            val response = call.execute()
+                            if (!response.isSuccessful) {
+                                response.close()
+                                throw IOException("HTTP ${response.code}")
+                            }
+                            val actualOffset = if (response.code == 206) offset else 0
+                            DictionaryStream(response.body!!.byteStream(), actualOffset)
+                        },
+                        cancelled = { !coroutineContext.isActive }
+                    ).getOrThrow()
                 }
                 ui.entries.indexOfFirst { it.name == installed.name }.let { index ->
                     if (index >= 0) ui.updateItem(index, installed)
@@ -231,8 +244,16 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                 if (isActive) ctx.importErrorDialog(e)
             } finally {
                 nm.cancel(id)
+                dialog.dismiss()
+                dictionaryDownloadJob = null
             }
         }
+        dialog.setOnShowListener {
+            dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setOnClickListener {
+                dictionaryDownloadJob?.cancel()
+            }
+        }
+        dialog.show()
     }
 
     private fun importFromUri(uri: Uri) {

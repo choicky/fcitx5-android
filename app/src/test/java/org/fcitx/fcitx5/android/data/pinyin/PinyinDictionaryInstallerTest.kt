@@ -88,6 +88,22 @@ class PinyinDictionaryInstallerTest {
         assertFalse(installer.target(entry).exists())
     }
 
+    @Test
+    fun resumesACompletePartialDownloadBeforeInstalling() {
+        val content = "dictionary".toByteArray()
+        val entry = entry(content)
+        val installer = PinyinDictionaryInstaller(temporaryFolder.root)
+        temporaryFolder.root.resolve(".${entry.fileName}.download").writeBytes(content.copyOf(4))
+
+        val installed = installer.install(entry, { offset ->
+            assertEquals(4, offset)
+            DictionaryStream(ByteArrayInputStream(content.copyOfRange(4, content.size)), offset)
+        })
+
+        assertEquals(content.toList(), installed.readBytes().toList())
+        assertTrue(installer.isInstalled(entry))
+    }
+
     private fun entry(content: ByteArray) = PinyinDictionaryCatalogEntry(
         id = "test-dictionary",
         displayName = "Test dictionary",
