@@ -60,19 +60,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build debug APK (arm64-v8a)
-        run: |
-          set -o pipefail
-          BUILD_ABI=arm64-v8a ./gradlew :app:testDebugUnitTest :app:assembleDebug 2>&1 \
-            | tee "$RUNNER_TEMP/phase5c-build.log"
-
-      - name: Summarize debug APK build failure
-        if: ${{ failure() }}
-        run: |
-          summary=$(tail -n 80 "$RUNNER_TEMP/phase5c-build.log" | tr '\n' ' ')
-          summary=${summary//'%'/'%25'}
-          summary=${summary//$'\r'/'%0D'}
-          summary=${summary//$'\n'/'%0A'}
-          echo "::error title=Phase 5C APK build failure::$summary"
+        run: BUILD_ABI=arm64-v8a ./gradlew :app:testDebugUnitTest :app:assembleDebug
 
       - name: Compile the release variant (Kotlin only, no APK)
         # checks the release/debug source-set boundary (for example the Local ASR stub)

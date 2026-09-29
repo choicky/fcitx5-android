@@ -78,7 +78,7 @@ object PinyinDictManager {
         return new
     }
 
-    fun installCatalogEntry(
+    internal fun installCatalogEntry(
         entry: PinyinDictionaryCatalogEntry,
         stream: InputStream,
         cancelled: () -> Boolean = { false },
