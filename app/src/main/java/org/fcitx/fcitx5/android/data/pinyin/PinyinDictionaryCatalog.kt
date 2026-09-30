@@ -13,6 +13,7 @@ package org.fcitx.fcitx5.android.data.pinyin
 internal data class PinyinDictionaryCatalogEntry(
     val id: String,
     val displayName: String,
+    val canonicalName: String = displayName,
     val version: String,
     val url: String,
     val size: Long,
@@ -37,7 +38,8 @@ internal object PinyinDictionaryCatalog {
     val entries = listOf(
         PinyinDictionaryCatalogEntry(
             id = "rime-frost",
-            displayName = "Rime Frost",
+            displayName = "白霜",
+            canonicalName = "Rime-Frost",
             version = RELEASE_TAG,
             url = "$RELEASE_BASE/rime-frost.dict",
             size = 37_322_174,
@@ -53,7 +55,8 @@ internal object PinyinDictionaryCatalog {
         ),
         PinyinDictionaryCatalogEntry(
             id = "rime-wanxiang",
-            displayName = "Rime Wanxiang (jichu)",
+            displayName = "万象",
+            canonicalName = "Rime-Wanxiang (jichu)",
             version = RELEASE_TAG,
             url = "$RELEASE_BASE/rime-wanxiang.dict",
             size = 24_683_718,

@@ -58,6 +58,12 @@
     <string name="dictionary_limitations">Limitations</string>
     <string name="dictionary_metadata">%1$s · %2$s entries</string>
     <string name="dictionary_entry_count_unknown">entry count unavailable</string>
+    <string name="dictionary_builtin_base">Simplified Chinese Base</string>
+    <string name="dictionary_builtin_extb">CJK Extension B</string>
+    <string name="dictionary_builtin_default">Built-in · always enabled</string>
+    <string name="dictionary_enabled">Enabled</string>
+    <string name="dictionary_disabled">Disabled</string>
+    <string name="dictionary_not_installed">Available · not installed</string>
     <string name="synced">Synced!</string>
     <string name="loading">Loading</string>
     <string name="clipboard_listening">Clipboard listening</string>
