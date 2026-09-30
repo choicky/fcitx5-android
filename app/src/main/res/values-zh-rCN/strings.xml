@@ -56,6 +56,8 @@
     <string name="dictionary_license">许可证</string>
     <string name="dictionary_source">来源</string>
     <string name="dictionary_limitations">限制</string>
+    <string name="dictionary_metadata">%1$s · %2$s 条词条</string>
+    <string name="dictionary_entry_count_unknown">词条数未知</string>
     <string name="synced">已同步！</string>
     <string name="loading">加载中</string>
     <string name="clipboard_listening">记录剪贴板历史</string>

@@ -20,6 +20,7 @@ class PinyinDictionaryCatalogTest {
             assertEquals(64, entry.sourceRevision.length)
             assertEquals(64, entry.sourceInputSha256.length)
             assertTrue(entry.size > 0)
+            assertTrue(entry.entryCount == null || entry.entryCount > 0)
             assertTrue(entry.license.isNotBlank())
         }
     }
@@ -34,6 +35,7 @@ class PinyinDictionaryCatalogTest {
             "b4880861161d585b21413fe554aa8f416beb39d68cf4ce3fba728df5fea584ff",
             PinyinDictionaryCatalog.find("rime-frost")!!.sha256
         )
+        assertEquals(2_010_605L, PinyinDictionaryCatalog.find("rime-frost")!!.entryCount)
         assertEquals(
             24_683_718L,
             PinyinDictionaryCatalog.find("rime-wanxiang")!!.size
@@ -42,5 +44,6 @@ class PinyinDictionaryCatalogTest {
             "492a452604f1d63ec1edf5682846291db72f3caadc3b6cc8e51af52fab3772da",
             PinyinDictionaryCatalog.find("rime-wanxiang")!!.sha256
         )
+        assertEquals(1_425_249L, PinyinDictionaryCatalog.find("rime-wanxiang")!!.entryCount)
     }
 }
