@@ -56,6 +56,11 @@
     <string name="dictionary_license">许可证</string>
     <string name="dictionary_source">来源</string>
     <string name="dictionary_limitations">限制</string>
+    <string name="dictionary_third_party">第三方词库</string>
+    <string name="dictionary_version">版本</string>
+    <string name="dictionary_source_project">源项目</string>
+    <string name="dictionary_license_info">许可证信息</string>
+    <string name="dictionary_normalization_notice">与官方 Fcitx5 词库完全匹配且被官方惩罚的词条，保留对应的官方负值。</string>
     <string name="dictionary_metadata">%1$s · %2$s 条词条</string>
     <string name="dictionary_entry_count_unknown">词条数未知</string>
     <string name="dictionary_builtin_base">简体中文基础词库</string>

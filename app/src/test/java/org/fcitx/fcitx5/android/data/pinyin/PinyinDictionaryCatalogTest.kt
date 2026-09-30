@@ -12,7 +12,7 @@ class PinyinDictionaryCatalogTest {
     @Test
     fun releaseEntriesCarryPinnedArtifactAndSourceMetadata() {
         assertEquals("dictionary-v1.1.0", PinyinDictionaryCatalog.RELEASE_TAG)
-        assertEquals(3, PinyinDictionaryCatalog.entries.size)
+        assertEquals(4, PinyinDictionaryCatalog.entries.size)
         PinyinDictionaryCatalog.entries.forEach { entry ->
             assertTrue(entry.url.startsWith("https://"))
             assertEquals(64, entry.sha256.length)
@@ -21,6 +21,10 @@ class PinyinDictionaryCatalogTest {
             assertTrue(entry.size > 0)
             assertTrue(entry.entryCount == null || entry.entryCount > 0)
             assertTrue(entry.license.isNotBlank())
+            assertTrue(entry.licenseUrl.startsWith("https://"))
+            assertTrue(entry.sourceRepository.startsWith("https://"))
+            assertTrue(entry.attribution.isNotBlank())
+            assertTrue(entry.modificationStatement.isNotBlank())
         }
     }
 
@@ -63,5 +67,14 @@ class PinyinDictionaryCatalogTest {
         assertTrue(!custom.researchOnly)
         assertTrue(custom.publicReleaseApproved)
         assertEquals("CustomPinyinDictionary", custom.canonicalName)
+    }
+
+    @Test
+    fun zhwikiUsesWikimediaProvenanceMetadata() {
+        val zhwiki = PinyinDictionaryCatalog.find("zhwiki")!!
+        assertEquals("GFDL-1.3-or-later AND CC-BY-SA-4.0 (Wikimedia data; exceptions apply)", zhwiki.license)
+        assertEquals(34_353_549L, zhwiki.size)
+        assertEquals(1_673_006L, zhwiki.entryCount)
+        assertTrue(zhwiki.modificationStatement.contains("normalized"))
     }
 }
