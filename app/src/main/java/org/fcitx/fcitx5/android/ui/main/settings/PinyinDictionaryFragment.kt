@@ -126,7 +126,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                         setOnCheckedChangeListener(null)
                     }
                 }
-            }
+            },
             initSettingsButton = { entry ->
                 if (entry is CatalogPlaceholderDictionary) {
                     visibility = View.VISIBLE
@@ -206,9 +206,9 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         lifecycleScope.launch {
             viewModel.fcitx.runOnReady {
                 val config = PinyinDictionaryConfig.setExtBEnabled(
-                    viewModel.fcitx.getImConfig("pinyin"), enabled
+                    getImConfig("pinyin"), enabled
                 )
-                viewModel.fcitx.setImConfig("pinyin", config)
+                setImConfig("pinyin", config)
                 extBEnabled = enabled
             }
             if (uiInitialized) ui.notifyDataSetChanged()
@@ -233,7 +233,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         lifecycleScope.launch {
             viewModel.fcitx.runOnReady {
                 extBEnabled = PinyinDictionaryConfig.extBEnabled(
-                    viewModel.fcitx.getImConfig("pinyin")
+                    getImConfig("pinyin")
                 )
             }
             ui.notifyDataSetChanged()
