@@ -21,7 +21,9 @@ internal data class PinyinDictionaryCatalogEntry(
     val sourceRepository: String,
     val sourceRevision: String,
     val sourceInputSha256: String,
-    val limitations: String
+    val limitations: String,
+    /** Number of rows in the compiled dictionary dump, when supplied by the release index. */
+    val entryCount: Long? = null
 ) {
     val fileName = "$id.dict"
 }
@@ -44,7 +46,10 @@ internal object PinyinDictionaryCatalog {
             sourceRepository = "https://github.com/gaboolic/rime-frost",
             sourceRevision = "211de1ca927b6c876e384c6de42e1cc8af868c68",
             sourceInputSha256 = "d14de272e0c39b8c446618bcc0be8bb07e5a7bdfc8d42cfa8c34b5e4f863ae2c",
-            limitations = "Rime source converted to LibIME pinyindict format."
+            limitations = "Rime source converted to LibIME pinyindict format.",
+            // dictionary-v1.0.0 predates the index entry_count field; this is
+            // its authoritative Phase 5B audit roundtrip_rows value.
+            entryCount = 2_010_605
         ),
         PinyinDictionaryCatalogEntry(
             id = "rime-wanxiang",
@@ -57,7 +62,10 @@ internal object PinyinDictionaryCatalog {
             sourceRepository = "https://github.com/amzxyz/rime-wanxiang",
             sourceRevision = "94f1e8d7b6d1267a9c8752a2e62145705dd1fb92",
             sourceInputSha256 = "4a6b1d17b812048f217cce0118a44c9ab7b9369768f0ce4ed5a9b6ae40100074",
-            limitations = "Only the pinned jichu table is included."
+            limitations = "Only the pinned jichu table is included.",
+            // dictionary-v1.0.0 predates the index entry_count field; this is
+            // its authoritative Phase 5B audit roundtrip_rows value.
+            entryCount = 1_425_249
         )
     )
 

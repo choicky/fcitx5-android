@@ -55,6 +55,7 @@ import org.fcitx.fcitx5.android.utils.lazyRoute
 import org.fcitx.fcitx5.android.utils.notificationManager
 import org.fcitx.fcitx5.android.utils.queryFileName
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 
@@ -123,7 +124,10 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                 // do nothing
             }
 
-            override fun showEntry(x: PinyinDictionary): String = x.name
+            override fun showEntry(x: PinyinDictionary): String =
+                PinyinDictionaryCatalog.find(x.name)?.let { entry ->
+                    dictionarySummary(entry, x.file.length())
+                } ?: x.name
         }.also {
             uiInitialized = true
         }
@@ -201,8 +205,9 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         val staged = PinyinDictManager.stagedCatalogBytes(entry)
         return when {
             staged > 0 -> "${entry.displayName} · ${formatBytes(staged)} / " +
-                "${formatBytes(entry.size)} · ${getString(R.string.resume_download)}"
-            else -> "${entry.displayName} · ${entry.license}"
+                "${formatBytes(entry.size)} · ${entry.entryCount?.let { formatCount(it) } ?: ""} " +
+                "· ${getString(R.string.resume_download)}"
+            else -> "${entry.displayName} · ${dictionarySummary(entry, entry.size)}"
         }
     }
 
@@ -211,6 +216,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             .setTitle(entry.displayName)
             .setMessage(
                 "${entry.version}\n\n" +
+                    "${dictionarySummary(entry, entry.size)}\n\n" +
                     "${getString(R.string.dictionary_license)}: ${entry.license}\n" +
                     "${getString(R.string.dictionary_source)}: ${entry.sourceRepository}\n" +
                     "${getString(R.string.dictionary_limitations)}: ${entry.limitations}"
@@ -444,6 +450,15 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
 
     private fun formatBytes(bytes: Long): String =
         android.text.format.Formatter.formatFileSize(requireContext(), bytes)
+
+    private fun dictionarySummary(entry: PinyinDictionaryCatalogEntry, bytes: Long): String {
+        val count = entry.entryCount?.let { formatCount(it) }
+            ?: getString(R.string.dictionary_entry_count_unknown)
+        return getString(R.string.dictionary_metadata, formatBytes(bytes), count)
+    }
+
+    private fun formatCount(count: Long): String =
+        String.format(Locale.getDefault(), "%,d", count)
 
     private fun formatDuration(seconds: Long): String = when {
         seconds < 60 -> getString(R.string.download_eta_seconds, seconds)
