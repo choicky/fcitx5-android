@@ -37,6 +37,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.reloadPinyinDict
+import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryConfig
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalog
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalogEntry
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictManager
@@ -44,6 +45,8 @@ import org.fcitx.fcitx5.android.data.pinyin.DictionaryStream
 import org.fcitx.fcitx5.android.data.pinyin.dict.BuiltinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.LibIMEDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
+import org.fcitx.fcitx5.android.data.pinyin.dict.CatalogPlaceholderDictionary
+import org.fcitx.fcitx5.android.data.pinyin.dict.StaticPinyinDictionary
 import org.fcitx.fcitx5.android.ui.common.BaseDynamicListUi
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
 import org.fcitx.fcitx5.android.ui.main.EditDeleteMenuProvider
@@ -86,6 +89,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     private var downloadState = DownloadState.Paused
     private var pauseRequested = false
     private var cancelRequested = false
+    private var extBEnabled = false
 
     private var uiInitialized = false
 
@@ -93,18 +97,43 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         object : BaseDynamicListUi<PinyinDictionary>(
             requireContext(),
             Mode.Custom(),
-            PinyinDictManager.listDictionaries(),
+            initialEntries(),
             initCheckBox = { entry ->
-                if (entry is LibIMEDictionary) {
-                    isChecked = entry.isEnabled
-                    setOnCheckedChangeListener { _, isChecked ->
-                        if (isChecked) entry.enable() else entry.disable()
-                        ui.updateItem(ui.indexItem(entry), entry)
+                when (entry) {
+                    is StaticPinyinDictionary -> {
+                        visibility = if (entry.kind == StaticPinyinDictionary.Kind.ExtensionB) {
+                            View.VISIBLE
+                        } else View.GONE
+                        isEnabled = entry.kind == StaticPinyinDictionary.Kind.ExtensionB
+                        isChecked = entry.kind == StaticPinyinDictionary.Kind.Base || extBEnabled
+                        if (entry.kind == StaticPinyinDictionary.Kind.ExtensionB) {
+                            setOnCheckedChangeListener { _, checked -> setExtBEnabled(checked) }
+                        }
                     }
-                } else {
-                    isChecked = true
-                    isEnabled = false
+                    is LibIMEDictionary -> {
+                        visibility = View.VISIBLE
+                        isEnabled = true
+                        isChecked = entry.isEnabled
+                        setOnCheckedChangeListener { _, isChecked ->
+                            if (isChecked) entry.enable() else entry.disable()
+                            ui.updateItem(ui.indexItem(entry), entry)
+                        }
+                    }
+                    else -> {
+                        visibility = View.GONE
+                        isEnabled = false
+                        isChecked = false
+                        setOnCheckedChangeListener(null)
+                    }
                 }
+            }
+            initSettingsButton = { entry ->
+                if (entry is CatalogPlaceholderDictionary) {
+                    visibility = View.VISIBLE
+                    setOnClickListener {
+                        PinyinDictionaryCatalog.find(entry.entryId)?.let(::showCatalogEntry)
+                    }
+                } else visibility = View.GONE
             }
         ) {
             init {
@@ -117,19 +146,72 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                     showAddOptions()
                 }
                 setViewModel(viewModel)
-                removable = { e -> e !is BuiltinDictionary }
+                removable = { e -> e is LibIMEDictionary && e !is BuiltinDictionary }
             }
 
             override fun updateFAB() {
                 // do nothing
             }
 
-            override fun showEntry(x: PinyinDictionary): String =
-                PinyinDictionaryCatalog.find(x.name)?.let { entry ->
-                    dictionarySummary(entry, x.file.length())
-                } ?: x.name
+            override fun showEntry(x: PinyinDictionary): String = when (x) {
+                is StaticPinyinDictionary -> "${x.label} / ${x.canonicalName}" +
+                    if (x.kind == StaticPinyinDictionary.Kind.Base) {
+                        "\n${getString(R.string.dictionary_builtin_default)}"
+                    } else "\n${getString(if (extBEnabled) R.string.dictionary_enabled else R.string.dictionary_disabled)}"
+                is CatalogPlaceholderDictionary -> PinyinDictionaryCatalog.find(x.entryId)?.let {
+                    catalogSummary(it)
+                } ?: x.displayLabel
+                else -> PinyinDictionaryCatalog.find(x.name)?.let { entry ->
+                    "${entry.displayName} / ${entry.canonicalName}\n" +
+                        "${dictionarySummary(entry, x.file.length())}\n" +
+                        getString(if ((x as? LibIMEDictionary)?.isEnabled == true)
+                            R.string.dictionary_enabled else R.string.dictionary_disabled)
+                } ?: x.name + if (x is LibIMEDictionary) {
+                    "\n${formatBytes(x.file.length())} · " +
+                        getString(if (x.isEnabled) R.string.dictionary_enabled else R.string.dictionary_disabled)
+                } else ""
+            }
         }.also {
             uiInitialized = true
+        }
+    }
+
+    private fun initialEntries(): List<PinyinDictionary> {
+        val installed = PinyinDictManager.listDictionaries()
+        val installedIds = installed.map { it.name }.toSet()
+        val catalog = PinyinDictionaryCatalog.entries
+            .filterNot { it.id in installedIds }
+            .map { CatalogPlaceholderDictionary(it.id, it.displayName) }
+        return listOf(
+            StaticPinyinDictionary(
+                StaticPinyinDictionary.Kind.Base,
+                getString(R.string.dictionary_builtin_base),
+                "LibIME Simplified Chinese Base"
+            ),
+            StaticPinyinDictionary(
+                StaticPinyinDictionary.Kind.ExtensionB,
+                getString(R.string.dictionary_builtin_extb),
+                "LibIME CJK Extension B"
+            )
+        ) + installed + catalog
+    }
+
+    private fun catalogSummary(entry: PinyinDictionaryCatalogEntry): String =
+        "${entry.displayName} / ${entry.canonicalName}\n" +
+            dictionarySummary(entry, entry.size) + "\n" +
+            getString(R.string.dictionary_not_installed)
+
+    private fun setExtBEnabled(enabled: Boolean) {
+        if (enabled == extBEnabled) return
+        lifecycleScope.launch {
+            viewModel.fcitx.runOnReady {
+                val config = PinyinDictionaryConfig.setExtBEnabled(
+                    viewModel.fcitx.getImConfig("pinyin"), enabled
+                )
+                viewModel.fcitx.setImConfig("pinyin", config)
+                extBEnabled = enabled
+            }
+            if (uiInitialized) ui.notifyDataSetChanged()
         }
     }
 
@@ -148,6 +230,14 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         args.uri?.let { importFromUri(Uri.parse(it)) }
         super.onViewCreated(view, savedInstanceState)
+        lifecycleScope.launch {
+            viewModel.fcitx.runOnReady {
+                extBEnabled = PinyinDictionaryConfig.extBEnabled(
+                    viewModel.fcitx.getImConfig("pinyin")
+                )
+            }
+            ui.notifyDataSetChanged()
+        }
         viewModel.toolbarButton.value =
             if (ui.entries.isNotEmpty()) ButtonMode.EDIT else ButtonMode.NONE
         requireActivity().addMenuProvider(
@@ -203,11 +293,12 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
 
     private fun catalogLabel(entry: PinyinDictionaryCatalogEntry): String {
         val staged = PinyinDictManager.stagedCatalogBytes(entry)
+        val label = "${entry.displayName} / ${entry.canonicalName}"
         return when {
-            staged > 0 -> "${entry.displayName} · ${formatBytes(staged)} / " +
+            staged > 0 -> "$label · ${formatBytes(staged)} / " +
                 "${formatBytes(entry.size)} · ${entry.entryCount?.let { formatCount(it) } ?: ""} " +
                 "· ${getString(R.string.resume_download)}"
-            else -> "${entry.displayName} · ${dictionarySummary(entry, entry.size)}"
+            else -> "$label · ${dictionarySummary(entry, entry.size)}"
         }
     }
 
@@ -251,8 +342,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         val dialog = AlertDialog.Builder(ctx)
             .setTitle(entry.displayName)
             .setView(content)
-            .setNegativeButton(R.string.pause_download, null)
-            .setPositiveButton(R.string.cancel_download, null)
+            .setNegativeButton(R.string.cancel_download, null)
+            .setPositiveButton(R.string.pause_download, null)
             .create()
         downloadDialog = dialog
         downloadEntry = entry
@@ -266,11 +357,11 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         }
         dialog.setOnShowListener {
             updateDownloadDialog()
-            dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setOnClickListener {
+            dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 if (downloadState == DownloadState.Downloading) pauseDownload()
                 else startDownload(entry)
             }
-            dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+            dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setOnClickListener {
                 cancelDownload()
             }
             if (startImmediately) startDownload(entry)
@@ -437,14 +528,14 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         } else ""
         downloadDetailsView?.text = "$percent${formatBytes(progress.done)} / " +
             "${formatBytes(progress.total)}$speed"
-        downloadDialog?.getButton(DialogInterface.BUTTON_NEGATIVE)?.apply {
+        downloadDialog?.getButton(DialogInterface.BUTTON_POSITIVE)?.apply {
             text = if (downloadState == DownloadState.Downloading) {
                 getString(R.string.pause_download)
             } else getString(R.string.resume_download)
             isEnabled = downloadState != DownloadState.Verifying &&
                 downloadState != DownloadState.Installed
         }
-        downloadDialog?.getButton(DialogInterface.BUTTON_POSITIVE)?.isEnabled =
+        downloadDialog?.getButton(DialogInterface.BUTTON_NEGATIVE)?.isEnabled =
             downloadState != DownloadState.Verifying && downloadState != DownloadState.Installed
     }
 
@@ -534,14 +625,17 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     }
 
     override fun onItemAdded(idx: Int, item: PinyinDictionary) {
-        item as LibIMEDictionary
-        dustman.addOrUpdate(item.name, item.isEnabled)
+        val libime = item as? LibIMEDictionary ?: return
+        dustman.addOrUpdate(libime.name, libime.isEnabled)
     }
 
     override fun onItemRemoved(idx: Int, item: PinyinDictionary) {
-        item as LibIMEDictionary
-        item.file.delete()
-        dustman.remove(item.name)
+        val libime = item as? LibIMEDictionary ?: return
+        libime.file.delete()
+        dustman.remove(libime.name)
+        PinyinDictionaryCatalog.find(libime.name)?.let {
+            ui.addItem(item = CatalogPlaceholderDictionary(it.id, it.displayName))
+        }
     }
 
     override fun onItemRemovedBatch(indexed: List<Pair<Int, PinyinDictionary>>) {
@@ -549,8 +643,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     }
 
     override fun onItemUpdated(idx: Int, old: PinyinDictionary, new: PinyinDictionary) {
-        new as LibIMEDictionary
-        dustman.addOrUpdate(new.name, new.isEnabled)
+        val libime = new as? LibIMEDictionary ?: return
+        dustman.addOrUpdate(libime.name, libime.isEnabled)
     }
 
     override fun onStop() {
