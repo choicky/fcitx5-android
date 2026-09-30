@@ -146,7 +146,7 @@ class PinyinDictionaryInstallerTest {
         assertThrows(DictionaryInstallFailure.Io::class.java) {
             installer.install(
                 entry,
-                DictionaryStream(source, 0, content.size.toLong()),
+                { DictionaryStream(source, 0, content.size.toLong()) },
                 progress = { done, total -> progress += done to total }
             )
         }
