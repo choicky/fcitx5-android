@@ -25,6 +25,7 @@ import org.fcitx.fcitx5.android.input.bar.ui.idle.InlineSuggestionsUi
 import org.fcitx.fcitx5.android.input.bar.ui.idle.NumberRow
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
+import org.fcitx.fcitx5.android.input.voice.VoiceInputSession
 import splitties.dimensions.dp
 import splitties.views.dsl.constraintlayout.after
 import splitties.views.dsl.constraintlayout.before
@@ -56,23 +57,18 @@ class IdleUi(
     var currentState = State.Empty
         private set
 
-    private val disableAnimation by AppPrefs.getInstance().advanced.disableAnimation
-
+    private var voiceInputButton = false
+    private var voiceInputState = VoiceInputSession.State.Idle
     private var inPrivate = false
+
+    private val disableAnimation by AppPrefs.getInstance().advanced.disableAnimation
 
     private val translateDirection by lazy {
         if (ctx.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_LTR) 1f else -1f
     }
 
-    private val menuButtonRotation
-        get() = when {
-            inPrivate -> 0f
-            currentState == State.Toolbar -> 90f * translateDirection
-            else -> -90f * translateDirection
-        }
-
-    val menuButton = ToolButton(ctx, R.drawable.ic_baseline_expand_more_24, theme).apply {
-        iconRotation = menuButtonRotation
+    val toolsButton = ToolButton(ctx, R.drawable.ic_baseline_more_horiz_24, theme).apply {
+        contentDescription = ctx.getString(R.string.toolbar_tools)
     }
 
     val hideKeyboardButton = ToolButton(ctx, R.drawable.ic_baseline_arrow_drop_down_24, theme)
@@ -115,7 +111,7 @@ class IdleUi(
 
     private val idleBody = constraintLayout {
         val size = dp(KawaiiBarComponent.HEIGHT)
-        add(menuButton, lParams(size, size) {
+        add(toolsButton, lParams(size, size) {
             startOfParent()
             centerVertically()
         })
@@ -124,7 +120,7 @@ class IdleUi(
             centerVertically()
         })
         add(animator, lParams(matchConstraints, matchParent) {
-            after(menuButton)
+            after(toolsButton)
             before(hideKeyboardButton)
             centerVertically()
         })
@@ -136,50 +132,40 @@ class IdleUi(
     }
 
     fun privateMode(activate: Boolean = true) {
-        if (activate == inPrivate) return
         inPrivate = activate
-        updateMenuButtonIcon()
-        updateMenuButtonContentDescription()
-        updateMenuButtonRotation(instant = true)
-    }
-
-    private fun updateMenuButtonIcon() {
-        menuButton.setIcon(
-            if (inPrivate) R.drawable.ic_view_private
-            else R.drawable.ic_baseline_expand_more_24
+        toolsButton.contentDescription = ctx.getString(
+            if (inPrivate) R.string.private_mode else R.string.toolbar_tools
         )
     }
 
-    private fun updateMenuButtonContentDescription() {
-        menuButton.contentDescription = when {
-            inPrivate -> ctx.getString(R.string.private_mode)
-            currentState == State.Toolbar -> ctx.getString(R.string.hide_toolbar)
-            else -> ctx.getString(R.string.expand_toolbar)
-        }
+    fun setVoiceInputButton(isVoiceInput: Boolean, callback: View.OnClickListener) {
+        voiceInputButton = isVoiceInput
+        buttonsUi.voiceInputButton.visibility = if (isVoiceInput) View.VISIBLE else View.GONE
+        if (isVoiceInput) updateVoiceInputButton()
+        buttonsUi.voiceInputButton.setOnClickListener(callback)
     }
 
-    private fun updateMenuButtonRotation(instant: Boolean = false) {
-        val targetRotation = menuButtonRotation
-        menuButton.apply {
-            if (targetRotation == iconRotation) return
-            iconAnimate().cancel()
-            if (!instant && !disableAnimation) {
-                iconAnimate().setDuration(200L).rotation(targetRotation)
-            } else {
-                iconRotation = targetRotation
+    internal fun setVoiceInputState(state: VoiceInputSession.State) {
+        voiceInputState = state
+        if (voiceInputButton) updateVoiceInputButton()
+    }
+
+    private fun updateVoiceInputButton() {
+        val active = voiceInputState != VoiceInputSession.State.Idle
+        // stopped and waiting for the final result: keep the stop icon, dimmed
+        val processing = voiceInputState == VoiceInputSession.State.Stopping
+        buttonsUi.voiceInputButton.setIcon(
+            if (active) R.drawable.ic_baseline_stop_24
+            else R.drawable.ic_baseline_keyboard_voice_24
+        )
+        buttonsUi.voiceInputButton.alpha = if (processing) 0.4f else 1f
+        buttonsUi.voiceInputButton.contentDescription = ctx.getString(
+            when {
+                processing -> R.string.voice_hint_processing
+                active -> R.string.stop_voice_input
+                else -> R.string.start_voice_input
             }
-        }
-    }
-
-    fun setHideKeyboardIsVoiceInput(isVoiceInput: Boolean, callback: View.OnClickListener) {
-        if (isVoiceInput) {
-            hideKeyboardButton.setIcon(R.drawable.ic_baseline_keyboard_voice_24)
-            hideKeyboardButton.contentDescription = ctx.getString(R.string.switch_to_voice_input)
-        } else {
-            hideKeyboardButton.setIcon(R.drawable.ic_baseline_arrow_drop_down_24)
-            hideKeyboardButton.contentDescription = ctx.getString(R.string.hide_keyboard)
-        }
-        hideKeyboardButton.setOnClickListener(callback)
+        )
     }
 
     private fun clearAnimation() {
@@ -243,7 +229,5 @@ class IdleUi(
             popup.dismissAll()
         }
         currentState = state
-        updateMenuButtonContentDescription()
-        updateMenuButtonRotation(instant = !fromUser)
     }
 }

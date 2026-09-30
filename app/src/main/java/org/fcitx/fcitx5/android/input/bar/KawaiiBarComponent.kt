@@ -13,7 +13,6 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InlineSuggestion
 import android.view.inputmethod.InlineSuggestionsResponse
-import android.view.inputmethod.InputMethodSubtype
 import android.widget.FrameLayout
 import android.widget.ViewAnimator
 import android.widget.inline.InlineContentView
@@ -64,10 +63,10 @@ import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardWindow
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
 import org.fcitx.fcitx5.android.input.status.StatusAreaWindow
+import org.fcitx.fcitx5.android.input.voice.VoiceInputComponent
 import org.fcitx.fcitx5.android.input.wm.InputWindow
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.fcitx.fcitx5.android.utils.AppUtil
-import org.fcitx.fcitx5.android.utils.InputMethodUtil
 import org.mechdancer.dependency.DynamicScope
 import org.mechdancer.dependency.manager.must
 import splitties.bitflags.hasFlag
@@ -94,6 +93,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val horizontalCandidate: HorizontalCandidateComponent by manager.must()
     private val commonKeyActionListener: CommonKeyActionListener by manager.must()
     private val popup: PopupComponent by manager.must()
+    private val voiceInput: VoiceInputComponent by manager.must()
 
     private val prefs = AppPrefs.getInstance()
 
@@ -101,10 +101,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val clipboardItemTimeout = prefs.clipboard.clipboardItemTimeout
     private val clipboardMaskSensitive by prefs.clipboard.clipboardMaskSensitive
     private val expandedCandidateStyle by prefs.keyboard.expandedCandidateStyle
-    private val expandToolbarByDefault by prefs.keyboard.expandToolbarByDefault
     private val toolbarNumRowOnPassword by prefs.keyboard.toolbarNumRowOnPassword
-    private val showVoiceInputButton by prefs.keyboard.showVoiceInputButton
-    private val preferredVoiceInput by prefs.keyboard.preferredVoiceInput
 
     private var clipboardTimeoutJob: Job? = null
 
@@ -112,7 +109,6 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private var isInlineSuggestionPresent: Boolean = false
     private var isCapabilityFlagsPassword: Boolean = false
     private var isKeyboardLayoutNumber: Boolean = false
-    private var isToolbarManuallyToggled: Boolean = false
 
     private enum class NumberRowState { Auto, ForceShow, ForceHide }
 
@@ -179,14 +175,6 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
             isClipboardFresh -> IdleUi.State.Clipboard
             isInlineSuggestionPresent -> IdleUi.State.InlineSuggestion
             isCapabilityFlagsPassword && !isKeyboardLayoutNumber && numberRowState != NumberRowState.ForceHide -> IdleUi.State.NumberRow
-            /**
-             * state matrix:
-             *                               expandToolbarByDefault
-             *                          |   \   |    true |   false
-             * isToolbarManuallyToggled |  true |   Empty | Toolbar
-             *                          | false | Toolbar |   Empty
-             */
-            expandToolbarByDefault == isToolbarManuallyToggled -> IdleUi.State.Empty
             else -> IdleUi.State.Toolbar
         }
         if (newState == idleUi.currentState) return
@@ -254,31 +242,10 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
         } else false
     }
 
-    private var voiceInputSubtype: Pair<String, InputMethodSubtype>? = null
-
-    private val switchToVoiceInputCallback = View.OnClickListener {
-        val (id, subtype) = voiceInputSubtype ?: return@OnClickListener
-        InputMethodUtil.switchInputMethod(service, id, subtype)
-    }
-
     private val idleUi: IdleUi by lazy {
         IdleUi(context, theme, popup, commonKeyActionListener).apply {
-            menuButton.setOnClickListener {
-                when (idleUi.currentState) {
-                    IdleUi.State.Empty -> {
-                        isToolbarManuallyToggled = !expandToolbarByDefault
-                        evalIdleUiState(fromUser = true)
-                    }
-                    IdleUi.State.Toolbar -> {
-                        isToolbarManuallyToggled = expandToolbarByDefault
-                        evalIdleUiState(fromUser = true)
-                    }
-                    else -> {
-                        isToolbarManuallyToggled = !expandToolbarByDefault
-                        idleUi.updateState(IdleUi.State.Toolbar, fromUser = true)
-                    }
-                }
-                // reset timeout timer (if present) when user switch layout
+            toolsButton.setOnClickListener {
+                windowManager.attachWindow(StatusAreaWindow())
                 if (clipboardTimeoutJob != null) {
                     launchClipboardTimeoutJob()
                 }
@@ -302,9 +269,6 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                 }
                 clipboardButton.setOnClickListener {
                     windowManager.attachWindow(ClipboardWindow())
-                }
-                moreButton.setOnClickListener {
-                    windowManager.attachWindow(StatusAreaWindow())
                 }
             }
             clipboardUi.suggestionView.apply {
@@ -429,6 +393,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
         ClipboardManager.addOnUpdateListener(onClipboardUpdateListener)
         clipboardSuggestion.registerOnChangeListener(onClipboardSuggestionUpdateListener)
         clipboardItemTimeout.registerOnChangeListener(onClipboardTimeoutUpdateListener)
+        voiceInput.addStateListener { state -> idleUi.setVoiceInputState(state) }
     }
 
     override fun onStartInput(info: EditorInfo, capFlags: CapabilityFlags) {
@@ -441,12 +406,10 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             idleUi.inlineSuggestionsBar.clear()
         }
-        voiceInputSubtype = InputMethodUtil.findVoiceSubtype(preferredVoiceInput)
-        val shouldShowVoiceInput =
-            showVoiceInputButton && voiceInputSubtype != null && !capFlags.has(CapabilityFlag.Password)
-        idleUi.setHideKeyboardIsVoiceInput(
+        val shouldShowVoiceInput = voiceInput.shouldShowVoiceInput(capFlags)
+        idleUi.setVoiceInputButton(
             shouldShowVoiceInput,
-            if (shouldShowVoiceInput) switchToVoiceInputCallback else hideKeyboardCallback
+            if (shouldShowVoiceInput) voiceInput.toggleCallback else hideKeyboardCallback
         )
         evalIdleUiState()
     }

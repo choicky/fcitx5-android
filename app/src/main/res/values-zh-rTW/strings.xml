@@ -123,7 +123,6 @@
     <string name="punctuation_pos_bottom">底部（僅限直向）</string>
     <string name="punctuation_pos_top_right">右上</string>
     <string name="punctuation_pos_none">無</string>
-    <string name="expand_toolbar_by_default">預設展開工具列</string>
     <string name="popup_on_key_press">按鍵時彈出顯示字元</string>
     <string name="disable_animation">停用動畫</string>
     <string name="import_from_file">從檔案匯入…</string>
@@ -288,6 +287,7 @@
     <string name="haptic_on_repeat">重複按鍵時的觸覺回饋</string>
     <string name="redo">重做</string>
     <string name="status_area">狀態區</string>
+    <string name="toolbar_tools">工具</string>
     <string name="expand_candidates_list">展開選字列表</string>
     <string name="hide_candidates_list">隱藏選字列表</string>
     <string name="switch_to_voice_input">切換到語音輸入</string>
