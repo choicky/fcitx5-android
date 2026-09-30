@@ -169,9 +169,12 @@ class PinyinDictionaryInstallerTest {
             temporaryFolder.newFile("hash-input").also { it.writeBytes(content) }
         ),
         license = "test",
+        licenseUrl = "https://example.test/license",
         sourceRepository = "https://example.test/source",
         sourceRevision = "test",
         sourceInputSha256 = "test",
-        limitations = "test"
+        limitations = "test",
+        attribution = "test",
+        modificationStatement = "test"
     )
 }

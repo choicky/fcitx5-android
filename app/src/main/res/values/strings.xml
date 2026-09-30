@@ -56,6 +56,11 @@
     <string name="dictionary_license">License</string>
     <string name="dictionary_source">Source</string>
     <string name="dictionary_limitations">Limitations</string>
+    <string name="dictionary_third_party">Third-party dictionary</string>
+    <string name="dictionary_version">Version</string>
+    <string name="dictionary_source_project">Source project</string>
+    <string name="dictionary_license_info">License information</string>
+    <string name="dictionary_normalization_notice">Exact entries penalized by the official Fcitx5 dictionary retain the corresponding official negative value.</string>
     <string name="dictionary_metadata">%1$s · %2$s entries</string>
     <string name="dictionary_entry_count_unknown">entry count unavailable</string>
     <string name="dictionary_builtin_base">Simplified Chinese Base</string>

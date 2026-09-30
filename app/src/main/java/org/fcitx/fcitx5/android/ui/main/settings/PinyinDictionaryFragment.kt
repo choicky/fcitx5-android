@@ -15,6 +15,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -128,10 +129,15 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                 }
             },
             initSettingsButton = { entry ->
-                if (entry is CatalogPlaceholderDictionary) {
+                val catalogEntry = when (entry) {
+                    is CatalogPlaceholderDictionary -> PinyinDictionaryCatalog.find(entry.entryId)
+                    is LibIMEDictionary -> PinyinDictionaryCatalog.find(entry.name)
+                    else -> null
+                }
+                if (catalogEntry != null) {
                     visibility = View.VISIBLE
                     setOnClickListener {
-                        PinyinDictionaryCatalog.find(entry.entryId)?.let(::showCatalogEntry)
+                        showCatalogEntry(catalogEntry, allowDownload = entry is CatalogPlaceholderDictionary)
                     }
                 } else visibility = View.GONE
             }
@@ -302,21 +308,52 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         }
     }
 
-    private fun showCatalogEntry(entry: PinyinDictionaryCatalogEntry) {
-        AlertDialog.Builder(requireContext())
-            .setTitle(entry.displayName)
-            .setMessage(
-                "${entry.version}\n\n" +
-                    "${dictionarySummary(entry, entry.size)}\n\n" +
-                    "${getString(R.string.dictionary_license)}: ${entry.license}\n" +
-                    "${getString(R.string.dictionary_source)}: ${entry.sourceRepository}\n" +
-                    "${getString(R.string.dictionary_limitations)}: ${entry.limitations}"
-            )
+    private fun showCatalogEntry(entry: PinyinDictionaryCatalogEntry, allowDownload: Boolean = true) {
+        val ctx = requireContext()
+        val content = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 0, 48, 0)
+        }
+        val details = TextView(ctx).apply {
+            text = buildCatalogDetails(entry)
+        }
+        content.addView(details)
+        val links = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        links.addView(Button(ctx).apply {
+            text = getString(R.string.dictionary_source_project)
+            setOnClickListener { openExternalLink(entry.sourceRepository) }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        links.addView(Button(ctx).apply {
+            text = getString(R.string.dictionary_license_info)
+            setOnClickListener { openExternalLink(entry.licenseUrl) }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        content.addView(links)
+        val builder = AlertDialog.Builder(ctx)
+            .setTitle("${entry.displayName}\n${entry.canonicalName}")
+            .setView(content)
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.download_dictionary) { _, _ ->
-                downloadCatalogEntry(entry)
-            }
+        builder.setPositiveButton(if (allowDownload) R.string.download_dictionary else android.R.string.ok) { _, _ ->
+            if (allowDownload) downloadCatalogEntry(entry)
+        }
+        builder
             .show()
+    }
+
+    private fun buildCatalogDetails(entry: PinyinDictionaryCatalogEntry): String =
+        "${getString(R.string.dictionary_third_party)}\n\n" +
+            "${getString(R.string.dictionary_source)}: ${entry.sourceRepository}\n" +
+            "${getString(R.string.dictionary_version)}: ${entry.version}\n" +
+            "${getString(R.string.dictionary_license)}: ${entry.license}\n" +
+            "${dictionarySummary(entry, entry.size)}\n\n" +
+            "${entry.attribution}\n\n" +
+            "${entry.modificationStatement}\n" +
+            "${getString(R.string.dictionary_normalization_notice)}\n\n" +
+            "${getString(R.string.dictionary_limitations)}: ${entry.limitations}"
+
+    private fun openExternalLink(url: String) {
+        startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(url)))
     }
 
     private fun downloadCatalogEntry(entry: PinyinDictionaryCatalogEntry) {
