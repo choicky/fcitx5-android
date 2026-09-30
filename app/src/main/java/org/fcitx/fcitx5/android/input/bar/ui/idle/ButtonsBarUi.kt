@@ -36,16 +36,16 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
         contentDescription = ctx.getString(R.string.redo)
     }
 
+    val voiceInputButton = toolButton(R.drawable.ic_baseline_keyboard_voice_24).apply {
+        contentDescription = ctx.getString(R.string.start_voice_input)
+    }
+
     val cursorMoveButton = toolButton(R.drawable.ic_cursor_move).apply {
         contentDescription = ctx.getString(R.string.text_editing)
     }
 
     val clipboardButton = toolButton(R.drawable.ic_clipboard).apply {
         contentDescription = ctx.getString(R.string.clipboard)
-    }
-
-    val moreButton = toolButton(R.drawable.ic_baseline_more_horiz_24).apply {
-        contentDescription = ctx.getString(R.string.status_area)
     }
 
 }

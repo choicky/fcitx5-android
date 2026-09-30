@@ -101,7 +101,6 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val clipboardItemTimeout = prefs.clipboard.clipboardItemTimeout
     private val clipboardMaskSensitive by prefs.clipboard.clipboardMaskSensitive
     private val expandedCandidateStyle by prefs.keyboard.expandedCandidateStyle
-    private val expandToolbarByDefault by prefs.keyboard.expandToolbarByDefault
     private val toolbarNumRowOnPassword by prefs.keyboard.toolbarNumRowOnPassword
 
     private var clipboardTimeoutJob: Job? = null
@@ -110,7 +109,6 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private var isInlineSuggestionPresent: Boolean = false
     private var isCapabilityFlagsPassword: Boolean = false
     private var isKeyboardLayoutNumber: Boolean = false
-    private var isToolbarManuallyToggled: Boolean = false
 
     private enum class NumberRowState { Auto, ForceShow, ForceHide }
 
@@ -177,14 +175,6 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
             isClipboardFresh -> IdleUi.State.Clipboard
             isInlineSuggestionPresent -> IdleUi.State.InlineSuggestion
             isCapabilityFlagsPassword && !isKeyboardLayoutNumber && numberRowState != NumberRowState.ForceHide -> IdleUi.State.NumberRow
-            /**
-             * state matrix:
-             *                               expandToolbarByDefault
-             *                          |   \   |    true |   false
-             * isToolbarManuallyToggled |  true |   Empty | Toolbar
-             *                          | false | Toolbar |   Empty
-             */
-            expandToolbarByDefault == isToolbarManuallyToggled -> IdleUi.State.Empty
             else -> IdleUi.State.Toolbar
         }
         if (newState == idleUi.currentState) return
@@ -254,22 +244,8 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
 
     private val idleUi: IdleUi by lazy {
         IdleUi(context, theme, popup, commonKeyActionListener).apply {
-            menuButton.setOnClickListener {
-                when (idleUi.currentState) {
-                    IdleUi.State.Empty -> {
-                        isToolbarManuallyToggled = !expandToolbarByDefault
-                        evalIdleUiState(fromUser = true)
-                    }
-                    IdleUi.State.Toolbar -> {
-                        isToolbarManuallyToggled = expandToolbarByDefault
-                        evalIdleUiState(fromUser = true)
-                    }
-                    else -> {
-                        isToolbarManuallyToggled = !expandToolbarByDefault
-                        idleUi.updateState(IdleUi.State.Toolbar, fromUser = true)
-                    }
-                }
-                // reset timeout timer (if present) when user switch layout
+            toolsButton.setOnClickListener {
+                windowManager.attachWindow(StatusAreaWindow())
                 if (clipboardTimeoutJob != null) {
                     launchClipboardTimeoutJob()
                 }
@@ -293,9 +269,6 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                 }
                 clipboardButton.setOnClickListener {
                     windowManager.attachWindow(ClipboardWindow())
-                }
-                moreButton.setOnClickListener {
-                    windowManager.attachWindow(StatusAreaWindow())
                 }
             }
             clipboardUi.suggestionView.apply {
@@ -434,7 +407,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
             idleUi.inlineSuggestionsBar.clear()
         }
         val shouldShowVoiceInput = voiceInput.shouldShowVoiceInput(capFlags)
-        idleUi.setHideKeyboardIsVoiceInput(
+        idleUi.setVoiceInputButton(
             shouldShowVoiceInput,
             if (shouldShowVoiceInput) voiceInput.toggleCallback else hideKeyboardCallback
         )

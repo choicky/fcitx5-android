@@ -153,7 +153,6 @@
     <string name="punctuation_pos_bottom">Bottom (Portrait only)</string>
     <string name="punctuation_pos_top_right">Top Right</string>
     <string name="punctuation_pos_none">None</string>
-    <string name="expand_toolbar_by_default">Expand toolbar by default</string>
     <string name="popup_on_key_press">Popup on key press</string>
     <string name="disable_animation">Disable animation</string>
     <string name="import_from_file">Import from file…</string>
@@ -319,6 +318,7 @@
     <string name="haptic_on_repeat">Haptic feedback on key repeat</string>
     <string name="redo">Redo</string>
     <string name="status_area">Status area</string>
+    <string name="toolbar_tools">Tools</string>
     <string name="expand_candidates_list">Expand candidates list</string>
     <string name="hide_candidates_list">Hide candidates list</string>
     <string name="switch_to_voice_input">Switch to voice input</string>
