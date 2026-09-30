@@ -20,7 +20,12 @@ internal sealed class DictionaryInstallFailure(message: String) : Exception(mess
     class Io(cause: IOException) : DictionaryInstallFailure(cause.message ?: "I/O failure")
 }
 
-internal data class DictionaryStream(val input: InputStream, val offset: Long)
+internal data class DictionaryStream(
+    val input: InputStream,
+    val offset: Long,
+    /** Total bytes represented by this response, when the HTTP response knows it. */
+    val totalSize: Long? = null
+)
 
 /** Installs one verified `.dict` artifact without touching the active file until verification. */
 internal class PinyinDictionaryInstaller(private val root: File) {
@@ -30,28 +35,38 @@ internal class PinyinDictionaryInstaller(private val root: File) {
     fun isInstalled(entry: PinyinDictionaryCatalogEntry): Boolean =
         target(entry).let { it.isFile && it.length() == entry.size && sha256(it) == entry.sha256 }
 
+    fun stagedBytes(entry: PinyinDictionaryCatalogEntry): Long =
+        staged(entry).takeIf { it.isFile }?.length()?.coerceAtMost(entry.size) ?: 0
+
+    fun discardDownload(entry: PinyinDictionaryCatalogEntry) {
+        staged(entry).delete()
+    }
+
     fun install(
         entry: PinyinDictionaryCatalogEntry,
         source: InputStream,
         cancelled: () -> Boolean = { false },
-        progress: (Long, Long) -> Unit = { _, _ -> }
-    ): File = install(entry, { DictionaryStream(source, 0) }, cancelled, progress)
+        progress: (Long, Long) -> Unit = { _, _ -> },
+        verifying: () -> Unit = {}
+    ): File = install(entry, { DictionaryStream(source, 0) }, cancelled, progress, verifying)
 
     fun install(
         entry: PinyinDictionaryCatalogEntry,
         source: (Long) -> DictionaryStream?,
         cancelled: () -> Boolean = { false },
-        progress: (Long, Long) -> Unit = { _, _ -> }
+        progress: (Long, Long) -> Unit = { _, _ -> },
+        verifying: () -> Unit = {}
     ): File {
         root.mkdirs()
         val available = root.usableSpace
-        val staged = root.resolve(".${entry.fileName}.download")
+        val staged = staged(entry)
         val existing = staged.takeIf { it.isFile }?.length()?.coerceAtMost(entry.size) ?: 0
         if (available < entry.size - existing) {
             throw DictionaryInstallFailure.NotEnoughSpace(entry.size - existing, available)
         }
         try {
             if (existing == entry.size && sha256(staged) == entry.sha256) {
+                verifying()
                 return swapIn(entry, staged)
             }
             val stream = source(existing) ?: throw IOException("no dictionary response")
@@ -59,7 +74,18 @@ internal class PinyinDictionaryInstaller(private val root: File) {
                 val append = existing > 0 && stream.offset == existing
                 val copied = if (append) existing else 0
                 val output = if (append) FileOutputStream(staged, true) else staged.outputStream()
-                output.use { copyVerified(entry, input, it, copied, cancelled, progress) }
+                output.use {
+                    copyVerified(
+                        entry,
+                        input,
+                        it,
+                        copied,
+                        stream.totalSize ?: entry.size,
+                        cancelled,
+                        progress,
+                        verifying
+                    )
+                }
             }
             return swapIn(entry, staged)
         } catch (e: DictionaryInstallFailure) {
@@ -83,8 +109,10 @@ internal class PinyinDictionaryInstaller(private val root: File) {
         source: InputStream,
         output: OutputStream,
         offset: Long,
+        totalSize: Long,
         cancelled: () -> Boolean,
-        progress: (Long, Long) -> Unit
+        progress: (Long, Long) -> Unit,
+        verifying: () -> Unit
     ) {
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(64 * 1024)
@@ -98,7 +126,7 @@ internal class PinyinDictionaryInstaller(private val root: File) {
                 }
             }
         }
-        progress(copied, entry.size)
+        progress(copied, totalSize)
         while (true) {
             if (cancelled()) throw DictionaryInstallFailure.Cancelled()
             val count = source.read(buffer)
@@ -109,8 +137,9 @@ internal class PinyinDictionaryInstaller(private val root: File) {
             }
             digest.update(buffer, 0, count)
             output.write(buffer, 0, count)
-            progress(copied, entry.size)
+            progress(copied, totalSize)
         }
+        verifying()
         val actual = digest.digest().joinToString("") { "%02x".format(it) }
         if (copied != entry.size || actual != entry.sha256) {
             throw DictionaryInstallFailure.Mismatch(entry.sha256, actual)
@@ -131,6 +160,9 @@ internal class PinyinDictionaryInstaller(private val root: File) {
         old.delete()
         return destination
     }
+
+    private fun staged(entry: PinyinDictionaryCatalogEntry) =
+        root.resolve(".${entry.fileName}.download")
 
     companion object {
         fun sha256(file: File): String = MessageDigest.getInstance("SHA-256").apply {

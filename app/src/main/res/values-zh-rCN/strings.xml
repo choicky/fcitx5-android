@@ -44,6 +44,15 @@
     <string name="download_dictionary">下载词库</string>
     <string name="downloading">正在下载</string>
     <string name="pause_download">暂停</string>
+    <string name="resume_download">继续下载</string>
+    <string name="cancel_download">取消下载</string>
+    <string name="download_paused">已暂停</string>
+    <string name="download_verifying">正在校验 SHA-256…</string>
+    <string name="download_failed">下载中断：%1$s</string>
+    <string name="download_interrupted">网络或下载错误</string>
+    <string name="download_installed">已安装</string>
+    <string name="download_eta_seconds">预计还需 %1$d 秒</string>
+    <string name="download_eta_minutes">预计还需 %1$d 分 %2$d 秒</string>
     <string name="dictionary_license">许可证</string>
     <string name="dictionary_source">来源</string>
     <string name="dictionary_limitations">限制</string>

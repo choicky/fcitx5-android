@@ -44,6 +44,15 @@
     <string name="download_dictionary">Download dictionary</string>
     <string name="downloading">Downloading</string>
     <string name="pause_download">Pause</string>
+    <string name="resume_download">Resume download</string>
+    <string name="cancel_download">Cancel download</string>
+    <string name="download_paused">Paused</string>
+    <string name="download_verifying">Verifying SHA-256…</string>
+    <string name="download_failed">Interrupted: %1$s</string>
+    <string name="download_interrupted">network or download error</string>
+    <string name="download_installed">Installed</string>
+    <string name="download_eta_seconds">about %1$d seconds remaining</string>
+    <string name="download_eta_minutes">about %1$d minutes %2$d seconds remaining</string>
     <string name="dictionary_license">License</string>
     <string name="dictionary_source">Source</string>
     <string name="dictionary_limitations">Limitations</string>
