@@ -104,6 +104,24 @@ class PinyinDictionaryInstallerTest {
         assertTrue(installer.isInstalled(entry))
     }
 
+    @Test
+    fun replacesPartialFileWhenServerFallsBackToFullResponse() {
+        val content = "dictionary".toByteArray()
+        val entry = entry(content)
+        val installer = PinyinDictionaryInstaller(temporaryFolder.root)
+        temporaryFolder.root.resolve(".${entry.fileName}.download").writeBytes(content.copyOf(4))
+
+        val installed = installer.install(entry, { offset ->
+            assertEquals(4, offset)
+            // A 200 response is represented by offset zero, so the installer
+            // must truncate the partial file instead of appending duplicate bytes.
+            DictionaryStream(ByteArrayInputStream(content), 0)
+        })
+
+        assertEquals(content.toList(), installed.readBytes().toList())
+        assertTrue(installer.isInstalled(entry))
+    }
+
     private fun entry(content: ByteArray) = PinyinDictionaryCatalogEntry(
         id = "test-dictionary",
         displayName = "Test dictionary",

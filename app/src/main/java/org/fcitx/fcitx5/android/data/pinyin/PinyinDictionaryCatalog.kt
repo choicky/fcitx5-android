@@ -4,7 +4,12 @@
  */
 package org.fcitx.fcitx5.android.data.pinyin
 
-/** Provenance and integrity metadata for a Phase 5B dictionary release artifact. */
+/**
+ * Provenance and integrity metadata for a Phase 5B dictionary release artifact.
+ *
+ * Artifact hash and size fields mirror the published release's index.json. That
+ * release index and SHA256SUMS are the authoritative metadata for downloads.
+ */
 internal data class PinyinDictionaryCatalogEntry(
     val id: String,
     val displayName: String,
@@ -33,8 +38,8 @@ internal object PinyinDictionaryCatalog {
             displayName = "Rime Frost",
             version = RELEASE_TAG,
             url = "$RELEASE_BASE/rime-frost.dict",
-            size = 37_190_112,
-            sha256 = "b08ff5f48bbe31a98ff32d6ff819fcfeb24f94cec2bba4bf02f35ba7882a5b32",
+            size = 37_322_174,
+            sha256 = "b4880861161d585b21413fe554aa8f416beb39d68cf4ce3fba728df5fea584ff",
             license = "GPL-3.0-only",
             sourceRepository = "https://github.com/gaboolic/rime-frost",
             sourceRevision = "211de1ca927b6c876e384c6de42e1cc8af868c68",
@@ -46,8 +51,8 @@ internal object PinyinDictionaryCatalog {
             displayName = "Rime Wanxiang (jichu)",
             version = RELEASE_TAG,
             url = "$RELEASE_BASE/rime-wanxiang.dict",
-            size = 24_597_605,
-            sha256 = "d2fcf381cdbc7843d8824ecad72990db412e82e2bdc7677a7d37f2e435d6387b",
+            size = 24_683_718,
+            sha256 = "492a452604f1d63ec1edf5682846291db72f3caadc3b6cc8e51af52fab3772da",
             license = "CC-BY-4.0",
             sourceRepository = "https://github.com/amzxyz/rime-wanxiang",
             sourceRevision = "94f1e8d7b6d1267a9c8752a2e62145705dd1fb92",

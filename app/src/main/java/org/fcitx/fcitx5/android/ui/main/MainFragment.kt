@@ -115,6 +115,11 @@ class MainFragment : PaddingPreferenceFragment() {
                     SettingsRoute.Voice
                 )
                 addDestinationPreference(
+                    R.string.pinyin_dict,
+                    R.drawable.ic_baseline_library_books_24,
+                    SettingsRoute.PinyinDict()
+                )
+                addDestinationPreference(
                     R.string.plugins,
                     R.drawable.ic_baseline_android_24,
                     SettingsRoute.Plugin
