@@ -12,12 +12,12 @@ class PinyinDictionaryCatalogTest {
     @Test
     fun releaseEntriesCarryPinnedArtifactAndSourceMetadata() {
         assertEquals("dictionary-v1.0.0", PinyinDictionaryCatalog.RELEASE_TAG)
-        assertEquals(2, PinyinDictionaryCatalog.entries.size)
+        assertEquals(4, PinyinDictionaryCatalog.entries.size)
         PinyinDictionaryCatalog.entries.forEach { entry ->
             assertTrue(entry.url.startsWith("https://"))
             assertEquals(64, entry.sha256.length)
             assertEquals(40, entry.sourceRevision.length)
-            assertEquals(64, entry.sourceInputSha256.length)
+            if (entry.sourceInputSha256 != null) assertEquals(64, entry.sourceInputSha256.length)
             assertTrue(entry.size > 0)
             assertTrue(entry.entryCount == null || entry.entryCount > 0)
             assertTrue(entry.license.isNotBlank())
@@ -51,5 +51,22 @@ class PinyinDictionaryCatalogTest {
         assertEquals("Rime-Frost", frost.canonicalName)
         assertEquals("万象", wanxiang!!.displayName)
         assertEquals("Rime-Wanxiang (jichu)", wanxiang.canonicalName)
+    }
+
+    @Test
+    fun researchEntriesCarryPinnedBytesAndAreNotPublicReleaseApproved() {
+        val zhwiki = PinyinDictionaryCatalog.find("zhwiki")!!
+        assertEquals(32_677_637L, zhwiki.size)
+        assertEquals(1_673_006L, zhwiki.entryCount)
+        assertTrue(zhwiki.researchOnly)
+        assertTrue(!zhwiki.publicReleaseApproved)
+        assertEquals("中文维基", zhwiki.displayName)
+
+        val custom = PinyinDictionaryCatalog.find("custom-pinyin")!!
+        assertEquals(29_688_969L, custom.size)
+        assertEquals(1_498_781L, custom.entryCount)
+        assertTrue(custom.researchOnly)
+        assertTrue(!custom.publicReleaseApproved)
+        assertEquals("CustomPinyinDictionary", custom.canonicalName)
     }
 }
