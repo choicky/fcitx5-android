@@ -12,9 +12,10 @@ class PinyinDictionaryCatalogTest {
     @Test
     fun releaseEntriesCarryPinnedArtifactAndSourceMetadata() {
         assertEquals("dictionary-v1.1.1", PinyinDictionaryCatalog.RELEASE_TAG)
-        assertEquals(4, PinyinDictionaryCatalog.entries.size)
+        assertEquals(5, PinyinDictionaryCatalog.entries.size)
         PinyinDictionaryCatalog.entries.forEach { entry ->
-            assertTrue(entry.url.startsWith("https://"))
+            if (entry.privateImportOnly) assertTrue(entry.url.isEmpty())
+            else assertTrue(entry.url.startsWith("https://"))
             assertEquals(64, entry.sha256.length)
             assertEquals(40, entry.sourceRevision.length)
             if (entry.sourceInputSha256 != null) assertEquals(64, entry.sourceInputSha256.length)
@@ -76,5 +77,20 @@ class PinyinDictionaryCatalogTest {
         assertEquals(34_496_975L, zhwiki.size)
         assertEquals(1_673_006L, zhwiki.entryCount)
         assertTrue(zhwiki.modificationStatement.contains("normalized"))
+    }
+
+    @Test
+    fun iceIsResearchOnlyAndUsesPinnedPrivateArtifactMetadata() {
+        val ice = PinyinDictionaryCatalog.find("rime-ice")!!
+        assertEquals("雾凇", ice.displayName)
+        assertEquals("Rime-Ice", ice.canonicalName)
+        assertTrue(ice.researchOnly)
+        assertTrue(!ice.publicReleaseApproved)
+        assertTrue(!ice.url.startsWith("https://"))
+        assertTrue(ice.privateImportOnly)
+        assertEquals(33_670_856L, ice.size)
+        assertEquals(1_885_206L, ice.entryCount)
+        assertTrue(ice.limitations.contains("Huayu"))
+        assertTrue(ice.limitations.contains("indiejoseph"))
     }
 }

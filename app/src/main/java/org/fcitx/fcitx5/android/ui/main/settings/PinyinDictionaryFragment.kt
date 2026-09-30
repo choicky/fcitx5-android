@@ -82,6 +82,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     private var downloadUiJob: Job? = null
     private var downloadDialog: AlertDialog? = null
     private var downloadEntry: PinyinDictionaryCatalogEntry? = null
+    private var privateImportEntry: PinyinDictionaryCatalogEntry? = null
     private var downloadProgressView: ProgressBar? = null
     private var downloadDetailsView: TextView? = null
     private var downloadStatusView: TextView? = null
@@ -272,8 +273,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
 
     private fun registerLauncher() {
         launcher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null)
-                importFromUri(uri)
+            val expected = privateImportEntry.also { privateImportEntry = null }
+            if (uri != null) importFromUri(uri, expected)
         }
     }
 
@@ -334,7 +335,12 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             .setTitle("${entry.displayName}\n${entry.canonicalName}")
             .setView(content)
             .setNegativeButton(android.R.string.cancel, null)
-        builder.setPositiveButton(if (allowDownload) R.string.download_dictionary else android.R.string.ok) { _, _ ->
+        builder.setPositiveButton(
+            if (allowDownload) {
+                if (entry.privateImportOnly) R.string.import_research_dictionary
+                else R.string.download_dictionary
+            } else android.R.string.ok
+        ) { _, _ ->
             if (allowDownload) downloadCatalogEntry(entry)
         }
         builder
@@ -357,7 +363,12 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     }
 
     private fun downloadCatalogEntry(entry: PinyinDictionaryCatalogEntry) {
-        showDownloadDialog(entry, startImmediately = true)
+        if (entry.privateImportOnly) {
+            privateImportEntry = entry
+            launcher.launch("*/*")
+        } else {
+            showDownloadDialog(entry, startImmediately = true)
+        }
     }
 
     private fun showDownloadDialog(
@@ -592,7 +603,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         seconds < 60 -> getString(R.string.download_eta_seconds, seconds)
         else -> getString(R.string.download_eta_minutes, seconds / 60, seconds % 60)
     }
-    private fun importFromUri(uri: Uri) {
+    private fun importFromUri(uri: Uri, expected: PinyinDictionaryCatalogEntry? = null) {
         val ctx = requireContext()
         val cr = ctx.contentResolver
         val nm = ctx.notificationManager
@@ -602,6 +613,31 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             if (PinyinDictionary.Type.fromFileName(fileName) == null) {
                 ctx.importErrorDialog(R.string.invalid_dict)
                 return@launch
+            }
+            if (expected != null) {
+                if (fileName != expected.fileName) {
+                    ctx.importErrorDialog(R.string.invalid_dict)
+                    return@launch
+                }
+                val valid = withContext(Dispatchers.IO) {
+                    cr.openInputStream(uri)?.use { input ->
+                        val digest = java.security.MessageDigest.getInstance("SHA-256")
+                        val buffer = ByteArray(64 * 1024)
+                        var size = 0L
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            size += count
+                            digest.update(buffer, 0, count)
+                        }
+                        val hash = digest.digest().joinToString("") { "%02x".format(it) }
+                        size == expected.size && hash == expected.sha256
+                    } ?: false
+                }
+                if (!valid) {
+                    ctx.importErrorDialog(R.string.dictionary_integrity_error)
+                    return@launch
+                }
             }
             val entryName = fileName.substringBeforeLast('.')
             if (ui.entries.any { it.name == entryName }) {

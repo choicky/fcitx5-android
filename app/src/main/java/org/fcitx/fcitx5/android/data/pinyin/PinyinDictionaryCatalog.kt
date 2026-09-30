@@ -29,7 +29,9 @@ internal data class PinyinDictionaryCatalogEntry(
     /** Number of rows in the compiled dictionary dump, when supplied by the release index. */
     val entryCount: Long? = null,
     val researchOnly: Boolean = false,
-    val publicReleaseApproved: Boolean = true
+    val publicReleaseApproved: Boolean = true,
+    /** A private artifact is selected through the existing local-import flow, not HTTP. */
+    val privateImportOnly: Boolean = false
 ) {
     val fileName = "$id.dict"
 }
@@ -41,6 +43,27 @@ internal object PinyinDictionaryCatalog {
         "https://github.com/choicky/fcitx5-moqi/releases/download/$RELEASE_TAG"
 
     val entries = listOf(
+        PinyinDictionaryCatalogEntry(
+            id = "rime-ice",
+            displayName = "雾凇",
+            canonicalName = "Rime-Ice",
+            version = "research-3aea6d36",
+            url = "",
+            size = 33_670_856,
+            sha256 = "d1ee425424834ffa1508583fff4b98c9b4193c03128451dcf6e050f4bd00b2fb",
+            license = "GPL-3.0-only (Rime-Ice project; external data permissions pending)",
+            licenseUrl = "https://raw.githubusercontent.com/iDvel/rime-ice/3aea6d3694fb3d94ec663641f021f788822897ad/LICENSE",
+            sourceRepository = "https://github.com/iDvel/rime-ice",
+            sourceRevision = "3aea6d3694fb3d94ec663641f021f788822897ad",
+            sourceInputSha256 = "491cba198fac1373dc694571629026a8211a5edb3bc0f6056f75a0c011b1c02f",
+            limitations = "Private/research testing only. Huayu and indiejoseph Gist public-distribution provenance/permission is pending; do not redistribute this artifact.",
+            attribution = "Rime-Ice contributors; includes 8105/base/ext/tencent/others source tables. Preserve Ice and upstream data-source attribution.",
+            modificationStatement = "Materialized through pinned Librime and converted/normalized for Fcitx5/LibIME compatibility; exact official negative values are retained.",
+            entryCount = 1_885_206,
+            researchOnly = true,
+            publicReleaseApproved = false,
+            privateImportOnly = true
+        ),
         PinyinDictionaryCatalogEntry(
             id = "rime-frost",
             displayName = "白霜",

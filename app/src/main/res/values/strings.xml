@@ -42,6 +42,8 @@
     <string name="whether_import_dict">Would you like to import this dictionary?</string>
     <string name="import_">Import</string>
     <string name="download_dictionary">Download dictionary</string>
+    <string name="import_research_dictionary">Import research dictionary</string>
+    <string name="dictionary_integrity_error">The selected research dictionary failed its size or SHA-256 check.</string>
     <string name="downloading">Downloading</string>
     <string name="pause_download">Pause</string>
     <string name="resume_download">Resume download</string>
