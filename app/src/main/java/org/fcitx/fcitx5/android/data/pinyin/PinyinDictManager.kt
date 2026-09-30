@@ -82,13 +82,21 @@ object PinyinDictManager {
         entry: PinyinDictionaryCatalogEntry,
         source: (Long) -> DictionaryStream?,
         cancelled: () -> Boolean = { false },
-        progress: (Long, Long) -> Unit = { _, _ -> }
+        progress: (Long, Long) -> Unit = { _, _ -> },
+        verifying: () -> Unit = {}
     ): Result<LibIMEDictionary> = runCatching {
         val file = PinyinDictionaryInstaller(pinyinDicDir).install(
-            entry, source, cancelled, progress
+            entry, source, cancelled, progress, verifying
         )
         PinyinDictionary.new(file) as? LibIMEDictionary
             ?: errorArg(R.string.exception_dict_filename, file.path)
+    }
+
+    internal fun stagedCatalogBytes(entry: PinyinDictionaryCatalogEntry): Long =
+        PinyinDictionaryInstaller(pinyinDicDir).stagedBytes(entry)
+
+    internal fun discardCatalogDownload(entry: PinyinDictionaryCatalogEntry) {
+        PinyinDictionaryInstaller(pinyinDicDir).discardDownload(entry)
     }
 
     fun sougouDictConv(src: String, dest: String) {

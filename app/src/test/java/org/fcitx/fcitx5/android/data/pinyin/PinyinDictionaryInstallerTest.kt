@@ -12,6 +12,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
 
 class PinyinDictionaryInstallerTest {
 
@@ -120,6 +122,41 @@ class PinyinDictionaryInstallerTest {
 
         assertEquals(content.toList(), installed.readBytes().toList())
         assertTrue(installer.isInstalled(entry))
+    }
+
+    @Test
+    fun reportsMonotonicProgressAndPreservesPartialOnNetworkFailure() {
+        val content = "dictionary".toByteArray()
+        val entry = entry(content)
+        val installer = PinyinDictionaryInstaller(temporaryFolder.root)
+        val progress = mutableListOf<Pair<Long, Long>>()
+        val source = object : InputStream() {
+            private var sent = false
+
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                if (sent) throw IOException("connection lost")
+                sent = true
+                content.copyInto(buffer, offset, 0, 4)
+                return 4
+            }
+
+            override fun read(): Int = error("buffered read expected")
+        }
+
+        assertThrows(DictionaryInstallFailure.Io::class.java) {
+            installer.install(
+                entry,
+                DictionaryStream(source, 0, content.size.toLong()),
+                progress = { done, total -> progress += done to total }
+            )
+        }
+
+        assertTrue(progress.zipWithNext().all { it.first.first <= it.second.first })
+        assertEquals(content.size.toLong(), progress.last().second)
+        assertEquals(4L, installer.stagedBytes(entry))
+        assertFalse(installer.isInstalled(entry))
+        installer.discardDownload(entry)
+        assertEquals(0, installer.stagedBytes(entry))
     }
 
     private fun entry(content: ByteArray) = PinyinDictionaryCatalogEntry(
