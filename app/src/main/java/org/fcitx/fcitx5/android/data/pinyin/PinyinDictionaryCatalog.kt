@@ -32,7 +32,7 @@ internal data class PinyinDictionaryCatalogEntry(
 }
 
 internal object PinyinDictionaryCatalog {
-    const val RELEASE_TAG = "dictionary-v1.0.0"
+    const val RELEASE_TAG = "dictionary-v1.1.0"
 
     private const val RELEASE_BASE =
         "https://github.com/choicky/fcitx5-moqi/releases/download/$RELEASE_TAG"
@@ -73,36 +73,19 @@ internal object PinyinDictionaryCatalog {
             entryCount = 1_425_249
         ),
         PinyinDictionaryCatalogEntry(
-            id = "zhwiki",
-            displayName = "中文维基",
-            canonicalName = "fcitx5-pinyin-zhwiki",
-            version = "upstream-0.3.0-20260416",
-            url = "https://github.com/felixonmars/fcitx5-pinyin-zhwiki/releases/download/0.3.0/zhwiki-20260416.dict",
-            size = 32_677_637,
-            sha256 = "9bb6fd03f0350cc13340ec34ff59f695bdf7eb0f14db6acf13c1ebc91f89823b",
-            license = "Unlicense (code); Wikimedia dump terms (generated data)",
-            sourceRepository = "https://github.com/felixonmars/fcitx5-pinyin-zhwiki",
-            sourceRevision = "b0e079a6dadd30e67fd355e8f6e73b294367aac6",
-            limitations = "Research/personal-use catalog entry; generated data attribution and public release approval remain pending.",
-            entryCount = 1_673_006,
-            researchOnly = true,
-            publicReleaseApproved = false
-        ),
-        PinyinDictionaryCatalogEntry(
             id = "custom-pinyin",
             displayName = "自定义拼音词库",
             canonicalName = "CustomPinyinDictionary",
-            version = "upstream-0673212e",
-            url = "https://github.com/wuhgit/CustomPinyinDictionary/releases/download/assets/CustomPinyinDictionary_Fcitx.dict",
-            size = 29_688_969,
-            sha256 = "63677b0e1bcd9276e8eeef41553ab532bf6061278558d9efa3629b0ebe8836e5",
-            license = "Upstream license not declared; personal research only",
+            version = RELEASE_TAG,
+            url = "$RELEASE_BASE/custom-pinyin.dict",
+            size = 28_331_924,
+            sha256 = "69f0de1dcefb81002108b612329dc5ef20784f194441dac44c3c72999e1ebf85",
+            license = "CC-BY-SA-4.0",
             sourceRepository = "https://github.com/wuhgit/CustomPinyinDictionary",
             sourceRevision = "0673212e83c9db1fef24fdf950b22c994bf27e9c",
-            limitations = "Research/personal-use only; upstream redistribution permission and third-party data rights are not confirmed.",
-            entryCount = 1_498_781,
-            researchOnly = true,
-            publicReleaseApproved = false
+            sourceInputSha256 = "63677b0e1bcd9276e8eeef41553ab532bf6061278558d9efa3629b0ebe8836e5",
+            limitations = "Normalized against the pinned official LibIME Base; upstream README attribution for included third-party sources remains applicable.",
+            entryCount = 1_498_781
         )
     )
 

@@ -11,8 +11,8 @@ import org.junit.Test
 class PinyinDictionaryCatalogTest {
     @Test
     fun releaseEntriesCarryPinnedArtifactAndSourceMetadata() {
-        assertEquals("dictionary-v1.0.0", PinyinDictionaryCatalog.RELEASE_TAG)
-        assertEquals(4, PinyinDictionaryCatalog.entries.size)
+        assertEquals("dictionary-v1.1.0", PinyinDictionaryCatalog.RELEASE_TAG)
+        assertEquals(3, PinyinDictionaryCatalog.entries.size)
         PinyinDictionaryCatalog.entries.forEach { entry ->
             assertTrue(entry.url.startsWith("https://"))
             assertEquals(64, entry.sha256.length)
@@ -54,20 +54,14 @@ class PinyinDictionaryCatalogTest {
     }
 
     @Test
-    fun researchEntriesCarryPinnedBytesAndAreNotPublicReleaseApproved() {
-        val zhwiki = PinyinDictionaryCatalog.find("zhwiki")!!
-        assertEquals(32_677_637L, zhwiki.size)
-        assertEquals(1_673_006L, zhwiki.entryCount)
-        assertTrue(zhwiki.researchOnly)
-        assertTrue(!zhwiki.publicReleaseApproved)
-        assertEquals("中文维基", zhwiki.displayName)
-
+    fun normalizedCustomEntryUsesProjectReleaseMetadata() {
         val custom = PinyinDictionaryCatalog.find("custom-pinyin")!!
-        assertEquals(29_688_969L, custom.size)
+        assertEquals(28_331_924L, custom.size)
         assertEquals(1_498_781L, custom.entryCount)
-        assertTrue(custom.researchOnly)
-        assertTrue(!custom.publicReleaseApproved)
+        assertEquals("dictionary-v1.1.0", custom.version)
+        assertEquals("CC-BY-SA-4.0", custom.license)
+        assertTrue(!custom.researchOnly)
+        assertTrue(custom.publicReleaseApproved)
         assertEquals("CustomPinyinDictionary", custom.canonicalName)
-
     }
 }
