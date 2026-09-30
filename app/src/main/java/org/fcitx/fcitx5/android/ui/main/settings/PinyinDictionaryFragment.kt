@@ -146,7 +146,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                     showAddOptions()
                 }
                 setViewModel(viewModel)
-                removable = { e -> e is LibIMEDictionary && e !is BuiltinDictionary }
+                removable = { e -> e is LibIMEDictionary }
             }
 
             override fun updateFAB() {
