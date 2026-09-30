@@ -103,6 +103,22 @@ internal object PinyinDictionaryCatalog {
             entryCount = 1_498_781,
             researchOnly = true,
             publicReleaseApproved = false
+        ),
+        PinyinDictionaryCatalogEntry(
+            id = "rime-ice",
+            displayName = "雾凇",
+            canonicalName = "Rime-Ice",
+            version = "phase5c-ice-materialized-20260930",
+            url = "https://github.com/choicky/fcitx5-moqi/releases/download/phase5c-ice-materialized-20260930/rime-ice.dict",
+            size = 33_670_856,
+            sha256 = "d1ee425424834ffa1508583fff4b98c9b4193c03128451dcf6e050f4bd00b2fb",
+            license = "GPL-3.0-only; generated data provenance remains research-only",
+            sourceRepository = "https://github.com/iDvel/rime-ice",
+            sourceRevision = "3aea6d3694fb3d94ec663641f021f788822897ad",
+            limitations = "Rime/Librime-materialized research artifact; public-release approval for combined source data remains pending.",
+            entryCount = 1_885_206,
+            researchOnly = true,
+            publicReleaseApproved = false
         )
     )
 

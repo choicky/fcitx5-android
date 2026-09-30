@@ -12,7 +12,7 @@ class PinyinDictionaryCatalogTest {
     @Test
     fun releaseEntriesCarryPinnedArtifactAndSourceMetadata() {
         assertEquals("dictionary-v1.0.0", PinyinDictionaryCatalog.RELEASE_TAG)
-        assertEquals(4, PinyinDictionaryCatalog.entries.size)
+        assertEquals(5, PinyinDictionaryCatalog.entries.size)
         PinyinDictionaryCatalog.entries.forEach { entry ->
             assertTrue(entry.url.startsWith("https://"))
             assertEquals(64, entry.sha256.length)
@@ -68,5 +68,13 @@ class PinyinDictionaryCatalogTest {
         assertTrue(custom.researchOnly)
         assertTrue(!custom.publicReleaseApproved)
         assertEquals("CustomPinyinDictionary", custom.canonicalName)
+
+        val ice = PinyinDictionaryCatalog.find("rime-ice")!!
+        assertEquals(33_670_856L, ice.size)
+        assertEquals(1_885_206L, ice.entryCount)
+        assertTrue(ice.researchOnly)
+        assertTrue(!ice.publicReleaseApproved)
+        assertEquals("雾凇", ice.displayName)
+        assertEquals("Rime-Ice", ice.canonicalName)
     }
 }
