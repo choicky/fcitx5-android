@@ -60,6 +60,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build debug APK (arm64-v8a)
+        env:
+          DEBUG_SIGN_KEY_BASE64: ${{ secrets.DEBUG_SIGN_KEY_BASE64 }}
+          DEBUG_SIGN_KEY_PWD: ${{ secrets.DEBUG_SIGN_KEY_PWD }}
+          DEBUG_SIGN_KEY_ALIAS: ${{ secrets.DEBUG_SIGN_KEY_ALIAS }}
         run: BUILD_ABI=arm64-v8a ./gradlew :app:testDebugUnitTest :app:assembleDebug
 
       - name: Compile the release variant (Kotlin only, no APK)
@@ -103,6 +107,26 @@ jobs:
               )
           print("APK content checks passed")
           PY
+
+      - name: Verify the fixed debug APK signature
+        env:
+          EXPECTED_DEBUG_CERT_SHA256: 41:70:5B:C9:4F:42:26:FF:FA:E9:60:91:B7:BA:36:F2:C0:55:B6:2A:93:DF:4E:B9:58:9C:A9:96:A3:7C:7A:7E
+        run: |
+          set -euo pipefail
+          apk=$(find app/build/outputs/apk/debug -name '*.apk' -print -quit)
+          test -n "$apk"
+          aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f -print -quit)
+          package=$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")
+          test "$package" = org.fcitx.fcitx5.android.debug
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -print -quit)
+          digest=$("$apksigner" verify --print-certs "$apk" |
+            sed -n 's/.*certificate SHA-256 digest: //p' | head -1 |
+            tr -d ':' | tr '[:lower:]' '[:upper:]')
+          test "${#digest}" = 64
+          cert=$(echo "$digest" | sed 's/../&:/g; s/:$//')
+          echo "APK package: $package"
+          echo "APK certificate SHA-256: $cert"
+          test "$cert" = "$EXPECTED_DEBUG_CERT_SHA256"
 
       - name: Upload APK
         uses: actions/upload-artifact@v7

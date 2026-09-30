@@ -100,13 +100,61 @@ val Project.signKeyPwd: String?
 val Project.signKeyAlias: String?
     get() = epn("SIGN_KEY_ALIAS", "signKeyAlias")
 
-fun NamedDomainObjectContainer<out ApkSigningConfig>.fromProjectEnv(project: Project): ApkSigningConfig? {
-    val keyFile = project.signKey ?: return null
-    val name = "release"
-    return findByName(name) ?: create(name) {
+val Project.debugSignKeyBase64: String?
+    get() = epn("DEBUG_SIGN_KEY_BASE64", "debugSignKeyBase64")
+
+val Project.debugSignKeyPwd: String?
+    get() = epn("DEBUG_SIGN_KEY_PWD", "debugSignKeyPwd")
+
+val Project.debugSignKeyAlias: String?
+    get() = epn("DEBUG_SIGN_KEY_ALIAS", "debugSignKeyAlias")
+
+private var debugSignKeyTempFile: File? = null
+
+@OptIn(ExperimentalEncodingApi::class)
+private fun Project.debugSignKey(): File? {
+    debugSignKeyBase64 ?: return null
+    if (debugSignKeyTempFile?.exists() == true) return debugSignKeyTempFile
+    val buildDir = layout.buildDirectory.asFile.get()
+    buildDir.mkdirs()
+    val file = File.createTempFile("debug-sign-", ".ks", buildDir)
+    return try {
+        file.writeBytes(Base64.decode(debugSignKeyBase64!!))
+        file.deleteOnExit()
+        debugSignKeyTempFile = file
+        file
+    } catch (e: Exception) {
+        file.delete()
+        null
+    }
+}
+
+fun NamedDomainObjectContainer<out ApkSigningConfig>.fromProjectEnv(
+    project: Project,
+    name: String = "release"
+): ApkSigningConfig? {
+    val keyFile: File?
+    val password: String?
+    val alias: String?
+    if (name == "debug") {
+        keyFile = project.debugSignKey()
+        password = project.debugSignKeyPwd
+        alias = project.debugSignKeyAlias
+    } else {
+        keyFile = project.signKey
+        password = project.signKeyPwd
+        alias = project.signKeyAlias
+    }
+    keyFile ?: return null
+    return findByName(name)?.apply {
         storeFile = keyFile
-        storePassword = project.signKeyPwd
-        keyAlias = project.signKeyAlias
-        keyPassword = project.signKeyPwd
+        storePassword = password
+        keyAlias = alias
+        keyPassword = password
+    } ?: create(name) {
+        storeFile = keyFile
+        storePassword = password
+        keyAlias = alias
+        keyPassword = password
     }
 }

@@ -48,6 +48,7 @@ class AndroidAppConventionPlugin : AndroidBaseConventionPlugin() {
                 }
                 debug {
                     applicationIdSuffix = ".debug"
+                    signingConfig = signingConfigs.fromProjectEnv(target, "debug")
                 }
                 all {
                     // remove META-INF/version-control-info.textproto
