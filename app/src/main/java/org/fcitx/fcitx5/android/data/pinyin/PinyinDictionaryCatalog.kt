@@ -35,7 +35,7 @@ internal data class PinyinDictionaryCatalogEntry(
 }
 
 internal object PinyinDictionaryCatalog {
-    const val RELEASE_TAG = "dictionary-v1.1.0"
+    const val RELEASE_TAG = "dictionary-v1.1.1"
 
     private const val RELEASE_BASE =
         "https://github.com/choicky/fcitx5-moqi/releases/download/$RELEASE_TAG"
@@ -87,8 +87,8 @@ internal object PinyinDictionaryCatalog {
             canonicalName = "fcitx5-pinyin-zhwiki",
             version = RELEASE_TAG,
             url = "$RELEASE_BASE/zhwiki.dict",
-            size = 34_353_549,
-            sha256 = "afdbb9118a9759c9d236dde9d2d465521587b9d2156f186382b20825f7762353",
+            size = 34_496_975,
+            sha256 = "9b24a65edc15e6e440cf0bf85308f69dc11359c82abcbea1904da71693eca4a5",
             license = "GFDL-1.3-or-later AND CC-BY-SA-4.0 (Wikimedia data; exceptions apply)",
             licenseUrl = "https://dumps.wikimedia.org/legal.html",
             sourceRepository = "https://github.com/felixonmars/fcitx5-pinyin-zhwiki",
@@ -105,8 +105,8 @@ internal object PinyinDictionaryCatalog {
             canonicalName = "CustomPinyinDictionary",
             version = RELEASE_TAG,
             url = "$RELEASE_BASE/custom-pinyin.dict",
-            size = 28_331_924,
-            sha256 = "69f0de1dcefb81002108b612329dc5ef20784f194441dac44c3c72999e1ebf85",
+            size = 28_438_655,
+            sha256 = "3b0a69679b71a3d3b88e9210906bea340c7633809fa872d2cfb9b53b00fe5555",
             license = "CC-BY-SA-4.0",
             licenseUrl = "https://raw.githubusercontent.com/wuhgit/CustomPinyinDictionary/cf17f96af885cb818c2fad87184f383a52482351/LICENSE",
             sourceRepository = "https://github.com/wuhgit/CustomPinyinDictionary",
