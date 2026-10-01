@@ -264,8 +264,9 @@ class StatusAreaWindow(
     }
 
     override fun onStatusAreaUpdate(actions: Array<Action>) {
+        val toolbarEntries = toolbarEntry()?.let { arrayOf<StatusAreaEntry>(it) } ?: emptyArray()
         adapter.entries = arrayOf(
-            *arrayOfNotNull(toolbarEntry()),
+            *toolbarEntries,
             *staticEntries,
             *Array(actions.size) { StatusAreaEntry.fromAction(actions[it]) }
         )
