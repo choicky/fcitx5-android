@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 package org.fcitx.fcitx5.android.input.bar
 
+import org.fcitx.fcitx5.android.input.bar.ui.ToolbarEditorItemBounds
+import org.fcitx.fcitx5.android.input.bar.ui.toolbarEditorInsertionIndex
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -137,6 +139,30 @@ class ToolbarActionTest {
         assertEquals(ToolbarAction.Default, restored.current)
     }
 
+    @Test fun editorSessionWritesOnlyWhenExplicitlyCommitted() {
+        val session = ToolbarAction.EditorSession(
+            ToolbarAction.editorState(listOf(ToolbarAction.Emoji, ToolbarAction.Voice))
+        )
+        var writes = 0
+        session.update(ToolbarAction.editorDefaultState())
+        assertEquals(0, writes)
+        session.restoreDefault()
+        assertEquals(0, writes)
+        assertEquals(true, session.commit { writes++ })
+        assertEquals(1, writes)
+        assertEquals(false, session.commit { writes++ })
+        assertEquals(1, writes)
+    }
+
+    @Test fun discardedEditorSessionNeverWrites() {
+        val session = ToolbarAction.EditorSession(ToolbarAction.editorDefaultState())
+        var writes = 0
+        session.update(ToolbarAction.editorState(emptyList()))
+        session.discard()
+        assertEquals(false, session.commit { writes++ })
+        assertEquals(0, writes)
+    }
+
     @Test fun toolbarToggleMapsToActionAndDirection() {
         assertEquals(ToolbarAction.ToolbarToggle.Collapse, ToolbarAction.toolbarToggle(true))
         assertEquals(ToolbarAction.ToolbarToggle.Expand, ToolbarAction.toolbarToggle(false))
@@ -166,5 +192,45 @@ class ToolbarActionTest {
         ToolbarAction.editorOrder(listOf(ToolbarAction.TextEditing, ToolbarAction.Emoji,
             ToolbarAction.QuickPhrase, ToolbarAction.Voice, ToolbarAction.Clipboard))
     )
+
+    @Test fun wrappedAvailableInsertionUsesVisualRows() {
+        val bounds = listOf(
+            ToolbarEditorItemBounds(0, 0, 72, 76),
+            ToolbarEditorItemBounds(80, 0, 152, 76),
+            ToolbarEditorItemBounds(160, 0, 232, 76),
+            ToolbarEditorItemBounds(0, 84, 72, 160),
+            ToolbarEditorItemBounds(80, 84, 152, 160),
+        )
+        assertEquals(0, toolbarEditorInsertionIndex(-1, 20, bounds))
+        assertEquals(1, toolbarEditorInsertionIndex(75, 20, bounds))
+        assertEquals(3, toolbarEditorInsertionIndex(250, 20, bounds))
+        assertEquals(3, toolbarEditorInsertionIndex(200, 80, bounds))
+        assertEquals(4, toolbarEditorInsertionIndex(75, 110, bounds))
+        assertEquals(5, toolbarEditorInsertionIndex(160, 140, bounds))
+    }
+
+    @Test fun wrappedAvailableInsertionSupportsCrossContainerAndReorder() {
+        val state = ToolbarAction.editorState(listOf(ToolbarAction.Emoji, ToolbarAction.Voice))
+        val available = listOf(
+            ToolbarEditorItemBounds(0, 0, 72, 76),
+            ToolbarEditorItemBounds(80, 0, 152, 76),
+        )
+        val beforeSecond = toolbarEditorInsertionIndex(75, 20, available)
+        val reordered = ToolbarAction.editorMoveAvailable(
+            state,
+            state.available[0],
+            beforeSecond,
+        )
+        assertEquals(state.available[0], reordered.available[beforeSecond])
+
+        val crossContainerPosition = toolbarEditorInsertionIndex(0, 20, available)
+        val inserted = ToolbarAction.editorInsertAvailable(
+            ToolbarAction.editorInsertCurrent(state, ToolbarAction.TextEditing, 2),
+            ToolbarAction.TextEditing,
+            crossContainerPosition,
+        )
+        assertEquals(false, ToolbarAction.TextEditing in inserted.current)
+        assertEquals(ToolbarAction.TextEditing, inserted.available[crossContainerPosition])
+    }
 
 }

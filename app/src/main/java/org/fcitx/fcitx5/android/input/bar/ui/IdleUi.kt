@@ -62,6 +62,8 @@ class IdleUi(
     private var voiceInputButton = false
     private var voiceInputState = VoiceInputSession.State.Idle
     private var inPrivate = false
+    private var toolbarEditView: View? = null
+    private var toolbarEditing = false
 
     private val disableAnimation by AppPrefs.getInstance().advanced.disableAnimation
 
@@ -73,7 +75,9 @@ class IdleUi(
         contentDescription = ctx.getString(R.string.toolbar_tools)
     }
 
-    val hideKeyboardButton = ToolButton(ctx, R.drawable.ic_baseline_arrow_drop_down_24, theme)
+    val hideKeyboardButton = ToolButton(ctx, R.drawable.ic_baseline_arrow_drop_down_24, theme).apply {
+        contentDescription = ctx.getString(R.string.hide_keyboard)
+    }
 
     val emptyBar = Space(ctx)
 
@@ -160,7 +164,42 @@ class IdleUi(
     }
 
     private fun renderToolbar(actions: List<ToolbarAction>) {
+        if (toolbarEditing) return
         buttonsUi.render(actions.filter { it != ToolbarAction.Voice || voiceInputButton })
+    }
+
+    fun enterToolbarEdit(editor: ToolbarEditorUi) {
+        if (toolbarEditing) return
+        toolbarEditing = true
+        val editView = editor.currentRoot
+        toolbarEditView = editView
+        animator.add(editView, lParams(matchParent, matchParent))
+        animator.displayedChild = animator.indexOfChild(editView)
+        toolsButton.isEnabled = false
+        hideKeyboardButton.isEnabled = false
+        toolsButton.alpha = 0.55f
+        hideKeyboardButton.alpha = 0.55f
+    }
+
+    fun exitToolbarEdit() {
+        if (!toolbarEditing) return
+        toolbarEditing = false
+        toolbarEditView?.let {
+            animator.removeView(it)
+            toolbarEditView = null
+        }
+        toolsButton.isEnabled = true
+        hideKeyboardButton.isEnabled = true
+        toolsButton.alpha = 1f
+        hideKeyboardButton.alpha = 1f
+        renderToolbar(ToolbarAction.decode(toolbarActions.getValue()))
+        animator.displayedChild = when (currentState) {
+            State.Empty -> 0
+            State.Toolbar -> 1
+            State.Clipboard -> 2
+            State.InlineSuggestion -> 3
+            State.NumberRow -> 0
+        }
     }
 
     internal fun setVoiceInputState(state: VoiceInputSession.State) {
