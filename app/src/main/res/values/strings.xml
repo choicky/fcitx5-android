@@ -319,6 +319,9 @@
     <string name="redo">Redo</string>
     <string name="status_area">Status area</string>
     <string name="toolbar_tools">Tools</string>
+    <string name="edit_toolbar">Edit toolbar</string>
+    <string name="quickphrase">Quick Phrase</string>
+    <string name="restore_default">Restore default</string>
     <string name="expand_candidates_list">Expand candidates list</string>
     <string name="hide_candidates_list">Hide candidates list</string>
     <string name="switch_to_voice_input">Switch to voice input</string>

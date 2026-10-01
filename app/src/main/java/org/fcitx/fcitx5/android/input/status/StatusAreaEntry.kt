@@ -20,7 +20,9 @@ sealed class StatusAreaEntry(
             InputMethod,
             ReloadConfig,
             Keyboard,
-            ThemeList
+            ThemeList,
+            ToolbarCollapse,
+            ToolbarCustomize
         }
     }
 

@@ -15,10 +15,12 @@ import android.view.animation.AnimationSet
 import android.view.animation.TranslateAnimation
 import android.widget.Space
 import android.widget.ViewAnimator
+import androidx.annotation.Keep
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.bar.KawaiiBarComponent
+import org.fcitx.fcitx5.android.input.bar.ToolbarAction
 import org.fcitx.fcitx5.android.input.bar.ui.idle.ButtonsBarUi
 import org.fcitx.fcitx5.android.input.bar.ui.idle.ClipboardSuggestionUi
 import org.fcitx.fcitx5.android.input.bar.ui.idle.InlineSuggestionsUi
@@ -67,7 +69,7 @@ class IdleUi(
         if (ctx.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_LTR) 1f else -1f
     }
 
-    val toolsButton = ToolButton(ctx, R.drawable.ic_baseline_more_horiz_24, theme).apply {
+    val toolsButton = ToolButton(ctx, R.drawable.ic_baseline_widgets_24, theme).apply {
         contentDescription = ctx.getString(R.string.toolbar_tools)
     }
 
@@ -76,6 +78,13 @@ class IdleUi(
     val emptyBar = Space(ctx)
 
     val buttonsUi = ButtonsBarUi(ctx, theme)
+    private val toolbarActions = AppPrefs.getInstance().internal.toolbarActions
+
+    @Keep
+    private val toolbarActionsListener =
+        org.fcitx.fcitx5.android.data.prefs.ManagedPreference.OnChangeListener<String> { _, value ->
+            buttonsUi.render(ToolbarAction.decode(value))
+        }
 
     val clipboardUi = ClipboardSuggestionUi(ctx, theme)
 
@@ -86,6 +95,7 @@ class IdleUi(
     val inlineSuggestionsBar = InlineSuggestionsUi(ctx)
 
     private val animator = ViewAnimator(ctx).apply {
+        buttonsUi.render(ToolbarAction.decode(toolbarActions.getValue()))
         add(emptyBar, lParams(matchParent, matchParent))
         add(buttonsUi.root, lParams(matchParent, matchParent))
         add(clipboardUi.root, lParams(matchParent, matchParent))
@@ -129,6 +139,10 @@ class IdleUi(
     override val root = frameLayout {
         add(idleBody, lParams(matchParent, matchParent))
         add(numberRow, lParams(matchParent, matchParent))
+    }
+
+    init {
+        toolbarActions.registerOnChangeListener(toolbarActionsListener)
     }
 
     fun privateMode(activate: Boolean = true) {

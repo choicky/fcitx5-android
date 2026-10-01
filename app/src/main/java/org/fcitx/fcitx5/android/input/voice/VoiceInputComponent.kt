@@ -34,7 +34,6 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     ManagedHandler by managedHandler(), InputBroadcastReceiver {
 
     private val service by manager.inputMethodService()
-    private val showVoiceInputButton by AppPrefs.getInstance().voice.showVoiceInputButton
     private val selectionStore = VoiceSelectionStore(AppPrefs.getInstance()) {
         VoiceSelectionStore.lastErrorFile(service)
     }
@@ -211,7 +210,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     fun shouldShowVoiceInput(capFlags: CapabilityFlags): Boolean {
         passwordField = capFlags.has(CapabilityFlag.Password)
-        return showVoiceInputButton && !passwordField && resolution.offersTrigger
+        return !passwordField && resolution.offersTrigger
     }
 
     override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: CapabilityFlags) {

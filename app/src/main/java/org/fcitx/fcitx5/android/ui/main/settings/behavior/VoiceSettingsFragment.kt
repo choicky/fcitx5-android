@@ -265,15 +265,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             ) { editInstance(null) }
         }
 
-        screen.addCategory(R.string.voice_section_other) {
-            addPreference(MySwitchPreference(ctx).apply {
-                key = prefs.voice.showVoiceInputButton.key
-                setTitle(R.string.show_voice_input_button)
-                isIconSpaceReserved = false
-                isSingleLineTitle = false
-                setDefaultValue(prefs.voice.showVoiceInputButton.defaultValue)
-            })
-        }
     }
 
     /** A switch that is not bound to a preference key; [onChange] stores the value. */

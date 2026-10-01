@@ -8,6 +8,9 @@ import android.os.Build
 import android.view.View
 import android.widget.PopupMenu
 import android.widget.Toast
+import android.widget.Button
+import android.widget.CheckBox
+import android.widget.LinearLayout
 import androidx.core.text.buildSpannedString
 import androidx.core.text.color
 import androidx.lifecycle.lifecycleScope
@@ -17,8 +20,8 @@ import org.fcitx.fcitx5.android.core.Action
 import org.fcitx.fcitx5.android.core.SubtypeManager
 import org.fcitx.fcitx5.android.daemon.FcitxConnection
 import org.fcitx.fcitx5.android.daemon.launchOnReady
-import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
+import org.fcitx.fcitx5.android.input.bar.ToolbarAction
 import org.fcitx.fcitx5.android.input.FcitxInputMethodService
 import org.fcitx.fcitx5.android.input.bar.ui.ToolButton
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
@@ -32,6 +35,7 @@ import org.fcitx.fcitx5.android.input.status.StatusAreaEntry.Android.Type.Reload
 import org.fcitx.fcitx5.android.input.status.StatusAreaEntry.Android.Type.ThemeList
 import org.fcitx.fcitx5.android.input.wm.InputWindow
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.utils.AppUtil
 import org.fcitx.fcitx5.android.utils.DeviceUtil
 import org.fcitx.fcitx5.android.utils.alpha
@@ -45,7 +49,11 @@ import splitties.views.dsl.core.lParams
 import splitties.views.dsl.recyclerview.recyclerView
 import splitties.views.recyclerview.gridLayoutManager
 
-class StatusAreaWindow : InputWindow.ExtendedInputWindow<StatusAreaWindow>(),
+data class ToolbarControls(val isExpanded: () -> Boolean, val toggle: () -> Unit)
+
+class StatusAreaWindow(
+    private val toolbarControls: ToolbarControls? = null
+) : InputWindow.ExtendedInputWindow<StatusAreaWindow>(),
     InputBroadcastReceiver {
 
     private val service: FcitxInputMethodService by manager.inputMethodService()
@@ -76,8 +84,87 @@ class StatusAreaWindow : InputWindow.ExtendedInputWindow<StatusAreaWindow>(),
                 context.getString(R.string.virtual_keyboard),
                 R.drawable.ic_baseline_keyboard_24,
                 Keyboard
+            ),
+            StatusAreaEntry.Android(
+                context.getString(R.string.edit_toolbar),
+                R.drawable.ic_baseline_edit_24,
+                ToolbarCustomize
             )
         )
+    }
+
+    private fun toolbarEntry() = toolbarControls?.let {
+        StatusAreaEntry.Android(
+            context.getString(if (it.isExpanded()) R.string.hide_toolbar else R.string.expand_toolbar),
+            R.drawable.ic_baseline_expand_more_24,
+            ToolbarCollapse
+        )
+    }
+
+    private fun showToolbarEditor() {
+        val preference = AppPrefs.getInstance().internal.toolbarActions
+        var actions = ToolbarAction.decode(preference.getValue())
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), 0, dp(20), 0)
+        }
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle(R.string.edit_toolbar)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                preference.setValue(ToolbarAction.encode(actions))
+                preference.fireChange()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        fun label(action: ToolbarAction) = context.getString(
+            when (action) {
+                ToolbarAction.Emoji -> R.string.emoji_and_symbols
+                ToolbarAction.QuickPhrase -> R.string.quickphrase
+                ToolbarAction.Voice -> R.string.voice_input
+                ToolbarAction.Clipboard -> R.string.clipboard
+                ToolbarAction.TextEditing -> R.string.text_editing
+                ToolbarAction.Undo -> R.string.undo
+                ToolbarAction.Redo -> R.string.redo
+            }
+        )
+        fun render() {
+            container.removeAllViews()
+            ToolbarAction.All.forEach { action ->
+                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                val check = CheckBox(context).apply {
+                    text = label(action)
+                    isChecked = action in actions
+                    setOnCheckedChangeListener { _, checked ->
+                        actions = if (checked) (actions + action).distinct() else actions - action
+                    }
+                }
+                row.addView(check, LinearLayout.LayoutParams(0, dp(48), 1f))
+                Button(context).apply {
+                    text = "↑"
+                    setOnClickListener {
+                        val index = actions.indexOf(action)
+                        if (index > 0) actions = actions.toMutableList().apply { add(index - 1, removeAt(index)) }
+                        render()
+                    }
+                }.also { row.addView(it, LinearLayout.LayoutParams(dp(48), dp(48))) }
+                Button(context).apply {
+                    text = "↓"
+                    setOnClickListener {
+                        val index = actions.indexOf(action)
+                        if (index >= 0 && index < actions.lastIndex) actions = actions.toMutableList().apply { add(index + 1, removeAt(index)) }
+                        render()
+                    }
+                }.also { row.addView(it, LinearLayout.LayoutParams(dp(48), dp(48))) }
+                container.addView(row)
+            }
+            Button(context).apply {
+                text = context.getString(R.string.restore_default)
+                setOnClickListener { actions = ToolbarAction.Default; render() }
+            }.also { container.addView(it) }
+        }
+        render()
+        dialog.show()
     }
 
     private fun activateAction(action: Action) {
@@ -152,6 +239,8 @@ class StatusAreaWindow : InputWindow.ExtendedInputWindow<StatusAreaWindow>(),
                         }
                         Keyboard -> AppUtil.launchMainToKeyboard(context)
                         ThemeList -> AppUtil.launchMainToThemeList(context)
+                        ToolbarCollapse -> toolbarControls?.toggle()
+                        ToolbarCustomize -> showToolbarEditor()
                     }
                 }
             }
@@ -174,6 +263,7 @@ class StatusAreaWindow : InputWindow.ExtendedInputWindow<StatusAreaWindow>(),
 
     override fun onStatusAreaUpdate(actions: Array<Action>) {
         adapter.entries = arrayOf(
+            *listOfNotNull(toolbarEntry()),
             *staticEntries,
             *Array(actions.size) { StatusAreaEntry.fromAction(actions[it]) }
         )
