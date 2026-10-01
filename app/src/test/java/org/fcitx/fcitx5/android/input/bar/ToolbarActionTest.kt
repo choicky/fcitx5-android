@@ -101,7 +101,7 @@ class ToolbarActionTest {
         val state = ToolbarAction.editorState(listOf(ToolbarAction.Voice, ToolbarAction.Emoji))
         assertEquals(listOf(ToolbarAction.Voice, ToolbarAction.Emoji), state.current)
         assertEquals(ToolbarAction.All.filterNot { it in state.current }, state.available)
-        assertEquals(ToolbarAction.All, (state.current + state.available).distinct())
+        assertEquals(ToolbarAction.All.toSet(), (state.current + state.available).toSet())
     }
 
     @Test fun zeroAndAllActionsAreValidEditorConfigurations() {
