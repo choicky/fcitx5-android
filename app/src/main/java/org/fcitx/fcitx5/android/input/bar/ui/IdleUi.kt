@@ -9,6 +9,7 @@ import android.transition.Slide
 import android.transition.TransitionManager
 import android.transition.TransitionSet
 import android.view.View
+import android.view.ViewGroup
 import android.view.Gravity
 import android.view.animation.AlphaAnimation
 import android.view.animation.AnimationSet
@@ -173,7 +174,7 @@ class IdleUi(
         toolbarEditing = true
         val editView = editor.currentRoot
         toolbarEditView = editView
-        animator.add(editView, lParams(matchParent, matchParent))
+        animator.addView(editView, ViewGroup.LayoutParams(matchParent, matchParent))
         animator.displayedChild = animator.indexOfChild(editView)
         toolsButton.isEnabled = false
         hideKeyboardButton.isEnabled = false

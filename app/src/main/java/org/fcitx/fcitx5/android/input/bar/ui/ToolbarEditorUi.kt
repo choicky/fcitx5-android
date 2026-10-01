@@ -47,7 +47,7 @@ class ToolbarEditorUi(
 
     private val currentScroll = HorizontalScrollView(ctx).apply {
         isHorizontalScrollBarEnabled = false
-        fillViewport = true
+        isFillViewport = true
         setOnDragListener(dropListener { event, x, y ->
             dropIntoCurrent(event, x + scrollX, y)
         })
