@@ -21,6 +21,34 @@ enum class ToolbarAction(val id: String, @DrawableRes val icon: Int) {
         val available: List<ToolbarAction>
     )
 
+    /** In-memory transaction for one inline editor session; it has no preference access. */
+    class EditorSession(initial: EditorState) {
+        val initialState = initial
+        var state = initial
+            private set
+        private var closed = false
+
+        fun update(next: EditorState) {
+            check(!closed) { "toolbar editor session is closed" }
+            state = next
+        }
+
+        fun restoreDefault() {
+            update(ToolbarAction.editorDefaultState())
+        }
+
+        fun discard() {
+            closed = true
+        }
+
+        fun commit(persist: (EditorState) -> Unit): Boolean {
+            if (closed) return false
+            persist(state)
+            closed = true
+            return true
+        }
+    }
+
     sealed class PresentationResult {
         data class Fits(val actions: List<ToolbarAction>) : PresentationResult()
         data class StillInsufficient(val actions: List<ToolbarAction>) : PresentationResult()

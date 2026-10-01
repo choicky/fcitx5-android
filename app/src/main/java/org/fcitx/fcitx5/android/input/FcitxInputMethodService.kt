@@ -149,6 +149,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     )
 
     private fun replaceInputView(theme: Theme): InputView {
+        inputView?.discardToolbarEditorForTeardown()
         val newInputView = InputView(this, fcitx, theme)
         setInputView(newInputView)
         inputDeviceMgr.setInputView(newInputView)
@@ -656,6 +657,9 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && inputView?.handleToolbarEditorBack() == true) {
+            return true
+        }
         inputView?.cancelVoiceInput()
         // request to show floating CandidatesView when pressing physical keyboard
         if (inputDeviceMgr.evaluateOnKeyDown(event, this)) {
@@ -1065,6 +1069,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         Timber.d("onFinishInputView: finishingInput=$finishingInput")
         decorLocationUpdated = false
         inputDeviceMgr.onFinishInputView()
+        inputView?.discardToolbarEditorForTeardown()
         inputView?.cancelVoiceInput()
         currentInputConnection?.apply {
             finishComposingText()
@@ -1099,6 +1104,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     }
 
     override fun onDestroy() {
+        inputView?.discardToolbarEditorForTeardown()
         inputView?.finishVoiceInput()
         recreateInputViewPrefs.forEach {
             it.unregisterOnChangeListener(recreateInputViewListener)

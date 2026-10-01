@@ -47,6 +47,7 @@ import org.fcitx.fcitx5.android.input.bar.ui.CandidateUi
 import org.fcitx.fcitx5.android.input.bar.ui.IdleUi
 import org.fcitx.fcitx5.android.input.bar.ui.TitleUi
 import org.fcitx.fcitx5.android.input.bar.ui.ToolButton
+import org.fcitx.fcitx5.android.input.bar.ui.ToolbarEditorUi
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.candidates.expanded.ExpandedCandidateStyle
 import org.fcitx.fcitx5.android.input.candidates.expanded.window.FlexboxExpandedCandidateWindow
@@ -100,6 +101,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val voiceInput: VoiceInputComponent by manager.must()
 
     private val prefs = AppPrefs.getInstance()
+    private val toolbarActions = prefs.internal.toolbarActions
 
     private val clipboardSuggestion = prefs.clipboard.clipboardSuggestion
     private val clipboardItemTimeout = prefs.clipboard.clipboardItemTimeout
@@ -118,6 +120,9 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
 
     private var numberRowState = NumberRowState.Auto
     private var isToolbarCollapsed = false
+    private var toolbarEditorSession: ToolbarAction.EditorSession? = null
+    private var toolbarEditorUi: ToolbarEditorUi? = null
+    private var toolbarEditorWindow: ToolbarEditorWindow? = null
 
     @Keep
     private val onClipboardUpdateListener =
@@ -258,7 +263,8 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                             if (isToolbarCollapsed) idleUi.updateState(IdleUi.State.Empty, true)
                             else idleUi.updateState(IdleUi.State.Toolbar, true)
                             windowManager.attachWindow(KeyboardWindow)
-                        }
+                        },
+                        edit = { enterToolbarEdit() }
                     )
                 ))
                 if (clipboardTimeoutJob != null) {
@@ -318,6 +324,67 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                 }
             }
         }
+    }
+
+    private fun enterToolbarEdit() {
+        if (toolbarEditorSession != null) return
+        val initial = ToolbarAction.editorState(ToolbarAction.decode(toolbarActions.getValue()))
+        toolbarEditorSession = ToolbarAction.EditorSession(initial)
+        val editor = ToolbarEditorUi(
+            context,
+            theme,
+            initial,
+            onStateChanged = { toolbarEditorSession?.update(it) },
+            onRestore = {
+                val restored = ToolbarAction.editorDefaultState()
+                toolbarEditorSession?.restoreDefault()
+                toolbarEditorUi?.setState(restored, resetCurrentScroll = true)
+            },
+            onCancel = { discardToolbarEdit() },
+            onOk = { commitToolbarEdit() },
+        )
+        toolbarEditorUi = editor
+        idleUi.enterToolbarEdit(editor)
+        val window = ToolbarEditorWindow(editor)
+        toolbarEditorWindow = window
+        windowManager.attachWindow(window)
+    }
+
+    private fun commitToolbarEdit() {
+        val session = toolbarEditorSession ?: return
+        if (!session.commit { state ->
+                toolbarActions.setValue(ToolbarAction.encode(state.current))
+                toolbarActions.fireChange()
+            }) return
+        finishToolbarEdit(restoreKeyboard = true)
+    }
+
+    private fun discardToolbarEdit(restoreKeyboard: Boolean = true) {
+        if (toolbarEditorSession == null) return
+        toolbarEditorSession?.discard()
+        finishToolbarEdit(restoreKeyboard)
+    }
+
+    private fun finishToolbarEdit(restoreKeyboard: Boolean) {
+        toolbarEditorSession = null
+        toolbarEditorUi = null
+        toolbarEditorWindow = null
+        idleUi.exitToolbarEdit()
+        if (restoreKeyboard && !windowManager.isAttached(KeyboardWindow)) {
+            windowManager.attachWindow(KeyboardWindow)
+        }
+    }
+
+    /** Returns true when Back was consumed by the transient editor session. */
+    fun handleToolbarEditorBack(): Boolean {
+        if (toolbarEditorSession == null) return false
+        discardToolbarEdit()
+        return true
+    }
+
+    /** Teardown path: discard without writing and let the caller restore the body. */
+    fun discardToolbarEditorForTeardown() {
+        discardToolbarEdit(restoreKeyboard = false)
     }
 
     private val candidateUi by lazy {
@@ -420,6 +487,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     }
 
     override fun onStartInput(info: EditorInfo, capFlags: CapabilityFlags) {
+        discardToolbarEdit(restoreKeyboard = false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             idleUi.privateMode(info.imeOptions.hasFlag(EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING))
         }
@@ -446,6 +514,9 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     }
 
     override fun onWindowAttached(window: InputWindow) {
+        if (toolbarEditorSession != null && window !== toolbarEditorWindow) {
+            discardToolbarEdit(restoreKeyboard = false)
+        }
         when (window) {
             is InputWindow.ExtendedInputWindow<*> -> {
                 titleUi.setTitle(window.title)

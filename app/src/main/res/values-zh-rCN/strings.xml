@@ -324,6 +324,8 @@
     <string name="toolbar_available_actions">可用操作</string>
     <string name="quickphrase">快捷短语</string>
     <string name="restore_default">恢复默认</string>
+    <string name="toolbar_add_action">将%1$s添加到工具栏</string>
+    <string name="toolbar_remove_action">从工具栏移除%1$s</string>
     <string name="expand_candidates_list">展开候选词列表</string>
     <string name="hide_candidates_list">隐藏</string>
     <string name="switch_to_voice_input">切换到语音输入</string>

@@ -343,6 +343,10 @@ class InputView(
 
     fun finishVoiceInput() = voiceInput.close()
 
+    fun handleToolbarEditorBack(): Boolean = kawaiiBar.handleToolbarEditorBack()
+
+    fun discardToolbarEditorForTeardown() = kawaiiBar.discardToolbarEditorForTeardown()
+
     override fun onStartHandleFcitxEvent() {
         val inputPanelData = fcitx.runImmediately { inputPanelCached }
         val inputMethodEntry = fcitx.runImmediately { inputMethodEntryCached }
