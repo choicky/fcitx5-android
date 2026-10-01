@@ -59,7 +59,7 @@ class ToolbarActionTest {
         )
     )
 
-    @Test fun narrowToolbarSuppressesQuickPhraseThenEmojiOnly() {
+    @Test fun narrowToolbarSuppressesInAcceptedOrderAndKeepsConfiguredState() {
         val actions = ToolbarAction.Default
         assertEquals(
             ToolbarAction.PresentationResult.Fits(
@@ -73,9 +73,17 @@ class ToolbarActionTest {
             ), ToolbarAction.presentationActions(actions) { it.size <= 3 }
         )
         assertEquals(
-            ToolbarAction.PresentationResult.StillInsufficient(
-                listOf(ToolbarAction.Voice, ToolbarAction.Clipboard, ToolbarAction.TextEditing)
+            ToolbarAction.PresentationResult.Fits(
+                listOf(ToolbarAction.Voice, ToolbarAction.Clipboard)
             ), ToolbarAction.presentationActions(actions) { it.size <= 2 }
+        )
+        assertEquals(
+            ToolbarAction.PresentationResult.Fits(listOf(ToolbarAction.Voice)),
+            ToolbarAction.presentationActions(actions) { it.size <= 1 }
+        )
+        assertEquals(
+            ToolbarAction.PresentationResult.StillInsufficient(listOf(ToolbarAction.Voice)),
+            ToolbarAction.presentationActions(actions) { it.isEmpty() }
         )
         assertEquals(actions, ToolbarAction.Default)
     }

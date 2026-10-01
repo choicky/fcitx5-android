@@ -1,10 +1,18 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 package org.fcitx.fcitx5.android.input.bar
 
+import androidx.annotation.DrawableRes
+import org.fcitx.fcitx5.android.R
+
 /** The configurable middle section of the keyboard toolbar. */
-enum class ToolbarAction(val id: String) {
-    Emoji("emoji"), QuickPhrase("quick_phrase"), Voice("voice"), Clipboard("clipboard"),
-    TextEditing("text_editing"), Undo("undo"), Redo("redo");
+enum class ToolbarAction(val id: String, @DrawableRes val icon: Int) {
+    Emoji("emoji", R.drawable.ic_baseline_tag_faces_24),
+    QuickPhrase("quick_phrase", R.drawable.ic_baseline_emoji_objects_24),
+    Voice("voice", R.drawable.ic_baseline_keyboard_voice_24),
+    Clipboard("clipboard", R.drawable.ic_clipboard),
+    TextEditing("text_editing", R.drawable.ic_cursor_move),
+    Undo("undo", R.drawable.ic_baseline_undo_24),
+    Redo("redo", R.drawable.ic_baseline_redo_24);
 
     enum class ToolbarToggle { Collapse, Expand }
 
@@ -53,16 +61,17 @@ enum class ToolbarAction(val id: String) {
             return insertAt(normalized, action, adjusted)
         }
 
-        /** Presentation-only suppression; the unresolved post-Emoji state remains explicit. */
+        /** Presentation-only suppression; the final non-fit state remains explicit. */
         fun presentationActions(
             actions: List<ToolbarAction>, fits: (List<ToolbarAction>) -> Boolean
         ): PresentationResult {
             val normalized = normalize(actions)
             if (fits(normalized)) return PresentationResult.Fits(normalized)
             val suppressed = normalized.toMutableList()
-            if (ToolbarAction.QuickPhrase in suppressed) suppressed.remove(ToolbarAction.QuickPhrase)
-            if (fits(suppressed)) return PresentationResult.Fits(suppressed)
-            if (ToolbarAction.Emoji in suppressed) suppressed.remove(ToolbarAction.Emoji)
+            listOf(QuickPhrase, Emoji, TextEditing, Clipboard).forEach { action ->
+                if (action in suppressed) suppressed.remove(action)
+                if (fits(suppressed)) return PresentationResult.Fits(suppressed)
+            }
             return if (fits(suppressed)) {
                 PresentationResult.Fits(suppressed)
             } else {

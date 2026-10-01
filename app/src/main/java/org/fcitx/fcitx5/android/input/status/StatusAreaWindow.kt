@@ -8,10 +8,13 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.os.Build
 import android.view.View
+import android.view.Gravity
+import android.view.WindowManager
 import android.widget.PopupMenu
 import android.widget.Toast
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.text.buildSpannedString
 import androidx.core.text.color
@@ -113,25 +116,50 @@ class StatusAreaWindow(
     private fun showToolbarEditor() {
         val preference = AppPrefs.getInstance().internal.toolbarActions
         var actions = ToolbarAction.decode(preference.getValue())
-        val container = LinearLayout(context).apply {
+        val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(context.dp(20), 0, context.dp(20), 0)
+        }
+        val scroll = ScrollView(context).apply {
+            isFillViewport = true
+            addView(content, ScrollView.LayoutParams(
+                ScrollView.LayoutParams.MATCH_PARENT,
+                ScrollView.LayoutParams.WRAP_CONTENT
+            ))
         }
         val currentContainer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         val availableContainer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         val footer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        container.addView(currentContainer)
-        container.addView(availableContainer)
-        container.addView(footer)
+        content.addView(currentContainer)
+        content.addView(availableContainer)
+        content.addView(footer)
         val dialog = AlertDialog.Builder(context)
             .setTitle(R.string.edit_toolbar)
-            .setView(container)
+            .setView(scroll)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 preference.setValue(ToolbarAction.encode(actions))
                 preference.fireChange()
             }
             .setNegativeButton(android.R.string.cancel, null)
             .create()
+        dialog.setOnShowListener {
+            dialog.window?.apply {
+                attributes = attributes.apply { gravity = Gravity.BOTTOM }
+                val keyboardPrefs = AppPrefs.getInstance().keyboard
+                val measuredCharacterAreaHeight = windowManager.view.height
+                val characterAreaHeight = if (measuredCharacterAreaHeight > 0) {
+                    measuredCharacterAreaHeight
+                } else {
+                    val percent = if (context.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+                        keyboardPrefs.keyboardHeightPercentLandscape.getValue()
+                    } else {
+                        keyboardPrefs.keyboardHeightPercent.getValue()
+                    }
+                    context.resources.displayMetrics.heightPixels * percent / 100
+                }.coerceAtLeast(context.dp(180))
+                setLayout(WindowManager.LayoutParams.MATCH_PARENT, characterAreaHeight)
+            }
+        }
         fun label(action: ToolbarAction) = context.getString(
             when (action) {
                 ToolbarAction.Emoji -> R.string.emoji_and_symbols
@@ -196,6 +224,10 @@ class StatusAreaWindow(
             actions.forEachIndexed { index, action ->
                 currentContainer.addView(insertionZone(index))
                 val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                ToolButton(context, action.icon, theme).apply {
+                    isClickable = false
+                    isFocusable = false
+                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(48), context.dp(48))) }
                 val labelView = TextView(context).apply {
                     text = label(action)
                 }
@@ -212,6 +244,10 @@ class StatusAreaWindow(
 
             ToolbarAction.All.filterNot { it in actions }.forEach { action ->
                 val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                ToolButton(context, action.icon, theme).apply {
+                    isClickable = false
+                    isFocusable = false
+                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(48), context.dp(48))) }
                 val labelView = TextView(context).apply {
                     text = label(action)
                 }
