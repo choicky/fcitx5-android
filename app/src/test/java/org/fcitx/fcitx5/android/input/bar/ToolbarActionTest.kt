@@ -1,0 +1,30 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+package org.fcitx.fcitx5.android.input.bar
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class ToolbarActionTest {
+    @Test fun defaultOrderIsStable() = assertEquals(
+        listOf(ToolbarAction.Emoji, ToolbarAction.QuickPhrase, ToolbarAction.Voice,
+            ToolbarAction.Clipboard, ToolbarAction.TextEditing), ToolbarAction.Default
+    )
+
+    @Test fun hiddenAndUnknownActionsAreNotRendered() = assertEquals(
+        listOf(ToolbarAction.Emoji, ToolbarAction.TextEditing),
+        ToolbarAction.decode("emoji,unknown,text_editing,emoji")
+    )
+
+    @Test fun persistenceRoundTripPreservesReorder() {
+        val reordered = listOf(ToolbarAction.Undo, ToolbarAction.Emoji, ToolbarAction.Voice)
+        assertEquals(reordered, ToolbarAction.decode(ToolbarAction.encode(reordered)))
+    }
+
+    @Test fun invalidStoredValueRestoresDefault() = assertEquals(
+        ToolbarAction.Default, ToolbarAction.decode("unknown")
+    )
+
+    @Test fun fixedEdgesAreNotPartOfActionPool() {
+        assertEquals(ToolbarAction.All, ToolbarAction.Default + listOf(ToolbarAction.Undo, ToolbarAction.Redo))
+    }
+}

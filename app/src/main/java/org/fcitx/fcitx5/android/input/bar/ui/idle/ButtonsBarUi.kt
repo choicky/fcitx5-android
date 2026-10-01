@@ -12,6 +12,7 @@ import com.google.android.flexbox.JustifyContent
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.bar.ui.ToolButton
+import org.fcitx.fcitx5.android.input.bar.ToolbarAction
 import splitties.dimensions.dp
 import splitties.views.dsl.core.Ui
 import splitties.views.dsl.core.view
@@ -46,6 +47,24 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
 
     val clipboardButton = toolButton(R.drawable.ic_clipboard).apply {
         contentDescription = ctx.getString(R.string.clipboard)
+    }
+
+    val quickPhraseButton = toolButton(R.drawable.ic_baseline_emoji_objects_24).apply {
+        contentDescription = ctx.getString(R.string.quickphrase)
+    }
+    val emojiButton = toolButton(R.drawable.ic_baseline_tag_faces_24).apply {
+        contentDescription = ctx.getString(R.string.emoji_and_symbols)
+    }
+    private val buttons = mapOf(
+        ToolbarAction.Emoji to emojiButton, ToolbarAction.QuickPhrase to quickPhraseButton,
+        ToolbarAction.Voice to voiceInputButton, ToolbarAction.Clipboard to clipboardButton,
+        ToolbarAction.TextEditing to cursorMoveButton, ToolbarAction.Undo to undoButton,
+        ToolbarAction.Redo to redoButton,
+    )
+
+    fun render(actions: List<ToolbarAction>) {
+        root.removeAllViews()
+        actions.forEach { action -> buttons[action]?.let(root::addView) }
     }
 
 }

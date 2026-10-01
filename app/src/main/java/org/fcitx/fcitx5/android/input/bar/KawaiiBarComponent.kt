@@ -55,20 +55,23 @@ import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateC
 import org.fcitx.fcitx5.android.input.clipboard.ClipboardWindow
 import org.fcitx.fcitx5.android.input.dependency.UniqueViewComponent
 import org.fcitx.fcitx5.android.input.dependency.context
+import org.fcitx.fcitx5.android.input.dependency.fcitx
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.input.dependency.theme
 import org.fcitx.fcitx5.android.input.editing.TextEditingWindow
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
 import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView
-import org.fcitx.fcitx5.android.input.keyboard.KeyboardWindow
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
+import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.status.StatusAreaWindow
+import org.fcitx.fcitx5.android.input.status.ToolbarControls
 import org.fcitx.fcitx5.android.input.voice.VoiceInputComponent
 import org.fcitx.fcitx5.android.input.wm.InputWindow
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.fcitx.fcitx5.android.utils.AppUtil
 import org.mechdancer.dependency.DynamicScope
 import org.mechdancer.dependency.manager.must
+import org.fcitx.fcitx5.android.daemon.launchOnReady
 import splitties.bitflags.hasFlag
 import splitties.dimensions.dp
 import splitties.views.backgroundColor
@@ -89,6 +92,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val context by manager.context()
     private val theme by manager.theme()
     private val service by manager.inputMethodService()
+    private val fcitx by manager.fcitx()
     private val windowManager: InputWindowManager by manager.must()
     private val horizontalCandidate: HorizontalCandidateComponent by manager.must()
     private val commonKeyActionListener: CommonKeyActionListener by manager.must()
@@ -113,6 +117,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private enum class NumberRowState { Auto, ForceShow, ForceHide }
 
     private var numberRowState = NumberRowState.Auto
+    private var isToolbarManuallyToggled = false
 
     @Keep
     private val onClipboardUpdateListener =
@@ -175,7 +180,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
             isClipboardFresh -> IdleUi.State.Clipboard
             isInlineSuggestionPresent -> IdleUi.State.InlineSuggestion
             isCapabilityFlagsPassword && !isKeyboardLayoutNumber && numberRowState != NumberRowState.ForceHide -> IdleUi.State.NumberRow
-            else -> IdleUi.State.Toolbar
+            else -> if (isToolbarManuallyToggled) IdleUi.State.Empty else IdleUi.State.Toolbar
         }
         if (newState == idleUi.currentState) return
         idleUi.updateState(newState, fromUser)
@@ -245,7 +250,17 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val idleUi: IdleUi by lazy {
         IdleUi(context, theme, popup, commonKeyActionListener).apply {
             toolsButton.setOnClickListener {
-                windowManager.attachWindow(StatusAreaWindow())
+                windowManager.attachWindow(StatusAreaWindow(
+                    ToolbarControls(
+                        isExpanded = { idleUi.currentState == IdleUi.State.Toolbar },
+                        toggle = {
+                            isToolbarManuallyToggled = idleUi.currentState == IdleUi.State.Toolbar
+                            if (isToolbarManuallyToggled) idleUi.updateState(IdleUi.State.Empty, true)
+                            else idleUi.updateState(IdleUi.State.Toolbar, true)
+                            windowManager.attachWindow(KeyboardWindow)
+                        }
+                    )
+                ))
                 if (clipboardTimeoutJob != null) {
                     launchClipboardTimeoutJob()
                 }
@@ -269,6 +284,12 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                 }
                 clipboardButton.setOnClickListener {
                     windowManager.attachWindow(ClipboardWindow())
+                }
+                emojiButton.setOnClickListener {
+                    windowManager.attachWindow(PickerWindow.Key.Emoji)
+                }
+                quickPhraseButton.setOnClickListener {
+                    fcitx.launchOnReady { triggerQuickPhrase() }
                 }
             }
             clipboardUi.suggestionView.apply {

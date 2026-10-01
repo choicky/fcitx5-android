@@ -10,7 +10,6 @@ import androidx.annotation.Keep
 import androidx.annotation.RequiresApi
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
-import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.InputFeedbacks.InputFeedbackMode
 import org.fcitx.fcitx5.android.input.candidates.expanded.ExpandedCandidateStyle
@@ -21,6 +20,7 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase
 import org.fcitx.fcitx5.android.input.keyboard.LangSwitchBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SwipeSymbolDirection
+import org.fcitx.fcitx5.android.input.bar.ToolbarAction
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.popup.EmojiModifier
 import org.fcitx.fcitx5.android.utils.DeviceUtil
@@ -68,6 +68,14 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         // no longer written: the last failure moved to the no-backup directory (LastErrorRecord);
         // kept so an earlier value can be cleared
         val voiceLastError = string("voice_last_error", "")
+        val toolbarActions = string(
+            "toolbar_actions",
+            if (!sharedPreferences.contains("toolbar_actions") &&
+                sharedPreferences.contains("show_voice_input_button") &&
+                !runCatching { sharedPreferences.getBoolean("show_voice_input_button", true) }.getOrDefault(true)
+            ) ToolbarAction.encode(ToolbarAction.Default - ToolbarAction.Voice)
+            else ToolbarAction.encode(ToolbarAction.Default)
+        )
     }
 
     // storage for the Voice screen; its UI is built by VoiceSettingsFragment
@@ -80,9 +88,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         )
 
         // MoQi fork: on by default in debug (voice test) builds only
-        val showVoiceInputButton = switch(
-            R.string.show_voice_input_button, "show_voice_input_button", BuildConfig.DEBUG
-        )
+        // Kept as a raw preference key for toolbar migration; toolbar visibility is now owned
+        // by Internal.toolbarActions and this legacy switch is no longer exposed as a source of truth.
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {
@@ -195,7 +202,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
         val preferredVoiceInput = voiceInputPreference(
             R.string.preferred_voice_input, "preferred_voice_input", ""
-        ) { voice.showVoiceInputButton.getValue() }
+        )
 
         val expandKeypressArea =
             switch(R.string.expand_keypress_area, "expand_keypress_area", false)
