@@ -55,12 +55,14 @@ import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateC
 import org.fcitx.fcitx5.android.input.clipboard.ClipboardWindow
 import org.fcitx.fcitx5.android.input.dependency.UniqueViewComponent
 import org.fcitx.fcitx5.android.input.dependency.context
-import org.fcitx.fcitx5.android.input.dependency.fcitx
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.input.dependency.theme
 import org.fcitx.fcitx5.android.input.editing.TextEditingWindow
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
 import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView
+import org.fcitx.fcitx5.android.input.keyboard.KeyAction
+import org.fcitx.fcitx5.android.input.keyboard.KeyActionListener
+import org.fcitx.fcitx5.android.input.keyboard.KeyboardWindow
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.status.StatusAreaWindow
@@ -71,7 +73,6 @@ import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.fcitx.fcitx5.android.utils.AppUtil
 import org.mechdancer.dependency.DynamicScope
 import org.mechdancer.dependency.manager.must
-import org.fcitx.fcitx5.android.daemon.launchOnReady
 import splitties.bitflags.hasFlag
 import splitties.dimensions.dp
 import splitties.views.backgroundColor
@@ -92,7 +93,6 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val context by manager.context()
     private val theme by manager.theme()
     private val service by manager.inputMethodService()
-    private val fcitx by manager.fcitx()
     private val windowManager: InputWindowManager by manager.must()
     private val horizontalCandidate: HorizontalCandidateComponent by manager.must()
     private val commonKeyActionListener: CommonKeyActionListener by manager.must()
@@ -289,7 +289,9 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                     windowManager.attachWindow(PickerWindow.Key.Emoji)
                 }
                 quickPhraseButton.setOnClickListener {
-                    fcitx.launchOnReady { triggerQuickPhrase() }
+                    commonKeyActionListener.listener.onKeyAction(
+                        KeyAction.QuickPhraseAction, KeyActionListener.Source.Popup
+                    )
                 }
             }
             clipboardUi.suggestionView.apply {
