@@ -33,6 +33,8 @@ import org.fcitx.fcitx5.android.input.status.StatusAreaEntry.Android.Type.InputM
 import org.fcitx.fcitx5.android.input.status.StatusAreaEntry.Android.Type.Keyboard
 import org.fcitx.fcitx5.android.input.status.StatusAreaEntry.Android.Type.ReloadConfig
 import org.fcitx.fcitx5.android.input.status.StatusAreaEntry.Android.Type.ThemeList
+import org.fcitx.fcitx5.android.input.status.StatusAreaEntry.Android.Type.ToolbarCollapse
+import org.fcitx.fcitx5.android.input.status.StatusAreaEntry.Android.Type.ToolbarCustomize
 import org.fcitx.fcitx5.android.input.wm.InputWindow
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
@@ -106,7 +108,7 @@ class StatusAreaWindow(
         var actions = ToolbarAction.decode(preference.getValue())
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), 0, dp(20), 0)
+            setPadding(context.dp(20), 0, context.dp(20), 0)
         }
         val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
             .setTitle(R.string.edit_toolbar)
@@ -139,7 +141,7 @@ class StatusAreaWindow(
                         actions = if (checked) (actions + action).distinct() else actions - action
                     }
                 }
-                row.addView(check, LinearLayout.LayoutParams(0, dp(48), 1f))
+                row.addView(check, LinearLayout.LayoutParams(0, context.dp(48), 1f))
                 Button(context).apply {
                     text = "↑"
                     setOnClickListener {
@@ -147,7 +149,7 @@ class StatusAreaWindow(
                         if (index > 0) actions = actions.toMutableList().apply { add(index - 1, removeAt(index)) }
                         render()
                     }
-                }.also { row.addView(it, LinearLayout.LayoutParams(dp(48), dp(48))) }
+                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(48), context.dp(48))) }
                 Button(context).apply {
                     text = "↓"
                     setOnClickListener {
@@ -155,7 +157,7 @@ class StatusAreaWindow(
                         if (index >= 0 && index < actions.lastIndex) actions = actions.toMutableList().apply { add(index + 1, removeAt(index)) }
                         render()
                     }
-                }.also { row.addView(it, LinearLayout.LayoutParams(dp(48), dp(48))) }
+                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(48), context.dp(48))) }
                 container.addView(row)
             }
             Button(context).apply {
@@ -263,7 +265,7 @@ class StatusAreaWindow(
 
     override fun onStatusAreaUpdate(actions: Array<Action>) {
         adapter.entries = arrayOf(
-            *listOfNotNull(toolbarEntry()),
+            *arrayOfNotNull(toolbarEntry()),
             *staticEntries,
             *Array(actions.size) { StatusAreaEntry.fromAction(actions[it]) }
         )
