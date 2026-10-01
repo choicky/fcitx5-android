@@ -174,7 +174,13 @@ class IdleUi(
         toolbarEditing = true
         val editView = editor.currentRoot
         toolbarEditView = editView
-        animator.addView(editView, ViewGroup.LayoutParams(matchParent, matchParent))
+        animator.addView(
+            editView,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        )
         animator.displayedChild = animator.indexOfChild(editView)
         toolsButton.isEnabled = false
         hideKeyboardButton.isEnabled = false
