@@ -126,11 +126,13 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         super.onStart()
         toolbarActions.registerOnChangeListener(toolbarActionsListener)
         spaceLongPressBehavior.registerOnChangeListener(spaceLongPressListener)
+        ModelJobs.addListener(jobListener)
     }
 
     override fun onStop() {
         toolbarActions.unregisterOnChangeListener(toolbarActionsListener)
         spaceLongPressBehavior.unregisterOnChangeListener(spaceLongPressListener)
+        ModelJobs.removeListener(jobListener)
         super.onStop()
     }
 
@@ -724,16 +726,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     }
 
     private val jobListener: (LocalAsrModel) -> Unit = { onModelChanged(it) }
-
-    override fun onStart() {
-        super.onStart()
-        ModelJobs.addListener(jobListener)
-    }
-
-    override fun onStop() {
-        ModelJobs.removeListener(jobListener)
-        super.onStop()
-    }
 
     /** One field of a provider's credential form; [choices] shows radio buttons instead of text. */
     private data class CredentialField(
