@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dictionary_section_core">基础词库</string>
+    <string name="dictionary_section_builtin">内置词库</string>
+    <string name="dictionary_section_catalog">第三方词库</string>
+    <string name="dictionary_section_imported">导入的词库</string>
+    <string name="dictionary_required">必需</string>
+    <string name="dictionary_use">启用此词库</string>
+    <string name="dictionary_use_named">启用 %1$s</string>
+    <string name="dictionary_section_use">使用</string>
+    <string name="dictionary_section_information">词库信息</string>
+    <string name="dictionary_section_source_license">来源与许可证</string>
+    <string name="dictionary_section_storage">存储</string>
+    <string name="dictionary_entries">词条数</string>
+    <string name="dictionary_size">目录标注大小</string>
+    <string name="dictionary_local_size">本地大小</string>
+    <string name="dictionary_catalog_version">目录版本</string>
+    <string name="dictionary_source_revision">来源修订</string>
+    <string name="dictionary_filename">文件名</string>
+    <string name="dictionary_delete_confirmation">删除本地词库“%1$s”？</string>
+</resources>

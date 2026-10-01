@@ -18,6 +18,10 @@ import android.widget.LinearLayout
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.FrameLayout
+import android.widget.ScrollView
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.widget.SwitchCompat
 import androidx.appcompat.app.AlertDialog
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,7 +52,6 @@ import org.fcitx.fcitx5.android.data.pinyin.dict.LibIMEDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.CatalogPlaceholderDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.StaticPinyinDictionary
-import org.fcitx.fcitx5.android.ui.common.BaseDynamicListUi
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
 import org.fcitx.fcitx5.android.ui.main.EditDeleteMenuProvider
 import org.fcitx.fcitx5.android.ui.main.MainViewModel
@@ -95,97 +98,39 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
 
     private var uiInitialized = false
 
-    private val ui: BaseDynamicListUi<PinyinDictionary> by lazy {
-        object : BaseDynamicListUi<PinyinDictionary>(
-            requireContext(),
-            Mode.Custom(),
-            initialEntries(),
-            initCheckBox = { entry ->
-                when (entry) {
-                    is StaticPinyinDictionary -> {
-                        visibility = if (entry.kind == StaticPinyinDictionary.Kind.ExtensionB) {
-                            View.VISIBLE
-                        } else View.GONE
-                        isEnabled = entry.kind == StaticPinyinDictionary.Kind.ExtensionB
-                        isChecked = entry.kind == StaticPinyinDictionary.Kind.Base || extBEnabled
-                        if (entry.kind == StaticPinyinDictionary.Kind.ExtensionB) {
-                            setOnCheckedChangeListener { _, checked -> setExtBEnabled(checked) }
-                        }
-                    }
-                    is LibIMEDictionary -> {
-                        visibility = View.VISIBLE
-                        isEnabled = true
-                        isChecked = entry.isEnabled
-                        setOnCheckedChangeListener { _, isChecked ->
-                            if (isChecked) entry.enable() else entry.disable()
-                            ui.updateItem(ui.indexItem(entry), entry)
-                        }
-                    }
-                    else -> {
-                        visibility = View.GONE
-                        isEnabled = false
-                        isChecked = false
-                        setOnCheckedChangeListener(null)
-                    }
+    private var managerRoot: FrameLayout? = null
+    private var detailName: String? = null
+    private var detailBack: OnBackPressedCallback? = null
+
+    private val ui: DictionaryManagerUi by lazy {
+        DictionaryManagerUi(requireContext(), initialEntries(), viewModel,
+            extBEnabled = { extBEnabled },
+            metadata = { row ->
+                row.size?.let { size ->
+                    row.entryCount?.let { count ->
+                        getString(R.string.dictionary_metadata, formatBytes(size), formatCount(count))
+                    } ?: formatBytes(size)
                 }
             },
-            initSettingsButton = { entry ->
-                val catalogEntry = when (entry) {
-                    is CatalogPlaceholderDictionary -> PinyinDictionaryCatalog.find(entry.entryId)
-                    is LibIMEDictionary -> PinyinDictionaryCatalog.find(entry.name)
-                    else -> null
-                }
-                if (catalogEntry != null) {
-                    visibility = View.VISIBLE
-                    setOnClickListener {
-                        showCatalogEntry(catalogEntry, allowDownload = entry is CatalogPlaceholderDictionary)
-                    }
-                } else visibility = View.GONE
-            }
-        ) {
-            init {
-                enableUndo = false
-                addTouchCallback()
-                // since FAB is always shown in this fragment,
-                // set shouldShowFab to true to hide it when entering multi select mode
-                shouldShowFab = true
-                fab.setOnClickListener {
-                    showAddOptions()
-                }
-                setViewModel(viewModel)
-                removable = { e -> e is LibIMEDictionary }
-            }
+            toggle = ::setDictionaryEnabled,
+            detail = ::showDictionaryDetail,
+            add = ::showAddOptions,
+        ).also { uiInitialized = true }
+    }
 
-            override fun updateFAB() {
-                // do nothing
+    private fun setDictionaryEnabled(entry: PinyinDictionary, enabled: Boolean) {
+        when (entry) {
+            is StaticPinyinDictionary -> setExtBEnabled(enabled)
+            is LibIMEDictionary -> {
+                if (enabled) entry.enable() else entry.disable()
+                ui.updateItem(ui.indexItem(entry), entry)
             }
-
-            override fun showEntry(x: PinyinDictionary): String = when (x) {
-                is StaticPinyinDictionary -> "${x.label} / ${x.canonicalName}" +
-                    if (x.kind == StaticPinyinDictionary.Kind.Base) {
-                        "\n${getString(R.string.dictionary_builtin_default)}"
-                    } else "\n${getString(if (extBEnabled) R.string.dictionary_enabled else R.string.dictionary_disabled)}"
-                is CatalogPlaceholderDictionary -> PinyinDictionaryCatalog.find(x.entryId)?.let {
-                    catalogSummary(it)
-                } ?: x.displayLabel
-                else -> PinyinDictionaryCatalog.find(x.name)?.let { entry ->
-                    "${entry.displayName} / ${entry.canonicalName}\n" +
-                        "${dictionarySummary(entry, x.file.length())}\n" +
-                        getString(if ((x as? LibIMEDictionary)?.isEnabled == true)
-                            R.string.dictionary_enabled else R.string.dictionary_disabled)
-                } ?: x.name + if (x is LibIMEDictionary) {
-                    "\n${formatBytes(x.file.length())} · " +
-                        getString(if (x.isEnabled) R.string.dictionary_enabled else R.string.dictionary_disabled)
-                } else ""
-            }
-        }.also {
-            uiInitialized = true
         }
     }
 
     private fun initialEntries(): List<PinyinDictionary> {
         val installed = PinyinDictManager.listDictionaries()
-        val installedIds = installed.map { it.name }.toSet()
+        val installedIds = installed.filterIsInstance<LibIMEDictionary>().map { it.name }.toSet()
         val catalog = PinyinDictionaryCatalog.entries
             .filterNot { it.id in installedIds }
             .map { CatalogPlaceholderDictionary(it.id, it.displayName) }
@@ -203,11 +148,6 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         ) + installed + catalog
     }
 
-    private fun catalogSummary(entry: PinyinDictionaryCatalogEntry): String =
-        "${entry.displayName} / ${entry.canonicalName}\n" +
-            dictionarySummary(entry, entry.size) + "\n" +
-            getString(R.string.dictionary_not_installed)
-
     private fun setExtBEnabled(enabled: Boolean) {
         if (enabled == extBEnabled) return
         lifecycleScope.launch {
@@ -218,7 +158,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                 setImConfig("pinyin", config)
                 extBEnabled = enabled
             }
-            if (uiInitialized) ui.notifyDataSetChanged()
+            if (uiInitialized) ui.refreshState()
         }
     }
 
@@ -231,7 +171,12 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         registerLauncher()
         ui.addOnItemChangedListener(this)
         resetDustman()
-        return ui.root
+        detailName = savedInstanceState?.getString("dictionary_detail")
+        (ui.root.parent as? ViewGroup)?.removeView(ui.root)
+        return FrameLayout(requireContext()).also {
+            managerRoot = it
+            it.addView(ui.root)
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -243,14 +188,15 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                     getImConfig("pinyin")
                 )
             }
-            ui.notifyDataSetChanged()
+            ui.refreshState()
         }
-        viewModel.toolbarButton.value =
-            if (ui.entries.isNotEmpty()) ButtonMode.EDIT else ButtonMode.NONE
+        viewModel.toolbarButton.value = ButtonMode.EDIT
         requireActivity().addMenuProvider(
             EditDeleteMenuProvider(
                 buttonMode = viewModel.toolbarButton,
-                editButtonAction = { ui.enterMultiSelect(requireActivity().onBackPressedDispatcher) },
+                editButtonAction = {
+                    if (detailName == null) ui.enterMultiSelect(requireActivity().onBackPressedDispatcher)
+                },
                 deleteButtonAction = { ui.deleteSelected(); ui.exitMultiSelect() },
                 menuHost = requireActivity(),
                 lifecycleOwner = viewLifecycleOwner,
@@ -258,6 +204,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             viewLifecycleOwner,
             Lifecycle.State.STARTED
         )
+        detailName?.let { name -> ui.entries.find { it.name == name }?.let(::showDictionaryDetail) }
     }
 
     private fun createNotificationChannel() {
@@ -269,6 +216,127 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             ).apply { description = CHANNEL_ID }
             requireContext().notificationManager.createNotificationChannel(channel)
         }
+    }
+
+    private fun showDictionaryDetail(dictionary: PinyinDictionary) {
+        val root = managerRoot ?: return
+        val row = DictionaryPresentation.row(dictionary, extBEnabled)
+        if (!row.manageable) return
+        detailName = dictionary.name
+        ui.exitMultiSelect()
+        viewModel.toolbarButton.value = ButtonMode.NONE
+        detailBack?.remove()
+        detailBack = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = closeDictionaryDetail()
+        }.also { requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, it) }
+        val ctx = requireContext()
+        val padding = (20 * resources.displayMetrics.density).toInt()
+        val body = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding, padding, padding)
+        }
+        fun text(value: String, heading: Boolean = false) {
+            body.addView(TextView(ctx).apply {
+                text = value
+                setTextAppearance(if (heading) android.R.style.TextAppearance_Material_Title
+                    else android.R.style.TextAppearance_Material_Body1)
+                setPadding(0, padding / 2, 0, padding / 2)
+                setTextIsSelectable(!heading)
+                if (heading) androidx.core.view.ViewCompat.setAccessibilityHeading(this, true)
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        fun field(label: Int, value: String?) {
+            if (!value.isNullOrBlank()) text("${getString(label)}\n$value")
+        }
+        fun action(label: Int, block: () -> Unit) {
+            body.addView(Button(ctx).apply {
+                setText(label)
+                setOnClickListener { block() }
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        text(row.name, heading = true)
+        row.canonicalName?.let { text(it) }
+        text(getString(if (row.installed) R.string.download_installed else R.string.dictionary_not_installed))
+        if (row.enabled != null) {
+            text(getString(R.string.dictionary_section_use), heading = true)
+            body.addView(SwitchCompat(ctx).apply {
+                setText(R.string.dictionary_use)
+                isChecked = row.enabled
+                minHeight = (48 * resources.displayMetrics.density).toInt()
+                setOnCheckedChangeListener { _, checked -> setDictionaryEnabled(dictionary, checked) }
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        row.catalog?.let { catalog ->
+            text(getString(R.string.dictionary_section_information), heading = true)
+            field(R.string.dictionary_entries, catalog.entryCount?.let(::formatCount))
+            field(R.string.dictionary_size, formatBytes(catalog.size))
+            field(R.string.dictionary_catalog_version, catalog.version)
+            field(R.string.dictionary_source_revision, catalog.sourceRevision)
+            text(getString(R.string.dictionary_section_source_license), heading = true)
+            field(R.string.dictionary_source, catalog.sourceRepository)
+            action(R.string.dictionary_source_project) { openExternalLink(catalog.sourceRepository) }
+            field(R.string.dictionary_license, catalog.license)
+            action(R.string.dictionary_license_info) { openExternalLink(catalog.licenseUrl) }
+            text(catalog.attribution)
+            text(catalog.modificationStatement)
+            text(getString(R.string.dictionary_normalization_notice))
+            field(R.string.dictionary_limitations, catalog.limitations)
+            if (!row.installed) {
+                action(if (catalog.privateImportOnly) R.string.import_research_dictionary
+                    else R.string.download_dictionary) { showCatalogEntry(catalog) }
+            }
+        }
+        if (row.installed) {
+            text(getString(R.string.dictionary_section_storage), heading = true)
+            field(R.string.dictionary_local_size, formatBytes(dictionary.file.length()))
+            field(R.string.dictionary_filename, dictionary.file.name)
+        }
+        if (row.removable) action(R.string.delete) {
+            AlertDialog.Builder(ctx)
+                .setTitle(R.string.delete)
+                .setMessage(getString(R.string.dictionary_delete_confirmation, row.name))
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.delete) { _, _ ->
+                    ui.indexItem(dictionary).takeIf { it >= 0 }?.let { ui.removeItem(it) }
+                    closeDictionaryDetail()
+                }.show()
+        }
+        root.removeAllViews()
+        root.addView(ScrollView(ctx).apply {
+            isFillViewport = true
+            clipToPadding = false
+            addView(body)
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
+                val bottom = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars()).bottom
+                view.setPadding(0, 0, 0, bottom)
+                insets
+            }
+        }, FrameLayout.LayoutParams(-1, -1))
+        androidx.core.view.ViewCompat.requestApplyInsets(root)
+    }
+
+    private fun closeDictionaryDetail() {
+        detailBack?.remove()
+        detailName = null
+        managerRoot?.let { root ->
+            root.removeAllViews()
+            (ui.root.parent as? ViewGroup)?.removeView(ui.root)
+            root.addView(ui.root)
+            ui.refreshState()
+            androidx.core.view.ViewCompat.requestApplyInsets(root)
+        }
+        viewModel.toolbarButton.value = ButtonMode.EDIT
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("dictionary_detail", detailName)
+        super.onSaveInstanceState(outState)
+    }
+
+    override fun onDestroyView() {
+        detailBack?.remove()
+        managerRoot = null
+        super.onDestroyView()
     }
 
     private fun registerLauncher() {
@@ -350,7 +418,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     private fun buildCatalogDetails(entry: PinyinDictionaryCatalogEntry): String =
         "${getString(R.string.dictionary_third_party)}\n\n" +
             "${getString(R.string.dictionary_source)}: ${entry.sourceRepository}\n" +
-            "${getString(R.string.dictionary_version)}: ${entry.version}\n" +
+            "${getString(R.string.dictionary_catalog_version)}: ${entry.version}\n" +
             "${getString(R.string.dictionary_license)}: ${entry.license}\n" +
             "${dictionarySummary(entry, entry.size)}\n\n" +
             "${entry.attribution}\n\n" +
@@ -700,6 +768,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     override fun onItemAdded(idx: Int, item: PinyinDictionary) {
         val libime = item as? LibIMEDictionary ?: return
         dustman.addOrUpdate(libime.name, libime.isEnabled)
+        if (detailName == libime.name) showDictionaryDetail(libime)
     }
 
     override fun onItemRemoved(idx: Int, item: PinyinDictionary) {
@@ -718,6 +787,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     override fun onItemUpdated(idx: Int, old: PinyinDictionary, new: PinyinDictionary) {
         val libime = new as? LibIMEDictionary ?: return
         dustman.addOrUpdate(libime.name, libime.isEnabled)
+        if (old !== new && detailName == libime.name) showDictionaryDetail(libime)
     }
 
     override fun onStop() {
