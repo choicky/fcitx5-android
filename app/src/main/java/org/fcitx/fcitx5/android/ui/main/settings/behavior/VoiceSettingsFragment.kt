@@ -17,6 +17,8 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Button
+import androidx.appcompat.widget.SwitchCompat
 import androidx.preference.ListPreference
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -193,6 +195,24 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     /** The row status each model row was built with; a change of status needs a rebuild. */
     private val renderedStatus = mutableMapOf<LocalAsrModel, ModelStatus>()
 
+    private class ModelDetail(
+        val entry: ModelCatalogEntry,
+        val dialog: AlertDialog,
+        val status: TextView,
+        val controls: LinearLayout,
+        var row: ModelRow? = null,
+    )
+    private var modelDetail: ModelDetail? = null
+    private var cloudDetail: AlertDialog? = null
+
+    override fun onDestroyView() {
+        modelDetail?.dialog?.dismiss()
+        modelDetail = null
+        cloudDetail?.dismiss()
+        cloudDetail = null
+        super.onDestroyView()
+    }
+
     private fun render() {
         // dialog callbacks and posted updates can arrive after the screen is gone
         if (!isAdded) return
@@ -206,7 +226,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val external = external()
         val resolution =
             resolveCurrentService(selection, localStatus(), authorization, ::systemAvailable, external)
-        screen.addCategory(R.string.voice_current_section) {
+        screen.addCategory(R.string.voice_v2_section_triggers) {
             addSwitch(
                 getString(R.string.show_voice_input_button),
                 getString(R.string.show_voice_input_button_summary),
@@ -233,42 +253,36 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                     true
                 }
             }.also { spaceLongPressPreference = it })
-            // the selected service itself is the row; it stays shown (with why) when unusable
+        }
+        screen.addCategory(R.string.voice_v2_section_service) {
+            // Selection is a selector row; the saved service stays in its summary when unusable.
             val current = selection.current
             val lastError = store.lastError?.takeIf { it.first == current?.key }?.second
-            val title = current?.let(::label) ?: getString(R.string.voice_current_none)
+            val title = getString(R.string.voice_v2_current_service)
             val state = listOfNotNull(
                 reasonText(resolution),
                 getString(if (current == null) R.string.voice_current_choose else R.string.voice_current_change)
             ).joinToString(" · ")
-            val summary = state + (lastError?.let { "\n" + getString(R.string.voice_last_error, it) } ?: "")
-            addPreference(title, summary) { chooseCurrent() }
+            val summary = (current?.let(::label) ?: getString(R.string.voice_current_none)) +
+                "\n" + state + (lastError?.let { "\n" + getString(R.string.voice_last_error, it) } ?: "")
+            addPreference(Preference(ctx).apply {
+                key = CURRENT_ROW_KEY
+                isPersistent = false
+                setup(title, summary) { chooseCurrent() }
+            })
             val lastUsed = AsrServiceId.parse(store.lastUsedService)
             if (lastUsed != null && lastUsed != current) {
                 addPreference(getString(R.string.voice_last_used, label(lastUsed)))
             }
             if (current == null) {
                 addPreference(
-                    getString(R.string.voice_run_recommendation),
+                    getString(R.string.voice_v2_recommendation),
                     getString(R.string.voice_run_recommendation_summary)
                 ) { runRecommendation() }
             }
         }
 
-        screen.addCategory(R.string.voice_section_system) {
-            // one row for enablement and the disclosure answer; they stay separate states
-            val row = systemRow(
-                selection.isEnabled(AsrServiceId.System), authorization, systemAvailable(),
-                selection.current == AsrServiceId.System
-            )
-            addPreference(Preference(ctx).apply {
-                key = SYSTEM_ROW_KEY
-                isPersistent = false
-                setup(getString(R.string.asr_provider_system), systemSummary(row.status)) { systemActions(row) }
-            })
-        }
-
-        screen.addCategory(R.string.voice_section_local) {
+        screen.addCategory(R.string.voice_v2_section_local) {
             if (!LocalAsrEngines.AVAILABLE) addPreference(getString(R.string.voice_local_no_runtime))
             // one row per model: status and next step, actions on tap, and once installed its
             // own enable switch in the row; installing enables and selects nothing
@@ -289,7 +303,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             }
         }
 
-        screen.addCategory(R.string.voice_section_cloud) {
+        screen.addCategory(R.string.voice_v2_section_cloud) {
             addCloud(AsrServiceId.Doubao, R.string.voice_enable_doubao, R.string.voice_doubao_credentials, selection, external) {
                 editDoubaoCredentials()
             }
@@ -301,7 +315,18 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             }
         }
 
-        screen.addCategory(R.string.voice_section_selfhosted) {
+        screen.addCategory(R.string.voice_v2_section_other) {
+            // Presentation grouping only: System authorization and instance configuration
+            // continue through their own existing paths.
+            val row = systemRow(
+                selection.isEnabled(AsrServiceId.System), authorization, systemAvailable(),
+                selection.current == AsrServiceId.System
+            )
+            addPreference(Preference(ctx).apply {
+                key = SYSTEM_ROW_KEY
+                isPersistent = false
+                setup(getString(R.string.asr_provider_system), systemSummary(row.status)) { systemActions(row) }
+            })
             store.instances.forEach { instance ->
                 val problem = when (endpointProblem(instance.url, BuildConfig.DEBUG, instance.protocol)) {
                     null -> null
@@ -322,7 +347,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 getString(R.string.voice_selfhosted_note)
             ) { editInstance(null) }
         }
-
+        refreshModelDetail()
     }
 
     /** A switch that is not bound to a preference key; [onChange] stores the value. */
@@ -348,7 +373,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     }
 
     /**
-     * A cloud provider: its enable switch with a short status, then its credential row. What is
+     * A cloud object opens its existing enable/configuration controls. What is
      * stored where and who receives the audio is explained in the credential form, before
      * anything is entered; enabling a provider without credentials opens that form.
      */
@@ -364,20 +389,57 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val status = cloudStatus(selection.isEnabled(service), configured, selection.current == service)
         val summary = getString(
             when (status) {
-                CloudStatus.NeedsCredentials -> R.string.voice_cloud_needs_credentials
-                CloudStatus.EnableToSelect -> R.string.voice_cloud_enable_to_select
-                CloudStatus.Selectable -> R.string.voice_cloud_selectable
+                CloudStatus.NeedsCredentials -> R.string.voice_v2_not_configured
+                CloudStatus.EnableToSelect -> R.string.voice_v2_configured_disabled
+                CloudStatus.Selectable -> R.string.voice_v2_configured_enabled
                 CloudStatus.InUse -> R.string.voice_status_in_use
             }
         )
-        addSwitch(getString(enableTitle), summary, selection.isEnabled(service)) { on ->
-            store.save(store.load().withEnabled(service, on))
-            if (on && !configured) view?.post { edit() }
+        addPreference(Preference(context).apply {
+            key = "voice_cloud_row_${service.key}"
+            isPersistent = false
+            setup(getString(enableTitle), summary) {
+                showCloudDetail(service, enableTitle, credentialsTitle, edit)
+            }
+        })
+    }
+
+    private fun showCloudDetail(service: AsrServiceId, title: Int, credentialsTitle: Int, edit: () -> Unit) {
+        cloudDetail?.dismiss()
+        val ctx = requireContext()
+        val configured = external().configured(service)
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val body = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, pad / 2)
         }
-        addPreference(
-            getString(credentialsTitle),
-            getString(if (configured) R.string.voice_credentials_set else R.string.voice_credentials_missing)
-        ) { edit() }
+        val dialog = AlertDialog.Builder(ctx).setTitle(title)
+            .setView(ScrollView(ctx).apply { addView(body) })
+            .setPositiveButton(android.R.string.ok, null).create()
+        cloudDetail = dialog
+        dialog.setOnDismissListener { if (cloudDetail === dialog) cloudDetail = null }
+        body.addView(SwitchCompat(ctx).apply {
+            setText(R.string.voice_v2_enable_service)
+            isChecked = store.load().isEnabled(service)
+            minimumHeight = (48 * resources.displayMetrics.density).toInt()
+            setOnCheckedChangeListener { _, on ->
+                store.save(store.load().withEnabled(service, on))
+                render()
+                if (on && !configured) {
+                    dialog.dismiss()
+                    view?.post { edit() }
+                }
+            }
+        }, LinearLayout.LayoutParams(-1, -2))
+        body.addView(TextView(ctx).apply {
+            setText(if (configured) R.string.voice_credentials_set else R.string.voice_credentials_missing)
+            setPadding(0, pad / 2, 0, pad / 2)
+        })
+        body.addView(Button(ctx).apply {
+            setText(credentialsTitle)
+            setOnClickListener { dialog.dismiss(); edit() }
+        }, LinearLayout.LayoutParams(-1, -2))
+        dialog.show()
     }
 
     /** Status and next step, then the disclosure: the device's service decides, it may go online. */
@@ -533,6 +595,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             return
         }
         preference.summary = modelSummary(entry, row)
+        refreshModelDetail()
     }
 
     private fun setModelEnabled(model: LocalAsrModel, on: Boolean) {
@@ -541,35 +604,32 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         render()
     }
 
-    /** Version, size, source, licence and limits; the full disclosure stays in the confirmation. */
-    private fun showModelDetails(entry: ModelCatalogEntry) {
-        AlertDialog.Builder(requireContext())
-            .setTitle(modelLabel(entry.model))
-            .setView(metadataView(modelMetadataText(entry)))
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
-    }
-
     private fun modelMetadataText(entry: ModelCatalogEntry): String = buildString {
         append(getString(R.string.voice_model_details_message, entry.version, megabytes(entry.totalBytes)))
         append("\n\n")
-        append(getString(R.string.voice_model_source, entry.sourceName ?: entry.sourceLabel ?: "unknown"))
+        (entry.sourceName ?: entry.sourceLabel)?.let { append(getString(R.string.voice_model_source, it)) }
         entry.sourceUrl?.let { append("\n").append(it) }
         append("\n").append(getString(R.string.voice_model_license, entry.license ?: getString(R.string.voice_license_unconfirmed)))
         entry.licenseUrl?.let { append("\n").append(it) }
         entry.attribution?.let { append("\n").append(getString(R.string.voice_model_attribution, it)) }
         append("\n\n").append(getString(R.string.voice_model_offline_note))
+        append("\n").append(getString(if (entry.model.streaming)
+            R.string.voice_v2_streaming else R.string.voice_v2_nonstreaming))
+        entry.downloadBase?.let { append("\n\n").append(getString(R.string.voice_v2_download_source, it)) }
         entry.limitation?.let { append("\n\n").append(it) }
         if (!entry.distributionApproved) {
             append("\n\n").append(getString(R.string.voice_model_research_status))
         }
     }
 
-    private fun metadataView(text: String) = TextView(requireContext()).apply {
-        setPadding(48, 0, 48, 0)
-        this.text = text
-        autoLinkMask = Linkify.WEB_URLS
-        movementMethod = LinkMovementMethod.getInstance()
+    private fun metadataView(text: String): ScrollView = ScrollView(requireContext()).apply {
+        addView(TextView(context).apply {
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, pad / 2)
+            this.text = text
+            autoLinkMask = Linkify.WEB_URLS
+            movementMethod = LinkMovementMethod.getInstance()
+        })
     }
 
     /** A model whose previous download is still stopping cannot start another one yet. */
@@ -598,49 +658,106 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
 
     /**
-     * Model Manager actions: exactly those that apply to the model's state (see [modelRow]), as a
-     * list under the model name. Details are one of the actions, never a dialog message, which
-     * would hide the list.
+     * A Local management detail using the existing modelRow action set and handlers.
+     * Progress updates its status; a state transition refreshes the controls only.
      */
     private fun modelActions(entry: ModelCatalogEntry) {
         val ctx = requireContext()
-        val model = entry.model
-        val actions = modelRowOf(entry).actions
-        val labels = actions.map { action ->
-            when (action) {
-                ModelAction.Download -> stagedBytes(model).takeIf { it > 0 }?.let {
-                    getString(R.string.voice_model_resume, megabytes(entry.totalBytes - it))
-                } ?: getString(R.string.voice_model_download, megabytes(entry.totalBytes))
-                ModelAction.DownloadFrom -> getString(R.string.voice_model_download_other)
-                ModelAction.Import -> getString(R.string.voice_model_import)
-                ModelAction.Discard -> getString(R.string.voice_model_discard)
-                ModelAction.Cancel -> getString(R.string.voice_model_cancel)
-                ModelAction.Use -> getString(
-                    if (store.load().isEnabled(AsrServiceId.Local(model))) R.string.voice_model_use
-                    else R.string.voice_model_enable_and_use
-                )
-                ModelAction.Remove -> getString(R.string.voice_model_remove)
-                ModelAction.Details -> getString(R.string.voice_model_details)
-            }
+        modelDetail?.dialog?.dismiss()
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val body = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, pad / 2)
         }
-        ActionListDialog.create(ctx, modelLabel(model), labels) { which ->
-            when (actions[which]) {
-                ModelAction.Download -> confirmDownload(entry)
-                ModelAction.DownloadFrom -> chooseSource(entry)
-                ModelAction.Import -> {
-                    pendingImport = entry
-                    importLauncher.launch(arrayOf("*/*"))
+        val status = TextView(ctx).apply { setPadding(0, pad / 2, 0, pad / 2) }
+        val controls = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        body.addView(status)
+        if (!LocalAsrEngines.AVAILABLE) body.addView(TextView(ctx).apply {
+            setText(R.string.voice_local_no_runtime)
+        })
+        body.addView(controls)
+        body.addView(TextView(ctx).apply {
+            text = modelMetadataText(entry)
+            setPadding(0, pad, 0, pad / 2)
+            autoLinkMask = Linkify.WEB_URLS
+            movementMethod = LinkMovementMethod.getInstance()
+        })
+        val dialog = AlertDialog.Builder(ctx)
+            .setTitle(modelLabel(entry.model))
+            .setView(ScrollView(ctx).apply { addView(body) })
+            .setPositiveButton(android.R.string.ok, null)
+            .create()
+        modelDetail = ModelDetail(entry, dialog, status, controls)
+        dialog.setOnDismissListener { if (modelDetail?.dialog === dialog) modelDetail = null }
+        refreshModelDetail()
+        dialog.show()
+    }
+
+    private fun refreshModelDetail() {
+        val detail = modelDetail ?: return
+        val entry = detail.entry
+        val row = modelRowOf(entry)
+        detail.status.text = modelSummary(entry, row)
+        if (row == detail.row) return
+        detail.row = row
+        detail.controls.removeAllViews()
+        if (row.status in INSTALLED) {
+            detail.controls.addView(SwitchCompat(requireContext()).apply {
+                setText(R.string.voice_v2_enable_service)
+                isChecked = store.load().isEnabled(AsrServiceId.Local(entry.model))
+                minimumHeight = (48 * resources.displayMetrics.density).toInt()
+                setOnCheckedChangeListener { _, on -> setModelEnabled(entry.model, on) }
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        row.actions.filterNot { it == ModelAction.Details }.forEach { action ->
+            detail.controls.addView(Button(requireContext()).apply {
+                text = modelActionLabel(entry, action)
+                setOnClickListener {
+                    detail.dialog.dismiss()
+                    performModelAction(entry, action)
                 }
-                ModelAction.Discard -> {
-                    if (ModelJobs.isRunning(model)) startedOrBusy(false) else LocalModels.remove(ctx, model)
-                    render()
-                }
-                ModelAction.Cancel -> ModelJobs.cancel(model)
-                ModelAction.Use -> useModel(model)
-                ModelAction.Remove -> confirmRemove(entry)
-                ModelAction.Details -> showModelDetails(entry)
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+    }
+
+    private fun modelActionLabel(entry: ModelCatalogEntry, action: ModelAction): String {
+        val model = entry.model
+        return when (action) {
+            ModelAction.Download -> stagedBytes(model).takeIf { it > 0 }?.let {
+                getString(R.string.voice_model_resume, megabytes(entry.totalBytes - it))
+            } ?: getString(R.string.voice_model_download, megabytes(entry.totalBytes))
+            ModelAction.DownloadFrom -> getString(R.string.voice_model_download_other)
+            ModelAction.Import -> getString(R.string.voice_model_import)
+            ModelAction.Discard -> getString(R.string.voice_model_discard)
+            ModelAction.Cancel -> getString(R.string.voice_model_cancel)
+            ModelAction.Use -> getString(
+                if (store.load().isEnabled(AsrServiceId.Local(model))) R.string.voice_model_use
+                else R.string.voice_model_enable_and_use
+            )
+            ModelAction.Remove -> getString(R.string.voice_model_remove)
+            ModelAction.Details -> getString(R.string.voice_model_details)
+        }
+    }
+
+    private fun performModelAction(entry: ModelCatalogEntry, action: ModelAction) {
+        val ctx = requireContext()
+        val model = entry.model
+        when (action) {
+            ModelAction.Download -> confirmDownload(entry)
+            ModelAction.DownloadFrom -> chooseSource(entry)
+            ModelAction.Import -> {
+                pendingImport = entry
+                importLauncher.launch(arrayOf("*/*"))
             }
-        }.show()
+            ModelAction.Discard -> {
+                if (ModelJobs.isRunning(model)) startedOrBusy(false) else LocalModels.remove(ctx, model)
+                render()
+            }
+            ModelAction.Cancel -> ModelJobs.cancel(model)
+            ModelAction.Use -> useModel(model)
+            ModelAction.Remove -> confirmRemove(entry)
+            ModelAction.Details -> modelActions(entry)
+        }
     }
 
     /**
@@ -1024,5 +1141,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         private val INSTALLED = setOf(ModelStatus.Installed, ModelStatus.Enabled, ModelStatus.InUse)
         const val PENDING_IMPORT = "pending_model_import"
         const val SYSTEM_ROW_KEY = "voice_system_row"
+        const val CURRENT_ROW_KEY = "voice_current_service_row"
     }
 }

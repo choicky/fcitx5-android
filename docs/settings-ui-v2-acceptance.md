@@ -26,13 +26,31 @@ changes, and delegates all operations to its existing paths. No route/domain
 or installer changes are required. Additional behavioral changes: None beyond
 the approved normal row navigation and detail delete confirmation.
 
-Voice Settings will use five presentation sections: input methods, recognition
+Voice Settings uses five presentation sections: input methods, recognition
 service, local recognition, cloud recognition and other recognition services.
 Its trigger controls mirror the canonical Keyboard Settings preferences.
 The current-service row opens the existing selector; recommendation remains an
 action. System and Self-hosted are grouped visually without changing provider
 types. Existing capabilities are reorganized; missing capabilities are omitted.
 No Dictionary/Voice management framework is introduced.
+
+Voice implementation keeps the existing Preference Fragment and provider names.
+The selector label carries the concrete selected service and reason in its
+summary. Three cloud object rows open a provider-specific enabled/credential
+surface that delegates to the original secure editor. Local rows open scrollable
+management details with the existing action set, installed-only enabling,
+metadata and notices. Progress updates the stable Preference/detail status;
+controls refresh on status changes. System retains its action/disclosure surface;
+Self-hosted retains its instance forms under Other. No connection test, provider
+capability, catalog/state store, fallback or runtime pipeline was added.
+
+Validation: Dictionary CI run `36906187024` passed JVM tests, debug APK, release
+Kotlin, instrumented-test compilation, APK content and signature assertions.
+OracleKR3 has no Android SDK; local Android Gradle tests stop at configuration.
+Instrumented tests are compiled by CI but have not run on a device. Voice and
+combined batch results are in the implementation reports; no device acceptance
+is inferred from compilation. Historical Voice/Local device PASS remains a
+record for its original commits, not acceptance of this presentation change.
 
 Implementation and validation results are recorded per batch. Physical-device
 acceptance remains **TBV**: density, wrapping, large fonts, dark mode, touch and

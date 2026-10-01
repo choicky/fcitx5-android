@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voice_v2_section_triggers">Voice input methods</string>
+    <string name="voice_v2_section_service">Speech recognition service</string>
+    <string name="voice_v2_section_local">Local speech recognition</string>
+    <string name="voice_v2_section_cloud">Cloud speech recognition</string>
+    <string name="voice_v2_section_other">Other speech recognition services</string>
+    <string name="voice_v2_current_service">Speech recognition service</string>
+    <string name="voice_v2_recommendation">One-click recommendation</string>
+    <string name="voice_v2_enable_service">Enable this service</string>
+    <string name="voice_v2_not_configured">Credentials not configured</string>
+    <string name="voice_v2_configured_disabled">Credentials configured · disabled</string>
+    <string name="voice_v2_configured_enabled">Enabled · credentials configured</string>
+    <string name="voice_v2_streaming">Processing: streaming</string>
+    <string name="voice_v2_nonstreaming">Processing: non-streaming</string>
+    <string name="voice_v2_download_source">Download source: %1$s</string>
+</resources>
