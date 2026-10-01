@@ -15,5 +15,11 @@ enum class ToolbarAction(val id: String) {
         }
         fun encode(actions: List<ToolbarAction>) = actions.joinToString(",") { it.id }
         fun normalize(actions: List<ToolbarAction>) = actions.distinct().filter { it in All }
+
+        /** Enabled actions keep their saved order; hidden actions follow in stable pool order. */
+        fun editorOrder(actions: List<ToolbarAction>): List<ToolbarAction> {
+            val enabled = normalize(actions)
+            return enabled + All.filterNot { it in enabled }
+        }
     }
 }

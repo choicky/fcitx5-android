@@ -27,4 +27,21 @@ class ToolbarActionTest {
     @Test fun fixedEdgesAreNotPartOfActionPool() {
         assertEquals(ToolbarAction.All, ToolbarAction.Default + listOf(ToolbarAction.Undo, ToolbarAction.Redo))
     }
+
+    @Test fun editorOrderShowsEnabledActionsBeforeHiddenActions() = assertEquals(
+        listOf(ToolbarAction.TextEditing, ToolbarAction.Emoji, ToolbarAction.QuickPhrase,
+            ToolbarAction.Voice, ToolbarAction.Clipboard, ToolbarAction.Undo, ToolbarAction.Redo),
+        ToolbarAction.editorOrder(listOf(ToolbarAction.TextEditing, ToolbarAction.Emoji,
+            ToolbarAction.QuickPhrase, ToolbarAction.Voice, ToolbarAction.Clipboard))
+    )
+
+    @Test fun reenabledActionIsAppendedToEnabledOrder() {
+        val current = listOf(ToolbarAction.Emoji, ToolbarAction.TextEditing)
+        val reenabled = (current + ToolbarAction.Voice).distinct()
+        assertEquals(
+            listOf(ToolbarAction.Emoji, ToolbarAction.TextEditing, ToolbarAction.Voice,
+                ToolbarAction.QuickPhrase, ToolbarAction.Clipboard, ToolbarAction.Undo, ToolbarAction.Redo),
+            ToolbarAction.editorOrder(reenabled)
+        )
+    }
 }
