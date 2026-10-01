@@ -40,12 +40,35 @@ The historical tests covered A non-selection/non-start and old A current state. 
 cover A removal, B/C ordering, System ASR authorization states, cloud enablement and credential
 availability behavior. APK compilation is not a real-device PASS.
 
-## Pending real-device checks
+## Current Local ASR recommendation acceptance — PASS
 
-- Verify the current Local list contains only B and C, with no A row, switch, download, import, or
-  alternate-source action; no A migration is required for current test devices.
-- Verify FunASR Nano precedes bilingual Zipformer and that current-null recommendation selects the
-  first usable retained Local model.
+The project owner completed physical-device acceptance for the current Local ASR cleanup and
+recommendation batch using Android implementation HEAD `c916d3e144d5e057936723f3e221930409dc2229`.
+GitHub Actions run `36802256868` passed; the tested APK was artifact `11136369038`, package
+`org.fcitx.fcitx5.android.debug`, signed with the fixed certificate SHA-256
+`41:70:5B:C9:4F:42:26:FF:FA:E9:60:91:B7:BA:36:F2:C0:55:B6:2A:93:DF:4E:B9:58:9C:A9:96:A3:7C:7A:7E`.
+
+The device acceptance PASS covers:
+
+- only FunASR Nano and bilingual Zipformer remain supported; Chinese-only Zipformer A is absent;
+- with both retained models installed and enabled and `current == null`, One-click recommendation
+  selects FunASR Nano;
+- when FunASR Nano is unusable and bilingual Zipformer remains usable, recommendation selects
+  bilingual Zipformer;
+- with no usable Local model, existing Android System ASR recommendation/disclosure behavior
+  remains;
+- successful recommendation persists a concrete current provider and hides the recommendation;
+- clearing current back to null makes the recommendation available again even after prior use;
+- an explicitly selected provider becoming unavailable is not silently replaced;
+- microphone voice flow, long-press Space, Stop/Cancel, restart/persistence and relevant voice
+  regressions pass.
+
+This is a device PASS for retained Local model/recommendation behavior. It does not change the
+separate public-distribution status: FunASR Nano and bilingual Zipformer remain research/private
+models with public in-product distribution pending their documented license/provenance review.
+
+## Remaining historical/other voice checks
+
 - Verify System ASR “未授权” and “已停用” remain distinct, including disclosure and revoke flows;
   confirm the possible network disclosure is visible.
 - Verify Doubao/Qwen/Tencent titles, switches, encrypted credential editing, hidden secrets, and
