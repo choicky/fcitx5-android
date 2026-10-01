@@ -13,6 +13,7 @@ import android.view.WindowManager
 import android.widget.PopupMenu
 import android.widget.Toast
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -122,9 +123,9 @@ class StatusAreaWindow(
         }
         val scroll = ScrollView(context).apply {
             isFillViewport = true
-            addView(content, ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT
+            addView(content, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
             ))
         }
         val currentContainer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -146,7 +147,7 @@ class StatusAreaWindow(
             dialog.window?.apply {
                 attributes = attributes.apply { gravity = Gravity.BOTTOM }
                 val keyboardPrefs = AppPrefs.getInstance().keyboard
-                val measuredCharacterAreaHeight = windowManager.view.height
+                val measuredCharacterAreaHeight = this@StatusAreaWindow.windowManager.view.height
                 val characterAreaHeight = if (measuredCharacterAreaHeight > 0) {
                     measuredCharacterAreaHeight
                 } else {
