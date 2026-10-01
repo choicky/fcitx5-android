@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.input.status
 
+import android.app.AlertDialog
 import android.os.Build
 import android.view.View
 import android.widget.PopupMenu
@@ -115,7 +116,7 @@ class StatusAreaWindow(
             orientation = LinearLayout.VERTICAL
             setPadding(context.dp(20), 0, context.dp(20), 0)
         }
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(context)
+        val dialog = AlertDialog.Builder(context)
             .setTitle(R.string.edit_toolbar)
             .setView(container)
             .setPositiveButton(android.R.string.ok) { _, _ ->
