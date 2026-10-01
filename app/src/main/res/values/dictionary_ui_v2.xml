@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dictionary_section_core">Core dictionaries</string>
+    <string name="dictionary_section_builtin">Built-in dictionaries</string>
+    <string name="dictionary_section_catalog">Third-party dictionaries</string>
+    <string name="dictionary_section_imported">Imported dictionaries</string>
+    <string name="dictionary_required">Required</string>
+    <string name="dictionary_use">Enable this dictionary</string>
+    <string name="dictionary_use_named">Enable %1$s</string>
+    <string name="dictionary_section_use">Use</string>
+    <string name="dictionary_section_information">Information</string>
+    <string name="dictionary_section_source_license">Source &amp; license</string>
+    <string name="dictionary_section_storage">Storage</string>
+    <string name="dictionary_entries">Entries</string>
+    <string name="dictionary_size">Catalog size</string>
+    <string name="dictionary_local_size">Local size</string>
+    <string name="dictionary_catalog_version">Catalog version</string>
+    <string name="dictionary_source_revision">Source revision</string>
+    <string name="dictionary_filename">Filename</string>
+    <string name="dictionary_delete_confirmation">Delete the local dictionary “%1$s”?</string>
+</resources>
