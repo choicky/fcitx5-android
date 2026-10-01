@@ -207,7 +207,12 @@ class LocalModelInstallerTest {
     fun removalAlsoRemovesTheAdbCopyAndStagedFiles() {
         val legacy = Files.createTempDirectory("legacy").toFile().resolve(model.dirName)
         legacy.mkdirs()
-        contents.forEach { (path, bytes) -> legacy.resolve(path).writeBytes(bytes) }
+        contents.forEach { (path, bytes) ->
+            legacy.resolve(path).apply {
+                parentFile.mkdirs()
+                writeBytes(bytes)
+            }
+        }
         // an adb-pushed model is used while the Model Manager has none
         assertEquals(legacy, installer.activeDir(model, legacy))
         installer.install(entry, source())
