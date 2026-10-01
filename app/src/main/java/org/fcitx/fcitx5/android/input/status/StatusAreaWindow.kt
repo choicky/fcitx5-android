@@ -96,9 +96,14 @@ class StatusAreaWindow(
     }
 
     private fun toolbarEntry() = toolbarControls?.let {
+        val toggle = ToolbarAction.toolbarToggle(it.isExpanded())
         StatusAreaEntry.Android(
-            context.getString(if (it.isExpanded()) R.string.hide_toolbar else R.string.expand_toolbar),
-            R.drawable.ic_baseline_expand_more_24,
+            context.getString(if (toggle == ToolbarAction.ToolbarToggle.Collapse) R.string.collapse_toolbar else R.string.expand_toolbar),
+            if (toggle == ToolbarAction.ToolbarToggle.Collapse) {
+                R.drawable.ic_baseline_expand_more_24
+            } else {
+                R.drawable.ic_baseline_expand_less_24
+            },
             ToolbarCollapse
         )
     }
@@ -169,7 +174,7 @@ class StatusAreaWindow(
             }.also { container.addView(it) }
         }
         render()
-        dialog.show()
+        service.showDialog(dialog)
     }
 
     private fun activateAction(action: Action) {

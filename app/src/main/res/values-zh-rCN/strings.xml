@@ -493,6 +493,8 @@
     <string name="private_mode">隐私模式（点击以切换工具栏）</string>
     <string name="hide_toolbar">隐藏工具栏</string>
     <string name="expand_toolbar">展开工具栏</string>
+    <string name="collapse_toolbar">收拢工具栏</string>
+    <string name="show_voice_input_button_summary">显示或隐藏工具栏中的语音快捷入口</string>
     <string name="back_to_keyboard">返回键盘</string>
     <string name="backspace">退格</string>
     <string name="move_cursor_up">向上移动光标</string>

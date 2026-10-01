@@ -493,6 +493,8 @@
     <string name="private_mode">Private mode (tap to toggle toolbar)</string>
     <string name="hide_toolbar">Hide toolbar</string>
     <string name="expand_toolbar">Expand toolbar</string>
+    <string name="collapse_toolbar">Collapse toolbar</string>
+    <string name="show_voice_input_button_summary">Show or hide the voice shortcut in the toolbar</string>
     <string name="back_to_keyboard">Back to keyboard</string>
     <string name="backspace">Backspace</string>
     <string name="move_cursor_up">Move cursor up</string>

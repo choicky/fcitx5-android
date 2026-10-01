@@ -55,6 +55,7 @@ import org.fcitx.fcitx5.android.input.voice.SystemStatus
 import org.fcitx.fcitx5.android.input.voice.UnavailableReason
 import org.fcitx.fcitx5.android.input.voice.VoiceSelection
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
+import org.fcitx.fcitx5.android.input.bar.ToolbarAction
 import org.fcitx.fcitx5.android.input.voice.applyRecommendation
 import org.fcitx.fcitx5.android.input.voice.cloudStatus
 import org.fcitx.fcitx5.android.input.voice.endpointProblem
@@ -173,8 +174,18 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val external = external()
         val resolution =
             resolveCurrentService(selection, localStatus(), authorization, ::systemAvailable, external)
+        val toolbarActions = AppPrefs.getInstance().internal.toolbarActions
 
         screen.addCategory(R.string.voice_current_section) {
+            addSwitch(
+                getString(R.string.show_voice_input_button),
+                getString(R.string.show_voice_input_button_summary),
+                ToolbarAction.Voice in ToolbarAction.decode(toolbarActions.getValue())
+            ) { visible ->
+                val actions = ToolbarAction.decode(toolbarActions.getValue())
+                toolbarActions.setValue(ToolbarAction.encode(ToolbarAction.withVoice(actions, visible)))
+                toolbarActions.fireChange()
+            }
             // the selected service itself is the row; it stays shown (with why) when unusable
             val current = selection.current
             val lastError = store.lastError?.takeIf { it.first == current?.key }?.second
