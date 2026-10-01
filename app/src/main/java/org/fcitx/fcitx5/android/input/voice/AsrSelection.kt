@@ -73,8 +73,6 @@ internal sealed interface AsrServiceId {
                 key.removePrefix(PREFIX).takeIf(SelfHostedInstance::isValidId)?.let(::SelfHosted)
             } else {
                 entries.firstOrNull { it.key == key }
-                    ?: key.takeIf { it == Local(LocalAsrModel.ZipformerZh).key }
-                        ?.let { Local(LocalAsrModel.ZipformerZh) }
             }
     }
 }
@@ -145,12 +143,15 @@ internal data class LocalStatus(
 }
 
 internal enum class UnavailableReason {
-    Disabled, RetiredLocalModel, NoSystemRecognizer, NoLocalRuntime, LocalModelFilesMissing,
+    Disabled, NoSystemRecognizer, NoLocalRuntime, LocalModelFilesMissing,
     MissingCredentials, InstanceMissing, InvalidEndpoint, CleartextEndpoint
 }
 
-/** What the one-time recommendation would do (D034). It never picks a network service. */
+/** What the user-initiated recommendation would do (D034). It never picks a network service. */
 internal sealed interface Recommendation {
+    /** Select an installed, enabled and runtime-ready Local model. */
+    data class SelectLocal(val model: LocalAsrModel) : Recommendation
+
     /** Select System ASR, which the user already allowed. */
     data object SelectSystem : Recommendation
 
@@ -162,10 +163,23 @@ internal sealed interface Recommendation {
 }
 
 /**
- * Research Local models (D037) are never recommended, so only System can be; a production
- * Local model will come first once one exists. [systemAvailable] is only queried when needed.
+ * User-initiated recommendation prefers usable retained Local models in their explicit product
+ * order, then authorized/available System ASR. Managed Cloud and Self-hosted are never selected.
  */
 internal fun recommend(
+    local: LocalStatus,
+    selection: VoiceSelection,
+    systemAuthorization: SystemAsrAuthorization,
+    systemAvailable: () -> Boolean
+): Recommendation = when {
+    local.runtimeAvailable -> LocalAsrModel.userVisibleEntries
+        .firstOrNull { it.recommendationEligible && local.usable(it, selection) }
+        ?.let(Recommendation::SelectLocal)
+        ?: recommendSystem(systemAuthorization, systemAvailable)
+    else -> recommendSystem(systemAuthorization, systemAvailable)
+}
+
+private fun recommendSystem(
     systemAuthorization: SystemAsrAuthorization,
     systemAvailable: () -> Boolean
 ): Recommendation = when {
@@ -182,14 +196,14 @@ internal sealed interface AsrResolution {
     /** System ASR is the current service, but the user has not allowed it yet. */
     data object NeedsSystemAuthorization : AsrResolution
 
-    /** No service is selected yet and the one-time recommendation still has to run. */
+    /** No service is selected yet; the current recommendation can be run or may be Nothing. */
     data class NeedsRecommendation(val recommendation: Recommendation) : AsrResolution
 
     /** The selected service cannot be used; the saved selection is kept. */
     data class CurrentUnavailable(val service: AsrServiceId, val reason: UnavailableReason) :
         AsrResolution
 
-    /** Nothing is selected and the recommendation has already run. */
+    /** Kept for callers that explicitly model a terminal no-service state. */
     data object NoService : AsrResolution
 }
 
@@ -206,7 +220,8 @@ internal val AsrResolution.offersTrigger: Boolean
 
 /**
  * Formal resolution of the current service (D034). The saved selection is never changed here.
- * [systemAvailable] is only queried when System ASR is actually considered (D030).
+ * [systemAvailable] is only queried when System ASR is actually considered (D030). A null
+ * current selection is always recalculated from current local/system state.
  */
 internal fun resolveCurrentService(
     selection: VoiceSelection,
@@ -216,8 +231,9 @@ internal fun resolveCurrentService(
     external: ExternalServices = ExternalServices.None
 ): AsrResolution {
     val current = selection.current
-        ?: return if (selection.recommendationDone) AsrResolution.NoService
-        else AsrResolution.NeedsRecommendation(recommend(systemAuthorization, systemAvailable))
+        ?: return AsrResolution.NeedsRecommendation(
+            recommend(local, selection, systemAuthorization, systemAvailable)
+        )
     if (!selection.isEnabled(current)) {
         return AsrResolution.CurrentUnavailable(current, UnavailableReason.Disabled)
     }
@@ -231,8 +247,6 @@ internal fun resolveCurrentService(
             else -> AsrResolution.NeedsSystemAuthorization
         }
         is AsrServiceId.Local -> when {
-            current.model !in LocalAsrModel.userVisibleEntries ->
-                AsrResolution.CurrentUnavailable(current, UnavailableReason.RetiredLocalModel)
             !local.runtimeAvailable ->
                 AsrResolution.CurrentUnavailable(current, UnavailableReason.NoLocalRuntime)
             current.model !in local.installed ->
@@ -268,8 +282,8 @@ internal fun resolveCurrentService(
 
 /**
  * D035: only a selected external (Managed Cloud / Self-hosted) service falls back, and only to
- * an enabled, installed production Local model. Research models (D037, A/B/C) and System ASR
- * never are fallback targets, so there is no target until a production Local model exists.
+ * an enabled, installed production Local model. Recommendation eligibility is intentionally
+ * separate: a research model may be user-recommended but is not a D035 fallback target.
  */
 internal fun fallbackTarget(
     selected: AsrServiceId?,
@@ -310,8 +324,8 @@ internal fun resolveVoiceBackend(
 
 /** The selection after the System ASR disclosure is answered. */
 internal fun VoiceSelection.afterSystemDisclosure(allowed: Boolean): VoiceSelection = when {
-    // the recommendation asked: an allow selects System, a decline ends the recommendation
-    current == null && !recommendationDone ->
+    // the recommendation asked: an allow selects System, a decline records the answer
+    current == null ->
         if (allowed) {
             copy(current = AsrServiceId.System, recommendationDone = true)
                 .withEnabled(AsrServiceId.System, true)
@@ -324,6 +338,9 @@ internal fun VoiceSelection.afterSystemDisclosure(allowed: Boolean): VoiceSelect
 /** Apply a recommendation that needs no further answer. */
 internal fun VoiceSelection.applyRecommendation(recommendation: Recommendation): VoiceSelection =
     when (recommendation) {
+        is Recommendation.SelectLocal ->
+            copy(current = AsrServiceId.Local(recommendation.model), recommendationDone = true)
+                .withEnabled(AsrServiceId.Local(recommendation.model), true)
         Recommendation.SelectSystem ->
             copy(current = AsrServiceId.System, recommendationDone = true)
                 .withEnabled(AsrServiceId.System, true)
@@ -335,7 +352,7 @@ internal fun VoiceSelection.applyRecommendation(recommendation: Recommendation):
 /**
  * Migration from the earlier persisted Auto/Local/System setting (`fb3b0c26`). Never selects a
  * network service. An old Auto keeps System only when it was already allowed, remembers a
- * decline, and otherwise leaves the one-time recommendation to run on first use. An old Local
+ * decline, and otherwise leaves the recommendation to run on first use. An old Local
  * becomes the research model chosen in the Developer screen, or no selection without one.
  */
 internal fun migrateLegacyProvider(
@@ -363,7 +380,7 @@ internal fun migrateLegacyProvider(
  * current key `local`) to one service per model. The effective configuration is kept: the
  * configured model is enabled if Local was enabled, and a current Local becomes that model.
  * A current Local without a configured model could not run before; it becomes no selection
- * (the recommendation does not run again). Nothing new is enabled or selected.
+ * (the recommendation does not run again as part of this migration). Nothing new is enabled or selected.
  */
 internal fun migrateLocalModels(
     currentKey: String,

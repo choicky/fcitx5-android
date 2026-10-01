@@ -25,7 +25,7 @@ class LocalAsrTest {
             dir.resolve("llm.int8.onnx").delete()
             assertEquals(listOf("llm.int8.onnx"), model.missingFiles(dir))
             // a nonexistent directory reports everything missing instead of throwing
-            assertEquals(LocalAsrModel.ZipformerZh.requiredFiles, LocalAsrModel.ZipformerZh.missingFiles(dir.resolve("absent")))
+            assertEquals(LocalAsrModel.FunAsrNano.requiredFiles, LocalAsrModel.FunAsrNano.missingFiles(dir.resolve("absent")))
         } finally {
             dir.deleteRecursively()
         }
@@ -154,10 +154,10 @@ class LocalAsrTest {
         val cache = LocalAsrRecognizerCache { _, _ ->
             if (fail) throw IllegalArgumentException("bad model") else FakeRecognizer()
         }
-        val error = runCatching { cache.acquire(LocalAsrModel.ZipformerZh, 1) { 0 } }.exceptionOrNull()
+        val error = runCatching { cache.acquire(LocalAsrModel.FunAsrNano, 1) { 0 } }.exceptionOrNull()
         assertTrue(error is IllegalArgumentException)
         fail = false
-        cache.acquire(LocalAsrModel.ZipformerZh, 1) { 0 }.close()
+        cache.acquire(LocalAsrModel.FunAsrNano, 1) { 0 }.close()
     }
 
     @Test

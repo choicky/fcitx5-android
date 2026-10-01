@@ -15,7 +15,7 @@ class VoiceBackendSelectionTest {
     fun localAsrPreferenceValues() {
         assertNull(localAsrModel("Off"))
         assertNull(localAsrModel(""))
-        assertEquals(LocalAsrModel.ZipformerZh, localAsrModel("ZipformerZh"))
+        assertNull(localAsrModel("ZipformerZh"))
         assertEquals(LocalAsrModel.FunAsrNano, localAsrModel("FunAsrNano"))
         assertEquals(1, localAsrThreads("1"))
         assertEquals(4, localAsrThreads("4"))

@@ -72,7 +72,6 @@ class VoiceSettingsRowsTest {
 
     // --- the current-service dialog ---
 
-    private val a = AsrServiceId.Local(LocalAsrModel.ZipformerZh)
     private val b = AsrServiceId.Local(LocalAsrModel.FunAsrNano)
     private val c = AsrServiceId.Local(LocalAsrModel.ZipformerBilingual)
     private val secure = SelfHostedInstance("s1", "home", SelfHostedProtocol.SherpaOnnx, "wss://asr.example.org/ws")
@@ -120,17 +119,9 @@ class VoiceSettingsRowsTest {
     }
 
     @Test
-    fun retiredAIsExcludedEvenWhenACallerStillHasItsLegacyCandidate() {
+    fun localCatalogIsOrderedNanoThenBilingual() {
         assertEquals(
-            listOf(c),
-            selectable(setOf(a, c), installed = setOf(LocalAsrModel.ZipformerZh, LocalAsrModel.ZipformerBilingual))
-        )
-    }
-
-    @Test
-    fun localCatalogIsOrderedCThenB() {
-        assertEquals(
-            listOf(LocalAsrModel.ZipformerBilingual, LocalAsrModel.FunAsrNano),
+            listOf(LocalAsrModel.FunAsrNano, LocalAsrModel.ZipformerBilingual),
             ModelCatalogEntry.entries.map { it.model }
         )
     }

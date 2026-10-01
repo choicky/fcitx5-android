@@ -15,7 +15,7 @@ import org.junit.Test
 
 class AsrSelectionTest {
 
-    // any research model; the tests do not imply a formal Local choice
+    // retained Local model used for common selection tests
     private val model = LocalAsrModel.userVisibleEntries.first()
     private val localService = AsrServiceId.Local(model)
     private val localReady = LocalStatus(runtimeAvailable = true, installed = setOf(model))
@@ -95,15 +95,17 @@ class AsrSelectionTest {
     }
 
     @Test
-    fun noPersistentAutoAfterTheRecommendation() {
-        // nothing selected and the recommendation already ran: no service, not an automatic pick
-        assertEquals(AsrResolution.NoService, resolve(selection(null, done = true)))
+    fun recommendationRemainsAvailableWhenCurrentIsCleared() {
+        // recommendationDone records history but must not hide a user-initiated rerun
+        assertEquals(
+            AsrResolution.NeedsRecommendation(Recommendation.Nothing),
+            resolve(selection(null, system = false, local = false, done = true), noLocal, Declined)
+        )
     }
 
     @Test
-    fun recommendationPicksOnlyAllowedSystemAndNeverResearchLocal() {
+    fun recommendationUsesSystemWhenNoUsableLocalExists() {
         val fresh = selection(null, system = false, local = false, done = false)
-        // a ready research model is not recommended (D037)
         assertEquals(
             AsrResolution.NeedsRecommendation(Recommendation.SelectSystem),
             resolve(fresh, localReady, Allowed)
@@ -117,11 +119,32 @@ class AsrSelectionTest {
     }
 
     @Test
+    fun recommendationPrefersFunAsrNanoThenBilingual() {
+        val nano = AsrServiceId.Local(LocalAsrModel.FunAsrNano)
+        val bilingual = AsrServiceId.Local(LocalAsrModel.ZipformerBilingual)
+        val both = VoiceSelection(null, setOf(nano, bilingual), true)
+        val all = LocalStatus(true, setOf(LocalAsrModel.FunAsrNano, LocalAsrModel.ZipformerBilingual))
+        assertEquals(
+            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.FunAsrNano)),
+            resolveCurrentService(both, all, Allowed, systemNotQueried)
+        )
+        val bilingualOnly = both.copy(enabled = setOf(bilingual))
+        assertEquals(
+            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.ZipformerBilingual)),
+            resolveCurrentService(bilingualOnly, all, Allowed, systemNotQueried)
+        )
+        assertEquals(
+            VoiceSelection(nano, setOf(nano, bilingual), true),
+            both.applyRecommendation(Recommendation.SelectLocal(LocalAsrModel.FunAsrNano))
+        )
+    }
+
+    @Test
     fun recommendationIsPersistedOnce() {
         val fresh = selection(null, system = false, local = false, done = false)
         val chosen = fresh.applyRecommendation(Recommendation.SelectSystem)
         assertEquals(selection(AsrServiceId.System, system = true, local = false, done = true), chosen)
-        // later availability changes do not rerun it or rewrite the selection
+        // an explicit selection remains stable when availability changes
         assertEquals(
             AsrResolution.CurrentUnavailable(AsrServiceId.System, UnavailableReason.NoSystemRecognizer),
             resolve(chosen, systemAvailable = false)
@@ -210,22 +233,8 @@ class AsrSelectionTest {
     @Test
     fun serviceKeysRoundTrip() {
         AsrServiceId.entries.forEach { assertEquals(it, AsrServiceId.parse(it.key)) }
-        assertEquals(AsrServiceId.Local(LocalAsrModel.ZipformerZh), AsrServiceId.parse("local:ZipformerZh"))
+        assertNull(AsrServiceId.parse("local:ZipformerZh"))
         assertNull(AsrServiceId.parse("auto"))
-    }
-
-    @Test
-    fun retiredAStaysSelectedButCanNeverStartOrBeListed() {
-        val a = AsrServiceId.Local(LocalAsrModel.ZipformerZh)
-        val selection = VoiceSelection(a, setOf(a), recommendationDone = true)
-        assertFalse(AsrServiceId.entries.contains(a))
-        assertEquals(
-            AsrResolution.CurrentUnavailable(a, UnavailableReason.RetiredLocalModel),
-            resolveCurrentService(selection, LocalStatus(true, LocalAsrModel.entries.toSet()), Allowed, systemNotQueried)
-        )
-        assertFalse(LocalStatus(true, LocalAsrModel.entries.toSet()).usable(a.model, selection))
-        assertEquals(VoiceStartStep.Unavailable(AsrResolution.CurrentUnavailable(a, UnavailableReason.RetiredLocalModel)),
-            voiceStartStep(AsrResolution.CurrentUnavailable(a, UnavailableReason.RetiredLocalModel), true))
     }
 
     @Test
@@ -233,7 +242,7 @@ class AsrSelectionTest {
         // selected Local or System report their own failure (D035)
         AsrServiceId.entries.forEach { assertNull(fallbackTarget(it, selection(it), localReady)) }
         assertNull(fallbackTarget(null, selection(null), localReady))
-        // A and B are research models (D037), never fallback targets
+        // Recommendation eligibility does not make research models D035 targets.
         LocalAsrModel.entries.forEach { assertFalse(it.production) }
     }
 
@@ -269,7 +278,6 @@ class AsrSelectionTest {
         assertTrue(AsrServiceId.entries.containsAll(services))
         services.forEach { assertEquals(it, AsrServiceId.parse(it.key)) }
         assertEquals(LocalAsrModel.userVisibleEntries.size, services.map { it.key }.toSet().size)
-        assertFalse(AsrServiceId.entries.contains(AsrServiceId.Local(LocalAsrModel.ZipformerZh)))
         // the single Local service's key is only read by the migration
         assertNull(AsrServiceId.parse(AsrServiceId.LEGACY_LOCAL_KEY))
     }
@@ -336,7 +344,7 @@ class AsrSelectionTest {
             val migrated = migrateLegacyProvider(legacy, auth, model)
             assertFalse(migrated.current == AsrServiceId.Doubao)
             assertFalse(AsrServiceId.Doubao in migrated.enabled)
-            val recommended = migrated.applyRecommendation(recommend(auth) { true })
+            val recommended = migrated.applyRecommendation(recommend(noLocal, migrated, auth) { true })
             assertFalse(recommended.current == AsrServiceId.Doubao)
         }
     }

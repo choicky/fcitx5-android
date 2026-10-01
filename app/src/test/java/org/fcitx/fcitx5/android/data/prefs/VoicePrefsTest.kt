@@ -91,7 +91,6 @@ class VoicePrefsTest {
     /** An install that already had the single Local service (switch + model, current "local"). */
     @Test
     fun theSingleLocalServiceMigratesToItsModelOnce() {
-        val zh = AsrServiceId.Local(LocalAsrModel.ZipformerZh)
         val values = mutableMapOf<String, Any>(
             "voice_selection_migrated" to true,
             "voice_current_service" to "local",
@@ -102,28 +101,27 @@ class VoicePrefsTest {
             "voice_recommendation_done" to true
         )
         assertEquals(
-            VoiceSelection(zh, setOf(AsrServiceId.System, AsrServiceId.Doubao, zh), true),
+            VoiceSelection(null, setOf(AsrServiceId.System, AsrServiceId.Doubao), true),
             store(values).load()
         )
-        assertEquals("local:ZipformerZh", values["voice_enabled_local_models"])
+        assertEquals("", values["voice_enabled_local_models"])
         // once: a later change stays
         store(values).save(VoiceSelection(AsrServiceId.Doubao, setOf(AsrServiceId.Doubao), true))
         assertEquals(VoiceSelection(AsrServiceId.Doubao, setOf(AsrServiceId.Doubao), true), store(values).load())
     }
 
     @Test
-    fun retiredASelectionIsPreservedWithoutMakingItRunnable() {
-        val a = AsrServiceId.Local(LocalAsrModel.ZipformerZh)
+    fun removedASelectionIsIgnoredWithoutCompatibilityMigration() {
         val values = mutableMapOf<String, Any>(
             "voice_selection_migrated" to true,
             "voice_local_models_migrated" to true,
-            "voice_current_service" to a.key,
-            "voice_enabled_local_models" to a.key,
+            "voice_current_service" to "local:ZipformerZh",
+            "voice_enabled_local_models" to "local:ZipformerZh",
             "voice_recommendation_done" to true
         )
-        assertEquals(VoiceSelection(a, setOf(a), true), store(values).load())
-        assertEquals(a.key, values["voice_current_service"])
-        assertEquals(a.key, values["voice_enabled_local_models"])
+        assertEquals(VoiceSelection(null, emptySet(), true), store(values).load())
+        assertEquals("local:ZipformerZh", values["voice_current_service"])
+        assertEquals("local:ZipformerZh", values["voice_enabled_local_models"])
     }
 
     @Test

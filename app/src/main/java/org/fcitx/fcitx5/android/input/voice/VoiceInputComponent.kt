@@ -316,7 +316,6 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         val message = when (resolution) {
             is AsrResolution.CurrentUnavailable -> when (resolution.reason) {
                 UnavailableReason.Disabled -> R.string.voice_current_disabled
-                UnavailableReason.RetiredLocalModel -> R.string.voice_retired_model
                 UnavailableReason.NoSystemRecognizer -> R.string.voice_input_unavailable
                 UnavailableReason.NoLocalRuntime -> R.string.voice_local_no_runtime
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_local_unavailable
