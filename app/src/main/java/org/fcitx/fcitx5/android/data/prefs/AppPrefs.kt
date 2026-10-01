@@ -70,11 +70,15 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val voiceLastError = string("voice_last_error", "")
         val toolbarActions = string(
             "toolbar_actions",
-            if (!sharedPreferences.contains("toolbar_actions") &&
-                sharedPreferences.contains("show_voice_input_button") &&
-                !runCatching { sharedPreferences.getBoolean("show_voice_input_button", true) }.getOrDefault(true)
-            ) ToolbarAction.encode(ToolbarAction.Default - ToolbarAction.Voice)
-            else ToolbarAction.encode(ToolbarAction.Default)
+            ToolbarAction.encode(
+                ToolbarAction.initialDefault(
+                    sharedPreferences.contains("toolbar_actions"),
+                    if (sharedPreferences.contains("show_voice_input_button")) {
+                        runCatching { sharedPreferences.getBoolean("show_voice_input_button", true) }
+                            .getOrDefault(true)
+                    } else null
+                )
+            )
         )
     }
 

@@ -10,6 +10,32 @@ class ToolbarActionTest {
             ToolbarAction.Clipboard, ToolbarAction.TextEditing), ToolbarAction.Default
     )
 
+    @Test fun cleanInstallDefaultIncludesVoice() = assertEquals(
+        ToolbarAction.Default, ToolbarAction.initialDefault(false, null)
+    )
+
+    @Test fun legacyVoiceOffMigratesOnlyBeforeToolbarPreferenceExists() {
+        assertEquals(
+            ToolbarAction.Default - ToolbarAction.Voice,
+            ToolbarAction.initialDefault(false, false)
+        )
+        assertEquals(
+            ToolbarAction.Default,
+            ToolbarAction.initialDefault(true, false)
+        )
+    }
+
+    @Test fun voiceSettingsToggleChangesOnlyToolbarMembership() {
+        val hidden = ToolbarAction.withVoice(ToolbarAction.Default, false)
+        assertEquals(hidden + ToolbarAction.Voice, ToolbarAction.withVoice(hidden, true))
+        assertEquals(hidden, ToolbarAction.withVoice(hidden, false))
+    }
+
+    @Test fun toolbarToggleMapsToActionAndDirection() {
+        assertEquals(ToolbarAction.ToolbarToggle.Collapse, ToolbarAction.toolbarToggle(true))
+        assertEquals(ToolbarAction.ToolbarToggle.Expand, ToolbarAction.toolbarToggle(false))
+    }
+
     @Test fun hiddenAndUnknownActionsAreNotRendered() = assertEquals(
         listOf(ToolbarAction.Emoji, ToolbarAction.TextEditing),
         ToolbarAction.decode("emoji,unknown,text_editing,emoji")
