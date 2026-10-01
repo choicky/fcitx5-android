@@ -22,9 +22,6 @@ internal object LocalAsrEngines {
 
     fun load(model: LocalAsrModel, modelDir: File, threads: Int): LocalAsrRecognizer =
         when (model) {
-            LocalAsrModel.ZipformerZh -> zipformer(
-                modelDir, threads, "encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "zipformer2"
-            )
             LocalAsrModel.FunAsrNano -> funAsrNano(modelDir, threads)
             // model type left empty: sherpa-onnx reads it from the model metadata
             LocalAsrModel.ZipformerBilingual -> zipformer(
