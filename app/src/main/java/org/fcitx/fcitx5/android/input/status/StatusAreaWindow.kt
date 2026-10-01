@@ -132,28 +132,31 @@ class StatusAreaWindow(
         )
         fun render() {
             container.removeAllViews()
-            ToolbarAction.All.forEach { action ->
+            ToolbarAction.editorOrder(actions).forEach { action ->
+                val enabled = action in actions
+                val index = actions.indexOf(action)
                 val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
                 val check = CheckBox(context).apply {
                     text = label(action)
-                    isChecked = action in actions
+                    isChecked = enabled
                     setOnCheckedChangeListener { _, checked ->
                         actions = if (checked) (actions + action).distinct() else actions - action
+                        render()
                     }
                 }
                 row.addView(check, LinearLayout.LayoutParams(0, context.dp(48), 1f))
                 Button(context).apply {
                     text = "↑"
+                    isEnabled = enabled && index > 0
                     setOnClickListener {
-                        val index = actions.indexOf(action)
                         if (index > 0) actions = actions.toMutableList().apply { add(index - 1, removeAt(index)) }
                         render()
                     }
                 }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(48), context.dp(48))) }
                 Button(context).apply {
                     text = "↓"
+                    isEnabled = enabled && index >= 0 && index < actions.lastIndex
                     setOnClickListener {
-                        val index = actions.indexOf(action)
                         if (index >= 0 && index < actions.lastIndex) actions = actions.toMutableList().apply { add(index + 1, removeAt(index)) }
                         render()
                     }
