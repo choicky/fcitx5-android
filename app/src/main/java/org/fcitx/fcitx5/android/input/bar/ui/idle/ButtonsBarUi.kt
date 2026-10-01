@@ -86,11 +86,7 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
             }
             requiredWidth <= availableWidth
         }
-        val actions = when (result) {
-            is ToolbarAction.PresentationResult.Fits -> result.actions
-            // No post-Emoji product policy is selected; retain the accepted suppression result.
-            is ToolbarAction.PresentationResult.StillInsufficient -> result.actions
-        }
+        val actions = (result as? ToolbarAction.PresentationResult.Fits)?.actions ?: return
         actions.forEach { action ->
             buttons[action]?.let(root::addView)
         }

@@ -87,12 +87,17 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private val credentials by lazy { KeystoreSecretCipher.store(requireContext()) }
     private val toolbarActions = AppPrefs.getInstance().internal.toolbarActions
     private val spaceLongPressBehavior = AppPrefs.getInstance().keyboard.spaceKeyLongPressBehavior
+    private var spaceLongPressPreference: ListPreference? = null
     private val toolbarActionsListener = ManagedPreference.OnChangeListener<String> { _, _ ->
         view?.post { if (isResumed) render() }
     }
     private val spaceLongPressListener =
         ManagedPreference.OnChangeListener<SpaceLongPressBehavior> { _, _ ->
-            view?.post { if (isResumed) render() }
+            view?.post {
+                if (isResumed) {
+                    spaceLongPressPreference?.value = spaceLongPressBehavior.getValue().name
+                }
+            }
         }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -195,6 +200,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val ctx = requireContext()
         renderCount++
         screen.removeAll()
+        spaceLongPressPreference = null
         val selection = store.load()
         val authorization = store.systemAuthorization
         val external = external()
@@ -225,7 +231,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                     spaceLongPressBehavior.fireChange()
                     true
                 }
-            })
+            }.also { spaceLongPressPreference = it })
             // the selected service itself is the row; it stays shown (with why) when unusable
             val current = selection.current
             val lastError = store.lastError?.takeIf { it.first == current?.key }?.second

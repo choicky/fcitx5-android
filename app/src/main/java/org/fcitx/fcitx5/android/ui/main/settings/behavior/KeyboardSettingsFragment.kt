@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.ui.main.settings.behavior
 
 import androidx.preference.PreferenceScreen
+import androidx.preference.Preference
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceFragment
@@ -22,6 +23,9 @@ class KeyboardSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance(
 
     override fun onPreferenceUiCreated(screen: PreferenceScreen) {
         super.onPreferenceUiCreated(screen)
+        screen.findPreference<Preference>(AppPrefs.getInstance().keyboard.preferredVoiceInput.key)?.let {
+            screen.removePreference(it)
+        }
         val switch = MySwitchPreference(screen.context).apply {
             isPersistent = false
             isIconSpaceReserved = false
@@ -38,6 +42,14 @@ class KeyboardSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance(
             }
         }
         voiceSwitch = switch
+        val keepLettersKey = AppPrefs.getInstance().keyboard.keepLettersUppercase.key
+        val keepLettersIndex = (0 until screen.preferenceCount).firstOrNull {
+            screen.getPreference(it).key == keepLettersKey
+        } ?: -1
+        for (index in 0 until screen.preferenceCount) {
+            screen.getPreference(index).order = index * 10
+        }
+        switch.order = ((keepLettersIndex + 1).coerceAtLeast(0) * 10) + 1
         screen.addPreference(switch)
         refreshVoiceSwitch()
     }
