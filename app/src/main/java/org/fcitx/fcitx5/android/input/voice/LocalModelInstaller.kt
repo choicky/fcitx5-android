@@ -15,8 +15,7 @@ import java.security.MessageDigest
 internal data class ModelFile(val path: String, val size: Long, val sha256: String)
 
 /**
- * The Model Manager catalog (D037). All entries are research models; none is a formal or
- * recommended model (D036). Files are fetched from the pinned upstream revision at
+ * The Model Manager catalog (D037). Files are fetched from the pinned upstream revision at
  * [downloadBase] (never mirrored or bundled) and always checked against the pinned SHA-256.
  */
 internal data class ModelCatalogEntry(
@@ -24,6 +23,14 @@ internal data class ModelCatalogEntry(
     val version: String,
     val files: List<ModelFile>,
     val downloadBase: String?,
+    /** Compliance metadata shown in the model details and first-download disclosure. */
+    val sourceName: String? = null,
+    val sourceUrl: String? = null,
+    val license: String? = null,
+    val licenseUrl: String? = null,
+    val attribution: String? = null,
+    val distributionApproved: Boolean = false,
+    val limitation: String? = null,
     /**
      * The download is the owner's personal-testing exception (D037, 2026-09-28): offered only
      * in test (debug) builds. It says nothing about public-release eligibility.
@@ -49,28 +56,8 @@ internal data class ModelCatalogEntry(
 
     companion object {
         /**
-         * A: no licence is declared for the weights, either on this conversion (public, not
-         * gated, no licence metadata) or on the icefall checkpoint it was converted from
-         * (yuekai/icefall-asr-multi-zh-hans-zipformer-large, gated: access after agreeing to
-         * share contact information). Downloadable only in test builds, for the owner's personal
-         * testing; not cleared for public release.
-         */
-        val ZipformerZh = ModelCatalogEntry(
-            LocalAsrModel.ZipformerZh,
-            version = "2025-06-30 (HF ad658fa0)",
-            files = listOf(
-                ModelFile("encoder.int8.onnx", 161141793, "5ac51e27981bb4dab01bb9be4958453ba50c3b61c063ddda0eab23fd3671aa4f"),
-                ModelFile("decoder.onnx", 5165083, "06522ad63cec0fdf6809f4e1db9bb4f7d710c34582e3b35db62ac60eccafac7e"),
-                ModelFile("joiner.int8.onnx", 1033416, "b34584dc6f561089e1d747fedebb3765f2caa72c927ef54d7ca55e5ae40a814b"),
-                ModelFile("tokens.txt", 20628, "6193c7ea1c96d0d9a1e9652789b40d13a8a913b434a5451e93158f5a09fd6652")
-            ),
-            downloadBase = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30/resolve/ad658fa0201659a09ea3c176129a191c77ecae8f",
-            testBuildDownloadOnly = true
-        )
-
-        /**
-         * B: Apache-2.0 declared for Fun-ASR-Nano, the ONNX export (ModelScope metadata) and
-         * Qwen3-0.6B; downloaded from the pinned Hugging Face revision 6f16bd37.
+         * Fun-ASR-Nano ONNX export. ModelScope declares Apache-2.0, but the exporter source
+         * repository has no LICENSE, so public approval remains separately recorded.
          */
         val FunAsrNano = ModelCatalogEntry(
             LocalAsrModel.FunAsrNano,
@@ -83,7 +70,13 @@ internal data class ModelCatalogEntry(
                 ModelFile("Qwen3-0.6B/merges.txt", 1671853, "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"),
                 ModelFile("Qwen3-0.6B/tokenizer.json", 11422654, "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4")
             ),
-            downloadBase = "https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30/resolve/6f16bd378457e13f36ccf3910df9017f96c346fb"
+            downloadBase = "https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30/resolve/6f16bd378457e13f36ccf3910df9017f96c346fb",
+            sourceName = "csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30",
+            sourceUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-funasr-nano-int8-2025-12-30/tree/6f16bd378457e13f36ccf3910df9017f96c346fb",
+            license = "Apache-2.0 (ModelScope metadata; exporter source has no LICENSE)",
+            licenseUrl = "https://www.modelscope.cn/models/zengshuishui/FunASR-nano-onnx",
+            attribution = "FunAudioLLM/Fun-ASR-Nano-2512; Wasser1462/FunASR-nano-onnx; zengshuishui ONNX export",
+            limitation = "Research model; the tested export produced empty final results for about 34–39 second utterances."
         )
 
         /**
@@ -100,11 +93,17 @@ internal data class ModelCatalogEntry(
                 ModelFile("joiner-epoch-99-avg-1.int8.onnx", 3228404, "1ed689c5ed19dbaa725d9d191bb4822b5f4855a39e1ffd28cbc1f340d25b2ee0"),
                 ModelFile("tokens.txt", 56317, "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3")
             ),
-            downloadBase = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/98590b7ed6443e77b714204da2757d75e1a642f4"
+            downloadBase = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/98590b7ed6443e77b714204da2757d75e1a642f4",
+            sourceName = "csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20",
+            sourceUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/tree/98590b7ed6443e77b714204da2757d75e1a642f4",
+            license = "Apache-2.0",
+            licenseUrl = "https://huggingface.co/pfluo/k2fsa-zipformer-chinese-english-mixed",
+            attribution = "csukuangfj sherpa-onnx conversion; pfluo/k2fsa-zipformer-chinese-english-mixed; k2-fsa/icefall",
+            limitation = "Research candidate; training-data provenance is not published in the model materials."
         )
 
-        /** User-facing catalog. ZipformerZh remains above as historical metadata only. */
-        val entries = listOf(ZipformerBilingual, FunAsrNano)
+        /** User-facing catalog and recommendation order. */
+        val entries = listOf(FunAsrNano, ZipformerBilingual)
 
         private val HF_RESOLVE = Regex("""https://huggingface\.co/([^/]+/[^/]+)/resolve/([0-9a-f]{40})/?""")
 

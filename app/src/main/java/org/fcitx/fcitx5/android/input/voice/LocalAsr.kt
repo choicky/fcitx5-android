@@ -9,32 +9,28 @@ import java.io.File
 import java.util.Locale
 
 /**
- * Phase 4B.3b-1 Local ASR candidates. Models are never bundled or downloaded: the tester pushes
- * them to `<external files dir>/local-asr/<dirName>/`. Neither is a selected default.
+ * Local ASR models are not bundled; the Model Manager downloads or imports them into
+ * `<external files dir>/local-asr/<dirName>`. Recognition uses the installed files locally.
  */
 internal enum class LocalAsrModel(
     val dirName: String,
     val streaming: Boolean,
     val requiredFiles: List<String>,
-    /** A formal Local model (D034/D035); research models A and B are not (D036/D037). */
+    /** Whether this model may be selected by the user-initiated recommendation. */
+    val recommendationEligible: Boolean,
+    /** D035 fallback maturity; deliberately separate from recommendation eligibility. */
     val production: Boolean = false
 ) {
-    /** A: sherpa-onnx OnlineRecognizer, true streaming. Research only: weights license unresolved. */
-    ZipformerZh(
-        "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30",
-        streaming = true,
-        listOf("encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "tokens.txt")
-    ),
-
     /**
-     * B: sherpa-onnx OfflineRecognizer with FunASR Nano, whole-utterance decode on stop. The
+     * FunASR Nano: sherpa-onnx OfflineRecognizer, whole-utterance decode on stop. The
      * tokenizer files are the ones sherpa-onnx 1.13.8 OfflineFunASRNanoModelConfig::Validate()
      * requires in the tokenizer directory.
      */
     FunAsrNano(
         "sherpa-onnx-funasr-nano-int8-2025-12-30",
         streaming = false,
-        listOf(
+        recommendationEligible = true,
+        requiredFiles = listOf(
             "encoder_adaptor.int8.onnx",
             "llm.int8.onnx",
             "embedding.int8.onnx",
@@ -45,14 +41,15 @@ internal enum class LocalAsrModel(
     ),
 
     /**
-     * C: streaming Zipformer bilingual zh-en INT8 (sherpa-onnx OnlineRecognizer), a candidate
+     * Streaming Zipformer bilingual zh-en INT8 (sherpa-onnx OnlineRecognizer), a candidate
      * under evaluation with Apache-2.0 declared by the mirror and the upstream author; not a
      * production model until it passes the device gate.
      */
     ZipformerBilingual(
         "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20",
         streaming = true,
-        listOf(
+        recommendationEligible = true,
+        requiredFiles = listOf(
             "encoder-epoch-99-avg-1.int8.onnx",
             "decoder-epoch-99-avg-1.onnx",
             "joiner-epoch-99-avg-1.int8.onnx",
@@ -66,8 +63,8 @@ internal enum class LocalAsrModel(
     companion object {
         const val ROOT_DIR = "local-asr"
 
-        /** Models still understood for old preferences and files, in the current UI order. */
-        val userVisibleEntries = listOf(ZipformerBilingual, FunAsrNano)
+        /** User-facing and recommendation order: FunASR Nano before bilingual Zipformer. */
+        val userVisibleEntries = listOf(FunAsrNano, ZipformerBilingual)
     }
 }
 

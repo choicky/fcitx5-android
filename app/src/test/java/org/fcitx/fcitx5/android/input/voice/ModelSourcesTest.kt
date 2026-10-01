@@ -19,7 +19,7 @@ import java.security.MessageDigest
 /** [ModelSources.download] against a local HTTP server, with the real OkHttp client. */
 class ModelSourcesTest {
 
-    private val model = LocalAsrModel.ZipformerZh
+    private val model = LocalAsrModel.FunAsrNano
     private val contents = model.requiredFiles.associateWith { path -> ByteArray(40_000) { (it * 31 + path.length).toByte() } }
     private val entry = ModelCatalogEntry(
         model, "test", contents.map { (path, bytes) ->
@@ -81,10 +81,10 @@ class ModelSourcesTest {
 
     @Test
     fun interruptedFileResumesWithARangeRequest() {
-        dropFirst = "encoder.int8.onnx"
+        dropFirst = "encoder_adaptor.int8.onnx"
         installer.install(entry, download(), attempts = 2)
         assertTrue(installer.isInstalled(model))
-        val encoder = requests.filter { it.first == "encoder.int8.onnx" }
+        val encoder = requests.filter { it.first == "encoder_adaptor.int8.onnx" }
         assertEquals(2, encoder.size)
         assertNull(encoder[0].second)
         assertTrue(encoder[1].second!!.matches(Regex("bytes=[1-9][0-9]*-")))
@@ -93,7 +93,7 @@ class ModelSourcesTest {
     @Test
     fun serverWithoutRangeSupportStillInstalls() {
         supportRange = false
-        dropFirst = "encoder.int8.onnx"
+        dropFirst = "encoder_adaptor.int8.onnx"
         installer.install(entry, download(), attempts = 2)
         assertTrue(installer.isInstalled(model))
     }
@@ -101,14 +101,14 @@ class ModelSourcesTest {
     @Test
     fun aRejectedRangeFallsBackToTheWholeFile() {
         rejectRange = true
-        dropFirst = "encoder.int8.onnx"
+        dropFirst = "encoder_adaptor.int8.onnx"
         installer.install(entry, download(), attempts = 2)
         assertTrue(installer.isInstalled(model))
     }
 
     @Test
     fun aWrongFileFromAnyAddressIsRejected() {
-        corrupt = "tokens.txt"
+        corrupt = "Qwen3-0.6B/vocab.json"
         val failure = runCatching { installer.install(entry, download(), attempts = 1) }.exceptionOrNull()
         assertTrue(failure is InstallFailure.Mismatch)
         assertFalse(installer.isInstalled(model))
@@ -117,7 +117,7 @@ class ModelSourcesTest {
 
     @Test
     fun aMissingFileOnTheServerIsAnError() {
-        val gone = ModelCatalogEntry(model, "test", entry.files.map { if (it.path == "tokens.txt") it.copy(path = "nope.txt") else it }, base)
+        val gone = ModelCatalogEntry(model, "test", entry.files.map { if (it.path == "Qwen3-0.6B/vocab.json") it.copy(path = "nope.txt") else it }, base)
         val failure = runCatching { installer.install(gone, ModelSources.download(http, gone, base, true)) }.exceptionOrNull()
         assertTrue(failure is InstallFailure.Io)
     }

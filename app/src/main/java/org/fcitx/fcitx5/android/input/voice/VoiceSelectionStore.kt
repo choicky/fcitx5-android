@@ -66,7 +66,8 @@ internal class VoiceSelectionStore(
 
     /**
      * Give or withdraw System ASR permission from its settings row; the selection is unchanged.
-     * Either way the disclosure counts as answered, so the recommendation does not ask again.
+     * Either way the disclosure counts as answered; a later user-initiated recommendation can
+     * still be run after the current selection is cleared.
      */
     fun setSystemAllowed(allowed: Boolean) {
         prefs.voice.systemAsrAllowed.setValue(allowed)

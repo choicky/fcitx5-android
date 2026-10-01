@@ -7,6 +7,8 @@ package org.fcitx.fcitx5.android.ui.main.settings.behavior
 import android.os.Bundle
 import android.speech.SpeechRecognizer
 import android.text.InputType
+import android.text.method.LinkMovementMethod
+import android.text.util.Linkify
 import android.widget.CheckBox
 import android.widget.EditText
 import android.view.View
@@ -132,7 +134,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         is AsrResolution.CurrentUnavailable -> getString(
             when (resolution.reason) {
                 UnavailableReason.Disabled -> R.string.voice_reason_disabled
-                UnavailableReason.RetiredLocalModel -> R.string.voice_reason_retired_model
                 UnavailableReason.NoSystemRecognizer -> R.string.voice_reason_no_system
                 UnavailableReason.NoLocalRuntime -> R.string.voice_reason_no_runtime
                 UnavailableReason.LocalModelFilesMissing -> R.string.voice_reason_model_missing
@@ -149,15 +150,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         when (model) {
             LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c
             LocalAsrModel.FunAsrNano -> R.string.voice_model_b
-            LocalAsrModel.ZipformerZh -> R.string.voice_model_a
-        }
-    )
-
-    private fun modelNote(model: LocalAsrModel) = getString(
-        when (model) {
-            LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c_note
-            LocalAsrModel.FunAsrNano -> R.string.voice_model_b_note
-            LocalAsrModel.ZipformerZh -> R.string.voice_model_a_note
         }
     )
 
@@ -197,7 +189,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             if (lastUsed != null && lastUsed != current) {
                 addPreference(getString(R.string.voice_last_used, label(lastUsed)))
             }
-            if (current == null && !selection.recommendationDone) {
+            if (current == null) {
                 addPreference(
                     getString(R.string.voice_run_recommendation),
                     getString(R.string.voice_run_recommendation_summary)
@@ -502,16 +494,33 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     /** Version, size, source, licence and limits; the full disclosure stays in the confirmation. */
     private fun showModelDetails(entry: ModelCatalogEntry) {
-        val source = entry.sourceLabel?.takeIf { entry.downloadOffered(BuildConfig.DEBUG) }
-            ?.let { getString(R.string.voice_model_source, it) + "\n" }.orEmpty()
         AlertDialog.Builder(requireContext())
             .setTitle(modelLabel(entry.model))
-            .setMessage(
-                getString(R.string.voice_model_details_message, entry.version, megabytes(entry.totalBytes)) +
-                        "\n" + source + "\n" + modelNote(entry.model)
-            )
+            .setView(metadataView(modelMetadataText(entry)))
             .setPositiveButton(android.R.string.ok, null)
             .show()
+    }
+
+    private fun modelMetadataText(entry: ModelCatalogEntry): String = buildString {
+        append(getString(R.string.voice_model_details_message, entry.version, megabytes(entry.totalBytes)))
+        append("\n\n")
+        append(getString(R.string.voice_model_source, entry.sourceName ?: entry.sourceLabel ?: "unknown"))
+        entry.sourceUrl?.let { append("\n").append(it) }
+        append("\n").append(getString(R.string.voice_model_license, entry.license ?: getString(R.string.voice_license_unconfirmed)))
+        entry.licenseUrl?.let { append("\n").append(it) }
+        entry.attribution?.let { append("\n").append(getString(R.string.voice_model_attribution, it)) }
+        append("\n\n").append(getString(R.string.voice_model_offline_note))
+        entry.limitation?.let { append("\n\n").append(it) }
+        if (!entry.distributionApproved) {
+            append("\n\n").append(getString(R.string.voice_model_research_status))
+        }
+    }
+
+    private fun metadataView(text: String) = TextView(requireContext()).apply {
+        setPadding(48, 0, 48, 0)
+        this.text = text
+        autoLinkMask = Linkify.WEB_URLS
+        movementMethod = LinkMovementMethod.getInstance()
     }
 
     /** A model whose previous download is still stopping cannot start another one yet. */
@@ -599,16 +608,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private fun confirmDownload(entry: ModelCatalogEntry) {
         AlertDialog.Builder(requireContext())
             .setTitle(modelLabel(entry.model))
-            .setMessage(
-                getString(
-                    when (entry.model) {
-                        LocalAsrModel.ZipformerZh -> R.string.voice_model_download_confirm_a
-                        LocalAsrModel.FunAsrNano -> R.string.voice_model_download_confirm
-                        LocalAsrModel.ZipformerBilingual -> R.string.voice_model_download_confirm_c
-                    },
-                    megabytes(entry.totalBytes)
-                )
-            )
+            .setView(metadataView(modelMetadataText(entry)))
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 startedOrBusy(ModelJobs.download(requireContext(), entry))
                 render()
@@ -951,9 +951,11 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         }
     }
 
-    /** The one-time recommendation (D034); it never selects a network service. */
+    /** The user-initiated recommendation (D034); it never selects a network service. */
     private fun runRecommendation() {
-        when (val recommendation = recommend(store.systemAuthorization, ::systemAvailable)) {
+        when (val recommendation = recommend(
+            localStatus(), store.load(), store.systemAuthorization, ::systemAvailable
+        )) {
             Recommendation.AskSystemAuthorization -> showSystemDisclosure()
             else -> {
                 store.save(store.load().applyRecommendation(recommendation))

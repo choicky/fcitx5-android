@@ -28,7 +28,7 @@ class ModelTasksTest {
     private val changes = AtomicInteger()
     private val tasks = ModelTasks(scope) { changes.incrementAndGet() }
 
-    private val model = LocalAsrModel.ZipformerZh
+    private val model = LocalAsrModel.FunAsrNano
     private val root = Files.createTempDirectory("models").toFile()
     private val installer = LocalModelInstaller(root)
     private val contents = model.requiredFiles.associateWith { "content of $it".toByteArray() }
@@ -73,7 +73,7 @@ class ModelTasksTest {
     fun aCancelledWorkerKeepsTheModelUntilItExitsAndTheRetryDoesNotOverlap() {
         val inside = AtomicInteger()
         val maxInside = AtomicInteger()
-        val stalled = StalledRead(contents["encoder.int8.onnx"]!!)
+        val stalled = StalledRead(contents["encoder_adaptor.int8.onnx"]!!)
         var lateProgress: (() -> Unit)? = null
 
         fun work(source: ModelFileSource): (ModelTasks.Handle) -> Unit = { handle ->
@@ -87,7 +87,7 @@ class ModelTasksTest {
         }
 
         val first: ModelFileSource = { f, _ ->
-            ModelStream(if (f.path == "encoder.int8.onnx") stalled else ByteArrayInputStream(contents[f.path]!!))
+            ModelStream(if (f.path == "encoder_adaptor.int8.onnx") stalled else ByteArrayInputStream(contents[f.path]!!))
         }
         assertTrue(tasks.start(model, entry.totalBytes, work(first)))
         assertTrue(stalled.entered.await(5, TimeUnit.SECONDS))

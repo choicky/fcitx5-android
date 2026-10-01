@@ -1,6 +1,8 @@
 # Phase 4 voice settings acceptance
 
-This document records the current acceptance scope for the `phase4-voice-poc` branch.
+This document records the historical acceptance scope for the `phase4-voice-poc` branch.
+The current Local model set and recommendation behavior are defined by the Phase 5 D045
+checkpoint in the control repository.
 
 ## Historical PASS records
 
@@ -10,13 +12,12 @@ acceptance record was present in this checkout to edit.
 
 ## This change
 
-- A (`ZipformerZh`) is retained as a legacy model identifier and storage path so old preferences
-  and files remain readable. It is absent from settings rows, enable controls, model actions,
-  current-service candidates, and the local runtime status. An old current/enabled A selection is
-  kept in preferences, resolves to unavailable with a prompt to choose another service, and never
-  creates a backend. A files are not deleted.
-- C (`ZipformerBilingual`) precedes B (`FunAsrNano`) in the user-facing catalog. B/C IDs, paths,
-  checksums, installed state, enablement, and current selection remain persisted as before.
+- Historical A/B/C acceptance covered A (`ZipformerZh`), B (`FunAsrNano`), and C
+  (`ZipformerBilingual`). The current implementation removes A from the supported set; no
+  external-user migration is required. A-specific preferences are no longer parsed as a current
+  model, while shared Zipformer runtime code remains for C.
+- The current user-facing order is B (`FunAsrNano`) followed by C (`ZipformerBilingual`). B/C
+  IDs, paths, checksums, installed state, enablement, and current selection remain persisted.
 - The system group is named “系统自带 ASR”. Its one-row enablement, unavailable, authorization,
   and disclosure behavior remains covered separately.
 - Doubao, Qwen, and Tencent switch titles use short service names. Credential storage, redaction,
@@ -35,18 +36,16 @@ Run when a JDK and Android SDK are available:
 BUILD_ABI=arm64-v8a ./gradlew :app:assembleDebug
 ```
 
-The tests cover A non-selection/non-start, old A current state, C/B ordering, System ASR
-authorization states, cloud enablement and credential availability behavior. APK compilation is
-not a real-device PASS.
+The historical tests covered A non-selection/non-start and old A current state. Current tests
+cover A removal, B/C ordering, System ASR authorization states, cloud enablement and credential
+availability behavior. APK compilation is not a real-device PASS.
 
 ## Pending real-device checks
 
-- Upgrade an install with A enabled and current; verify the current row explains that A is no
-  longer offered, the voice trigger does not start, the current-service chooser excludes A, and
-  B/C can be selected without an automatic choice.
-- Verify an A model directory remains after upgrade and B/C directories and installed states are
-  unchanged.
-- Verify C appears before B, with no A row, switch, download, import, or alternate-source action.
+- Verify the current Local list contains only B and C, with no A row, switch, download, import, or
+  alternate-source action; no A migration is required for current test devices.
+- Verify FunASR Nano precedes bilingual Zipformer and that current-null recommendation selects the
+  first usable retained Local model.
 - Verify System ASR “未授权” and “已停用” remain distinct, including disclosure and revoke flows;
   confirm the possible network disclosure is visible.
 - Verify Doubao/Qwen/Tencent titles, switches, encrypted credential editing, hidden secrets, and
