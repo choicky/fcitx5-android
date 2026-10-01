@@ -217,6 +217,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 toolbarActions.fireChange()
             }
             addPreference(ListPreference(ctx).apply {
+                key = spaceLongPressBehavior.key
                 isPersistent = false
                 isIconSpaceReserved = false
                 isSingleLineTitle = false
