@@ -370,7 +370,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
         toolbarEditorUi = null
         toolbarEditorWindow = null
         idleUi.exitToolbarEdit()
-        if (restoreKeyboard && !windowManager.isAttached(KeyboardWindow)) {
+        if (restoreKeyboard && !windowManager.isAttached(windowManager.getEssentialWindow(KeyboardWindow))) {
             windowManager.attachWindow(KeyboardWindow)
         }
     }
