@@ -215,13 +215,17 @@ class ToolbarActionTest {
             ToolbarEditorItemBounds(0, 0, 72, 76),
             ToolbarEditorItemBounds(80, 0, 152, 76),
         )
-        val beforeSecond = toolbarEditorInsertionIndex(75, 20, available)
+        val afterSecond = toolbarEditorInsertionIndex(160, 20, available)
+        assertEquals(2, afterSecond)
         val reordered = ToolbarAction.editorMoveAvailable(
             state,
             state.available[0],
-            beforeSecond,
+            afterSecond,
         )
-        assertEquals(state.available[0], reordered.available[beforeSecond])
+        assertEquals(
+            listOf(state.available[1], state.available[0]),
+            reordered.available.take(2),
+        )
 
         val crossContainerPosition = toolbarEditorInsertionIndex(0, 20, available)
         val inserted = ToolbarAction.editorInsertAvailable(
