@@ -10,6 +10,8 @@ import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
 import org.fcitx.fcitx5.android.input.voice.SystemAsrAuthorization
 import org.fcitx.fcitx5.android.input.voice.VoiceSelection
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
+import org.fcitx.fcitx5.android.input.bar.ToolbarAction
+import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -201,5 +203,39 @@ class VoicePrefsTest {
         val values = mutableMapOf<String, Any>("voice_last_error" to "qwen\nraw detail")
         assertFalse(AppPrefs(prefs(values, commitFails = true)).purgeLegacyVoiceLastError())
         assertTrue(values.containsKey("voice_last_error"))
+    }
+
+    @Test
+    fun mirroredTriggerPreferencesShareCanonicalKeysAndRemainIndependentInAllFourStates() {
+        val values = mutableMapOf<String, Any>()
+        val shared = prefs(values)
+        // Two projections read the same store, not separate Voice-specific preferences.
+        val keyboard = AppPrefs(shared)
+        val voice = AppPrefs(shared)
+        for (mic in listOf(false, true)) {
+            for (space in listOf(SpaceLongPressBehavior.None, SpaceLongPressBehavior.VoiceInput)) {
+                keyboard.keyboard.spaceKeyLongPressBehavior.setValue(space)
+                val actions = ToolbarAction.decode(voice.internal.toolbarActions.getValue())
+                voice.internal.toolbarActions.setValue(ToolbarAction.encode(ToolbarAction.withVoice(actions, mic)))
+                assertEquals(mic, ToolbarAction.Voice in ToolbarAction.decode(keyboard.internal.toolbarActions.getValue()))
+                assertEquals(space, voice.keyboard.spaceKeyLongPressBehavior.getValue())
+            }
+        }
+        assertEquals(setOf("toolbar_actions", "space_long_press_behavior"), values.keys)
+        assertEquals("space_long_press_behavior", voice.keyboard.spaceKeyLongPressBehavior.key)
+    }
+
+    @Test
+    fun everyCanonicalSpaceOptionRoundTripsWithoutChangingToolbarOrProviderSelection() {
+        val initialActions = ToolbarAction.encode(ToolbarAction.Default)
+        val values = mutableMapOf<String, Any>("toolbar_actions" to initialActions,
+            "voice_current_service" to "doubao")
+        val app = AppPrefs(prefs(values))
+        SpaceLongPressBehavior.entries.forEach { option ->
+            app.keyboard.spaceKeyLongPressBehavior.setValue(option)
+            assertEquals(option, app.keyboard.spaceKeyLongPressBehavior.getValue())
+            assertEquals(initialActions, app.internal.toolbarActions.getValue())
+            assertEquals("doubao", values["voice_current_service"])
+        }
     }
 }
