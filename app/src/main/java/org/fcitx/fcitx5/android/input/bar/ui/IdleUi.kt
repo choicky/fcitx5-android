@@ -83,7 +83,7 @@ class IdleUi(
     @Keep
     private val toolbarActionsListener =
         org.fcitx.fcitx5.android.data.prefs.ManagedPreference.OnChangeListener<String> { _, value ->
-            buttonsUi.render(ToolbarAction.decode(value))
+            renderToolbar(ToolbarAction.decode(value))
         }
 
     val clipboardUi = ClipboardSuggestionUi(ctx, theme)
@@ -95,7 +95,7 @@ class IdleUi(
     val inlineSuggestionsBar = InlineSuggestionsUi(ctx)
 
     private val animator = ViewAnimator(ctx).apply {
-        buttonsUi.render(ToolbarAction.decode(toolbarActions.getValue()))
+        renderToolbar(ToolbarAction.decode(toolbarActions.getValue()))
         add(emptyBar, lParams(matchParent, matchParent))
         add(buttonsUi.root, lParams(matchParent, matchParent))
         add(clipboardUi.root, lParams(matchParent, matchParent))
@@ -154,9 +154,13 @@ class IdleUi(
 
     fun setVoiceInputButton(isVoiceInput: Boolean, callback: View.OnClickListener) {
         voiceInputButton = isVoiceInput
-        buttonsUi.voiceInputButton.visibility = if (isVoiceInput) View.VISIBLE else View.GONE
         if (isVoiceInput) updateVoiceInputButton()
         buttonsUi.voiceInputButton.setOnClickListener(callback)
+        renderToolbar(ToolbarAction.decode(toolbarActions.getValue()))
+    }
+
+    private fun renderToolbar(actions: List<ToolbarAction>) {
+        buttonsUi.render(actions.filter { it != ToolbarAction.Voice || voiceInputButton })
     }
 
     internal fun setVoiceInputState(state: VoiceInputSession.State) {

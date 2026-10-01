@@ -117,7 +117,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private enum class NumberRowState { Auto, ForceShow, ForceHide }
 
     private var numberRowState = NumberRowState.Auto
-    private var isToolbarManuallyToggled = false
+    private var isToolbarCollapsed = false
 
     @Keep
     private val onClipboardUpdateListener =
@@ -180,7 +180,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
             isClipboardFresh -> IdleUi.State.Clipboard
             isInlineSuggestionPresent -> IdleUi.State.InlineSuggestion
             isCapabilityFlagsPassword && !isKeyboardLayoutNumber && numberRowState != NumberRowState.ForceHide -> IdleUi.State.NumberRow
-            else -> if (isToolbarManuallyToggled) IdleUi.State.Empty else IdleUi.State.Toolbar
+            else -> if (isToolbarCollapsed) IdleUi.State.Empty else IdleUi.State.Toolbar
         }
         if (newState == idleUi.currentState) return
         idleUi.updateState(newState, fromUser)
@@ -252,10 +252,10 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
             toolsButton.setOnClickListener {
                 windowManager.attachWindow(StatusAreaWindow(
                     ToolbarControls(
-                        isExpanded = { idleUi.currentState == IdleUi.State.Toolbar },
+                        isExpanded = { !isToolbarCollapsed },
                         toggle = {
-                            isToolbarManuallyToggled = idleUi.currentState == IdleUi.State.Toolbar
-                            if (isToolbarManuallyToggled) idleUi.updateState(IdleUi.State.Empty, true)
+                            isToolbarCollapsed = !isToolbarCollapsed
+                            if (isToolbarCollapsed) idleUi.updateState(IdleUi.State.Empty, true)
                             else idleUi.updateState(IdleUi.State.Toolbar, true)
                             windowManager.attachWindow(KeyboardWindow)
                         }

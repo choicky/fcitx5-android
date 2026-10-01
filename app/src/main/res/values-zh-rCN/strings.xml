@@ -289,6 +289,8 @@
     <string name="status_area">状态区域</string>
     <string name="toolbar_tools">工具</string>
     <string name="edit_toolbar">编辑工具栏</string>
+    <string name="toolbar_current_actions">当前工具栏</string>
+    <string name="toolbar_available_actions">可用操作</string>
     <string name="quickphrase">快捷短语</string>
     <string name="restore_default">恢复默认</string>
     <string name="expand_candidates_list">展开候选词列表</string>

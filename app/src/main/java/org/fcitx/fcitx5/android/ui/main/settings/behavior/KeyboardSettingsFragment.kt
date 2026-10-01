@@ -4,7 +4,61 @@
  */
 package org.fcitx.fcitx5.android.ui.main.settings.behavior
 
+import androidx.preference.PreferenceScreen
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceFragment
+import org.fcitx.fcitx5.android.input.bar.ToolbarAction
+import org.fcitx.fcitx5.android.ui.main.modified.MySwitchPreference
+import org.fcitx.fcitx5.android.R
 
-class KeyboardSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance().keyboard)
+class KeyboardSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance().keyboard) {
+
+    private val toolbarActions = AppPrefs.getInstance().internal.toolbarActions
+    private var voiceSwitch: MySwitchPreference? = null
+    private val toolbarActionsListener = ManagedPreference.OnChangeListener<String> { _, _ ->
+        refreshVoiceSwitch()
+    }
+
+    override fun onPreferenceUiCreated(screen: PreferenceScreen) {
+        super.onPreferenceUiCreated(screen)
+        val switch = MySwitchPreference(screen.context).apply {
+            isPersistent = false
+            isIconSpaceReserved = false
+            isSingleLineTitle = false
+            setTitle(R.string.show_voice_input_button)
+            setSummary(R.string.show_voice_input_button_summary)
+            setOnPreferenceChangeListener { _, value ->
+                val actions = ToolbarAction.decode(toolbarActions.getValue())
+                toolbarActions.setValue(
+                    ToolbarAction.encode(ToolbarAction.withVoice(actions, value as Boolean))
+                )
+                toolbarActions.fireChange()
+                true
+            }
+        }
+        voiceSwitch = switch
+        screen.addPreference(switch)
+        refreshVoiceSwitch()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshVoiceSwitch()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        toolbarActions.registerOnChangeListener(toolbarActionsListener)
+    }
+
+    override fun onStop() {
+        toolbarActions.unregisterOnChangeListener(toolbarActionsListener)
+        super.onStop()
+    }
+
+    private fun refreshVoiceSwitch() {
+        voiceSwitch?.isChecked = ToolbarAction.Voice in
+            ToolbarAction.decode(toolbarActions.getValue())
+    }
+}
