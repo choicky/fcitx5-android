@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.input.status
 
 import android.app.AlertDialog
 import android.content.ClipData
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.View
 import android.view.Gravity
@@ -14,6 +15,7 @@ import android.widget.PopupMenu
 import android.widget.Toast
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -116,7 +118,7 @@ class StatusAreaWindow(
 
     private fun showToolbarEditor() {
         val preference = AppPrefs.getInstance().internal.toolbarActions
-        var actions = ToolbarAction.decode(preference.getValue())
+        var editorState = ToolbarAction.editorState(ToolbarAction.decode(preference.getValue()))
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(context.dp(20), 0, context.dp(20), 0)
@@ -128,17 +130,38 @@ class StatusAreaWindow(
                 FrameLayout.LayoutParams.WRAP_CONTENT
             ))
         }
-        val currentContainer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        val availableContainer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        val footer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        content.addView(currentContainer)
-        content.addView(availableContainer)
-        content.addView(footer)
+        val currentContainer = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        val availableContainer = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        val currentScroll = HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(currentContainer, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, context.dp(56)
+            ))
+        }
+        val availableScroll = HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(availableContainer, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, context.dp(56)
+            ))
+        }
+        val currentHeading = LinearLayout(context).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(TextView(context).apply { setText(R.string.toolbar_current_actions) },
+                LinearLayout.LayoutParams(0, context.dp(48), 1f))
+        }
+        val availableHeading = TextView(context).apply {
+            setText(R.string.toolbar_available_actions)
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        content.addView(currentHeading)
+        content.addView(currentScroll)
+        content.addView(availableHeading)
+        content.addView(availableScroll)
         val dialog = AlertDialog.Builder(context)
             .setTitle(R.string.edit_toolbar)
             .setView(scroll)
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                preference.setValue(ToolbarAction.encode(actions))
+                preference.setValue(ToolbarAction.encode(editorState.current))
                 preference.fireChange()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -161,17 +184,6 @@ class StatusAreaWindow(
                 setLayout(WindowManager.LayoutParams.MATCH_PARENT, characterAreaHeight)
             }
         }
-        fun label(action: ToolbarAction) = context.getString(
-            when (action) {
-                ToolbarAction.Emoji -> R.string.emoji_and_symbols
-                ToolbarAction.QuickPhrase -> R.string.quickphrase
-                ToolbarAction.Voice -> R.string.voice_input
-                ToolbarAction.Clipboard -> R.string.clipboard
-                ToolbarAction.TextEditing -> R.string.text_editing
-                ToolbarAction.Undo -> R.string.undo
-                ToolbarAction.Redo -> R.string.redo
-            }
-        )
         fun actionFromDrag(event: android.view.DragEvent): ToolbarAction? {
             val id = event.clipData?.getItemAt(0)?.text?.toString() ?: return null
             return ToolbarAction.entries.firstOrNull { it.id == id }
@@ -197,75 +209,117 @@ class StatusAreaWindow(
             return row.startDrag(data, View.DragShadowBuilder(row), action.id, 0)
         }
 
+        fun actionLabel(action: ToolbarAction) = when (action) {
+            ToolbarAction.Emoji -> R.string.emoji_and_symbols
+            ToolbarAction.QuickPhrase -> R.string.quickphrase
+            ToolbarAction.Voice -> R.string.voice_input
+            ToolbarAction.Clipboard -> R.string.clipboard
+            ToolbarAction.TextEditing -> R.string.text_editing
+            ToolbarAction.Undo -> R.string.undo
+            ToolbarAction.Redo -> R.string.redo
+        }.let(context::getString)
+
+        fun badge(symbol: String, description: String, onClick: () -> Unit) = TextView(context).apply {
+            text = symbol
+            textSize = 10f
+            gravity = Gravity.CENTER
+            setTextColor(theme.genericActiveForegroundColor)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(theme.genericActiveBackgroundColor)
+            }
+            contentDescription = description
+            elevation = context.dp(2).toFloat()
+            setOnClickListener { onClick() }
+        }
+
+        fun actionChip(action: ToolbarAction, symbol: String, onClick: () -> Unit): View {
+            val chip = FrameLayout(context).apply {
+                contentDescription = actionLabel(action)
+                setOnLongClickListener { startDrag(this, action) }
+            }
+            ToolButton(context, action.icon, theme).apply {
+                isClickable = false
+                isFocusable = false
+            }.also { button ->
+                chip.addView(button, FrameLayout.LayoutParams(context.dp(48), context.dp(48), Gravity.CENTER))
+            }
+            badge(symbol, if (symbol == "+") "Add ${actionLabel(action)}" else "Remove ${actionLabel(action)}") {
+                onClick()
+            }.also { control ->
+                chip.addView(control, FrameLayout.LayoutParams(context.dp(18), context.dp(18), Gravity.TOP or Gravity.END))
+            }
+            return chip
+        }
+
         fun render() {
             currentContainer.removeAllViews()
             availableContainer.removeAllViews()
-            TextView(context).apply { setText(R.string.toolbar_current_actions) }
-                .also { currentContainer.addView(it) }
-            TextView(context).apply { setText(R.string.toolbar_available_actions) }
-                .also { availableContainer.addView(it) }
 
-            availableContainer.setOnDragListener(dropListener { action ->
-                actions = actions - action
-                render()
-            })
-
-            fun insertionZone(index: Int): View = View(context).apply {
-                minimumHeight = context.dp(12)
+            fun insertionZone(
+                position: Int,
+                onDrop: (ToolbarAction, Int) -> Unit
+            ): View = View(context).apply {
+                layoutParams = LinearLayout.LayoutParams(context.dp(12), context.dp(56))
                 setOnDragListener(dropListener { dropped ->
-                    actions = if (dropped in actions) {
-                        ToolbarAction.moveTo(actions, dropped, index)
-                    } else {
-                        ToolbarAction.insertAt(actions, dropped, index)
-                    }
+                    onDrop(dropped, position)
                     render()
                 })
             }
 
-            actions.forEachIndexed { index, action ->
-                currentContainer.addView(insertionZone(index))
-                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-                ToolButton(context, action.icon, theme).apply {
-                    isClickable = false
-                    isFocusable = false
-                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(48), context.dp(48))) }
-                val labelView = TextView(context).apply {
-                    text = label(action)
+            currentContainer.addView(insertionZone(0) { dropped, position ->
+                editorState = if (dropped in editorState.current) {
+                    ToolbarAction.editorMoveCurrent(editorState, dropped, position)
+                } else {
+                    ToolbarAction.editorInsertCurrent(editorState, dropped, position)
                 }
-                row.addView(labelView, LinearLayout.LayoutParams(0, context.dp(48), 1f))
-                Button(context).apply {
-                    text = "−"
-                    contentDescription = "Remove ${label(action)}"
-                    setOnClickListener { actions = actions - action; render() }
-                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(56), context.dp(48))) }
-                row.setOnLongClickListener { startDrag(row, action) }
-                currentContainer.addView(row)
+            })
+            editorState.current.forEachIndexed { index, action ->
+                currentContainer.addView(actionChip(action, "−") {
+                    editorState = ToolbarAction.editorAppendAvailable(editorState, action)
+                    render()
+                }, LinearLayout.LayoutParams(context.dp(56), context.dp(56)))
+                currentContainer.addView(insertionZone(index + 1) { dropped, position ->
+                    editorState = if (dropped in editorState.current) {
+                        ToolbarAction.editorMoveCurrent(editorState, dropped, position)
+                    } else {
+                        ToolbarAction.editorInsertCurrent(editorState, dropped, position)
+                    }
+                })
             }
-            currentContainer.addView(insertionZone(actions.size))
 
-            ToolbarAction.All.filterNot { it in actions }.forEach { action ->
-                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-                ToolButton(context, action.icon, theme).apply {
-                    isClickable = false
-                    isFocusable = false
-                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(48), context.dp(48))) }
-                val labelView = TextView(context).apply {
-                    text = label(action)
+            availableContainer.addView(insertionZone(0) { dropped, position ->
+                editorState = if (dropped in editorState.available) {
+                    ToolbarAction.editorMoveAvailable(editorState, dropped, position)
+                } else {
+                    ToolbarAction.editorInsertAvailable(editorState, dropped, position)
                 }
-                row.addView(labelView, LinearLayout.LayoutParams(0, context.dp(48), 1f))
-                Button(context).apply {
-                    text = "+"
-                    contentDescription = "Add ${label(action)}"
-                    setOnClickListener { actions = ToolbarAction.append(actions, action); render() }
-                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(56), context.dp(48))) }
-                row.setOnLongClickListener { startDrag(row, action) }
-                availableContainer.addView(row)
+            })
+            editorState.available.forEachIndexed { index, action ->
+                availableContainer.addView(actionChip(action, "+") {
+                    editorState = ToolbarAction.editorAppendCurrent(editorState, action)
+                    render()
+                }, LinearLayout.LayoutParams(context.dp(56), context.dp(56)))
+                availableContainer.addView(insertionZone(index + 1) { dropped, position ->
+                    editorState = if (dropped in editorState.available) {
+                        ToolbarAction.editorMoveAvailable(editorState, dropped, position)
+                    } else {
+                        ToolbarAction.editorInsertAvailable(editorState, dropped, position)
+                    }
+                })
             }
-            footer.removeAllViews()
-            Button(context).apply {
-                text = context.getString(R.string.restore_default)
-                setOnClickListener { actions = ToolbarAction.Default; render() }
-            }.also { footer.addView(it) }
+
+        }
+        Button(context).apply {
+            text = context.getString(R.string.restore_default)
+            setOnClickListener {
+                editorState = ToolbarAction.editorDefaultState()
+                render()
+            }
+        }.also { restoreButton ->
+            currentHeading.addView(restoreButton, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, context.dp(48)
+            ))
         }
         render()
         service.showDialog(dialog)

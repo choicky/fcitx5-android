@@ -16,6 +16,11 @@ enum class ToolbarAction(val id: String, @DrawableRes val icon: Int) {
 
     enum class ToolbarToggle { Collapse, Expand }
 
+    data class EditorState(
+        val current: List<ToolbarAction>,
+        val available: List<ToolbarAction>
+    )
+
     sealed class PresentationResult {
         data class Fits(val actions: List<ToolbarAction>) : PresentationResult()
         data class StillInsufficient(val actions: List<ToolbarAction>) : PresentationResult()
@@ -61,23 +66,51 @@ enum class ToolbarAction(val id: String, @DrawableRes val icon: Int) {
             return insertAt(normalized, action, adjusted)
         }
 
-        /** Presentation-only suppression; the final non-fit state remains explicit. */
+        /** Presentation-only suppression from the right end of configured order. */
         fun presentationActions(
             actions: List<ToolbarAction>, fits: (List<ToolbarAction>) -> Boolean
         ): PresentationResult {
             val normalized = normalize(actions)
-            if (fits(normalized)) return PresentationResult.Fits(normalized)
-            val suppressed = normalized.toMutableList()
-            listOf(QuickPhrase, Emoji, TextEditing, Clipboard).forEach { action ->
-                if (action in suppressed) suppressed.remove(action)
-                if (fits(suppressed)) return PresentationResult.Fits(suppressed)
+            for (size in normalized.size downTo 0) {
+                val prefix = normalized.take(size)
+                if (fits(prefix)) return PresentationResult.Fits(prefix)
             }
-            return if (fits(suppressed)) {
-                PresentationResult.Fits(suppressed)
-            } else {
-                PresentationResult.StillInsufficient(suppressed)
-            }
+            // An empty configurable prefix is a valid presentation; Tools and Hide remain.
+            return PresentationResult.Fits(emptyList())
         }
+
+        /** Build the transactional Editor state from Current and a session-local Available order. */
+        fun editorState(
+            current: List<ToolbarAction>,
+            availableOrder: List<ToolbarAction> = All
+        ): EditorState {
+            val currentNormalized = normalize(current)
+            val availableNormalized = normalize(availableOrder).filterNot { it in currentNormalized }
+            val missing = All.filterNot { it in currentNormalized || it in availableNormalized }
+            return EditorState(currentNormalized, availableNormalized + missing)
+        }
+
+        fun editorAppendCurrent(state: EditorState, action: ToolbarAction) =
+            editorState(append(state.current, action), state.available)
+
+        fun editorInsertCurrent(state: EditorState, action: ToolbarAction, position: Int) =
+            editorState(insertAt(state.current, action, position), state.available)
+
+        fun editorMoveCurrent(state: EditorState, action: ToolbarAction, position: Int) =
+            editorState(moveTo(state.current, action, position), state.available)
+
+        fun editorInsertAvailable(state: EditorState, action: ToolbarAction, position: Int) =
+            editorState(state.current - action, state.available.toMutableList().apply {
+                add(position.coerceIn(0, size), action)
+            })
+
+        fun editorAppendAvailable(state: EditorState, action: ToolbarAction) =
+            editorInsertAvailable(state, action, state.available.size)
+
+        fun editorMoveAvailable(state: EditorState, action: ToolbarAction, position: Int) =
+            editorState(state.current, moveTo(state.available, action, position))
+
+        fun editorDefaultState() = editorState(Default, listOf(Undo, Redo))
 
         fun toolbarToggle(isExpanded: Boolean) =
             if (isExpanded) ToolbarToggle.Collapse else ToolbarToggle.Expand
