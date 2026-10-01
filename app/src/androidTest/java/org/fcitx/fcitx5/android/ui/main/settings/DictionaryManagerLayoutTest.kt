@@ -10,8 +10,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.ui.main.MainActivity
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.google.android.material.snackbar.Snackbar
 
 /** Uses the real manager route without changing the device's dictionaries. */
 class DictionaryManagerLayoutTest {
@@ -29,11 +31,12 @@ class DictionaryManagerLayoutTest {
         try {
             instrumentation.waitForIdleSync()
             lateinit var fragment: PinyinDictionaryFragment
+            lateinit var recycler: RecyclerView
             instrumentation.runOnMainSync {
                 fragment = activity.supportFragmentManager.fragments
                     .flatMap { it.childFragmentManager.fragments }
                     .filterIsInstance<PinyinDictionaryFragment>().first()
-                val recycler = descendants(fragment.requireView()).filterIsInstance<RecyclerView>().first()
+                recycler = descendants(fragment.requireView()).filterIsInstance<RecyclerView>().first()
                 // Core header, Base, ExtB, then catalog header/objects (packaged rows may exist).
                 assertTrue(recycler.adapter!!.itemCount >= 9)
                 val position = (0 until recycler.adapter!!.itemCount).first { index ->
@@ -49,11 +52,15 @@ class DictionaryManagerLayoutTest {
                 val name = descendants(fragment.requireView()).filterIsInstance<TextView>()
                     .first { it.text.contains("Rime-Frost") }
                 (name.parent.parent as View).performClick()
+                // Import and explicit detail deletion still use the list's Snackbar anchor.
+                assertTrue(recycler.isAttachedToWindow)
+                assertNotNull(Snackbar.make(recycler, app.getString(R.string.delete), Snackbar.LENGTH_SHORT))
                 val texts = descendants(fragment.requireView()).filterIsInstance<TextView>()
                 assertTrue(texts.any { it.text.toString().contains(app.getString(R.string.dictionary_catalog_version)) })
                 assertTrue(texts.any { it.text.toString().contains(app.getString(R.string.dictionary_license)) })
                 activity.onBackPressedDispatcher.onBackPressed()
                 assertNotNull(descendants(fragment.requireView()).filterIsInstance<RecyclerView>().firstOrNull())
+                assertEquals(View.VISIBLE, (recycler.parent as View).visibility)
             }
         } finally {
             activity.finish()

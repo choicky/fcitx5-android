@@ -173,6 +173,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         resetDustman()
         detailName = savedInstanceState?.getString("dictionary_detail")
         (ui.root.parent as? ViewGroup)?.removeView(ui.root)
+        ui.root.visibility = View.VISIBLE
         return FrameLayout(requireContext()).also {
             managerRoot = it
             it.addView(ui.root)
@@ -204,7 +205,9 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             viewLifecycleOwner,
             Lifecycle.State.STARTED
         )
-        detailName?.let { name -> ui.entries.find { it.name == name }?.let(::showDictionaryDetail) }
+        val restoredDetail = detailName?.let { name -> ui.entries.find { it.name == name } }
+        detailName = null
+        restoredDetail?.let(::showDictionaryDetail)
     }
 
     private fun createNotificationChannel() {
@@ -301,7 +304,10 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                     closeDictionaryDetail()
                 }.show()
         }
-        root.removeAllViews()
+        // Keep the list mounted: existing import/delete feedback uses it as the
+        // Snackbar anchor even while its detail is displayed.
+        while (root.childCount > 1) root.removeViewAt(root.childCount - 1)
+        ui.root.visibility = View.GONE
         root.addView(ScrollView(ctx).apply {
             isFillViewport = true
             clipToPadding = false
@@ -319,9 +325,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         detailBack?.remove()
         detailName = null
         managerRoot?.let { root ->
-            root.removeAllViews()
-            (ui.root.parent as? ViewGroup)?.removeView(ui.root)
-            root.addView(ui.root)
+            while (root.childCount > 1) root.removeViewAt(root.childCount - 1)
+            ui.root.visibility = View.VISIBLE
             ui.refreshState()
             androidx.core.view.ViewCompat.requestApplyInsets(root)
         }
