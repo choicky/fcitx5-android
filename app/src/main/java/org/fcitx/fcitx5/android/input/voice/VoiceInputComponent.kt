@@ -20,6 +20,7 @@ import org.fcitx.fcitx5.android.core.CapabilityFlags
 import org.fcitx.fcitx5.android.core.InputMethodEntry
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
+import org.fcitx.fcitx5.android.input.bar.ToolbarAction
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.ui.main.MainActivity
 import org.fcitx.fcitx5.android.utils.AppUtil
@@ -93,10 +94,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     val toggleCallback = View.OnClickListener { toggle() }
 
-    /**
-     * What a session would use now, for both the trigger and [start] (D030: it follows this
-     * resolution, not System ASR availability). Debug PoC switches override the selection.
-     */
+    /** What a session would use now. Debug PoC switches override the selection. */
     private val resolution: AsrResolution
         get() = resolveVoiceBackend(
             debugOverride = debugBackendOverride(
@@ -210,7 +208,8 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     fun shouldShowVoiceInput(capFlags: CapabilityFlags): Boolean {
         passwordField = capFlags.has(CapabilityFlag.Password)
-        return !passwordField && resolution.offersTrigger
+        return !passwordField && ToolbarAction.Voice in
+            ToolbarAction.decode(AppPrefs.getInstance().internal.toolbarActions.getValue())
     }
 
     override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: CapabilityFlags) {

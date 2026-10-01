@@ -27,8 +27,57 @@ class ToolbarActionTest {
 
     @Test fun voiceSettingsToggleChangesOnlyToolbarMembership() {
         val hidden = ToolbarAction.withVoice(ToolbarAction.Default, false)
-        assertEquals(hidden + ToolbarAction.Voice, ToolbarAction.withVoice(hidden, true))
+        assertEquals(ToolbarAction.Default, ToolbarAction.withVoice(hidden, true))
+        assertEquals(
+            listOf(ToolbarAction.Emoji, ToolbarAction.QuickPhrase, ToolbarAction.Voice,
+                ToolbarAction.TextEditing),
+            ToolbarAction.withVoice(
+                listOf(ToolbarAction.Emoji, ToolbarAction.QuickPhrase, ToolbarAction.TextEditing),
+                true
+            )
+        )
         assertEquals(hidden, ToolbarAction.withVoice(hidden, false))
+    }
+
+    @Test fun toolbarEditorPlusAppendsRight() = assertEquals(
+        listOf(ToolbarAction.Emoji, ToolbarAction.TextEditing, ToolbarAction.Voice),
+        ToolbarAction.append(listOf(ToolbarAction.Emoji, ToolbarAction.TextEditing), ToolbarAction.Voice)
+    )
+
+    @Test fun toolbarDropInsertsAtExplicitPosition() = assertEquals(
+        listOf(ToolbarAction.Emoji, ToolbarAction.Voice, ToolbarAction.TextEditing),
+        ToolbarAction.insertAt(
+            listOf(ToolbarAction.Emoji, ToolbarAction.TextEditing), ToolbarAction.Voice, 1
+        )
+    )
+
+    @Test fun toolbarDragReordersWithoutChangingMembership() = assertEquals(
+        listOf(ToolbarAction.Voice, ToolbarAction.Emoji, ToolbarAction.TextEditing),
+        ToolbarAction.moveTo(
+            listOf(ToolbarAction.Emoji, ToolbarAction.Voice, ToolbarAction.TextEditing),
+            ToolbarAction.Voice, 0
+        )
+    )
+
+    @Test fun narrowToolbarSuppressesQuickPhraseThenEmojiOnly() {
+        val actions = ToolbarAction.Default
+        assertEquals(
+            ToolbarAction.PresentationResult.Fits(
+            listOf(ToolbarAction.Emoji, ToolbarAction.Voice, ToolbarAction.Clipboard,
+                ToolbarAction.TextEditing)
+            ), ToolbarAction.presentationActions(actions) { it.size <= 4 }
+        )
+        assertEquals(
+            ToolbarAction.PresentationResult.Fits(
+                listOf(ToolbarAction.Voice, ToolbarAction.Clipboard, ToolbarAction.TextEditing)
+            ), ToolbarAction.presentationActions(actions) { it.size <= 3 }
+        )
+        assertEquals(
+            ToolbarAction.PresentationResult.StillInsufficient(
+                listOf(ToolbarAction.Voice, ToolbarAction.Clipboard, ToolbarAction.TextEditing)
+            ), ToolbarAction.presentationActions(actions) { it.size <= 2 }
+        )
+        assertEquals(actions, ToolbarAction.Default)
     }
 
     @Test fun toolbarToggleMapsToActionAndDirection() {
@@ -61,13 +110,4 @@ class ToolbarActionTest {
             ToolbarAction.QuickPhrase, ToolbarAction.Voice, ToolbarAction.Clipboard))
     )
 
-    @Test fun reenabledActionIsAppendedToEnabledOrder() {
-        val current = listOf(ToolbarAction.Emoji, ToolbarAction.TextEditing)
-        val reenabled = (current + ToolbarAction.Voice).distinct()
-        assertEquals(
-            listOf(ToolbarAction.Emoji, ToolbarAction.TextEditing, ToolbarAction.Voice,
-                ToolbarAction.QuickPhrase, ToolbarAction.Clipboard, ToolbarAction.Undo, ToolbarAction.Redo),
-            ToolbarAction.editorOrder(reenabled)
-        )
-    }
 }

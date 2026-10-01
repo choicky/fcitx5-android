@@ -17,6 +17,7 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.preference.ListPreference
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.annotation.VisibleForTesting
@@ -25,6 +26,7 @@ import androidx.preference.PreferenceCategory
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.input.voice.AsrResolution
 import org.fcitx.fcitx5.android.input.voice.AsrServiceId
 import org.fcitx.fcitx5.android.input.voice.CloudStatus
@@ -56,6 +58,7 @@ import org.fcitx.fcitx5.android.input.voice.UnavailableReason
 import org.fcitx.fcitx5.android.input.voice.VoiceSelection
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
 import org.fcitx.fcitx5.android.input.bar.ToolbarAction
+import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.fcitx.fcitx5.android.input.voice.applyRecommendation
 import org.fcitx.fcitx5.android.input.voice.cloudStatus
 import org.fcitx.fcitx5.android.input.voice.endpointProblem
@@ -82,6 +85,15 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private val prefs = AppPrefs.getInstance()
     private val store = VoiceSelectionStore(prefs) { VoiceSelectionStore.lastErrorFile(requireContext()) }
     private val credentials by lazy { KeystoreSecretCipher.store(requireContext()) }
+    private val toolbarActions = AppPrefs.getInstance().internal.toolbarActions
+    private val spaceLongPressBehavior = AppPrefs.getInstance().keyboard.spaceKeyLongPressBehavior
+    private val toolbarActionsListener = ManagedPreference.OnChangeListener<String> { _, _ ->
+        view?.post { if (isResumed) render() }
+    }
+    private val spaceLongPressListener =
+        ManagedPreference.OnChangeListener<SpaceLongPressBehavior> { _, _ ->
+            view?.post { if (isResumed) render() }
+        }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         // the file picker may outlive this instance (e.g. after a configuration change)
@@ -108,6 +120,18 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         super.onResume()
         // the System ASR disclosure is answered in another activity
         render()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        toolbarActions.registerOnChangeListener(toolbarActionsListener)
+        spaceLongPressBehavior.registerOnChangeListener(spaceLongPressListener)
+    }
+
+    override fun onStop() {
+        toolbarActions.unregisterOnChangeListener(toolbarActionsListener)
+        spaceLongPressBehavior.unregisterOnChangeListener(spaceLongPressListener)
+        super.onStop()
     }
 
     private fun systemAvailable() = SpeechRecognizer.isRecognitionAvailable(requireContext())
@@ -174,8 +198,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val external = external()
         val resolution =
             resolveCurrentService(selection, localStatus(), authorization, ::systemAvailable, external)
-        val toolbarActions = AppPrefs.getInstance().internal.toolbarActions
-
         screen.addCategory(R.string.voice_current_section) {
             addSwitch(
                 getString(R.string.show_voice_input_button),
@@ -186,6 +208,22 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 toolbarActions.setValue(ToolbarAction.encode(ToolbarAction.withVoice(actions, visible)))
                 toolbarActions.fireChange()
             }
+            addPreference(ListPreference(ctx).apply {
+                isPersistent = false
+                isIconSpaceReserved = false
+                isSingleLineTitle = false
+                setTitle(R.string.space_long_press_behavior)
+                setDialogTitle(R.string.space_long_press_behavior)
+                entries = SpaceLongPressBehavior.entries.map { ctx.getString(it.stringRes) }.toTypedArray()
+                entryValues = SpaceLongPressBehavior.entries.map { it.name }.toTypedArray()
+                value = spaceLongPressBehavior.getValue().name
+                summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+                setOnPreferenceChangeListener { _, value ->
+                    spaceLongPressBehavior.setValue(enumValueOf<SpaceLongPressBehavior>(value as String))
+                    spaceLongPressBehavior.fireChange()
+                    true
+                }
+            })
             // the selected service itself is the row; it stays shown (with why) when unusable
             val current = selection.current
             val lastError = store.lastError?.takeIf { it.first == current?.key }?.second

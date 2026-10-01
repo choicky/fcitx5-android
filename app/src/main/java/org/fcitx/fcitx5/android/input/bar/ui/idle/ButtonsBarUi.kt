@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.input.bar.ui.idle
 
 import android.content.Context
+import android.view.ViewGroup
 import androidx.annotation.DrawableRes
 import com.google.android.flexbox.AlignItems
 import com.google.android.flexbox.FlexboxLayout
@@ -24,9 +25,11 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
         justifyContent = JustifyContent.SPACE_AROUND
     }
 
+    private var configuredActions = emptyList<ToolbarAction>()
+
     private fun toolButton(@DrawableRes icon: Int) = ToolButton(ctx, icon, theme).also {
         val size = ctx.dp(40)
-        root.addView(it, FlexboxLayout.LayoutParams(size, size))
+        it.layoutParams = FlexboxLayout.LayoutParams(size, size)
     }
 
     val undoButton = toolButton(R.drawable.ic_baseline_undo_24).apply {
@@ -63,8 +66,40 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
     )
 
     fun render(actions: List<ToolbarAction>) {
+        configuredActions = ToolbarAction.normalize(actions)
+        renderMeasured()
+    }
+
+    private fun renderMeasured() {
+        if (root.width <= 0) return
         root.removeAllViews()
-        actions.forEach { action -> buttons[action]?.let(root::addView) }
+        val result = ToolbarAction.presentationActions(configuredActions) { actions ->
+            val availableWidth = root.width - root.paddingLeft - root.paddingRight
+            val requiredWidth = actions.sumOf { action ->
+                val button = buttons[action] ?: return@sumOf 0
+                val params = button.layoutParams
+                val margins = (params as? ViewGroup.MarginLayoutParams)?.let {
+                    it.leftMargin + it.rightMargin
+                } ?: 0
+                val width = params?.width?.takeIf { it > 0 } ?: button.measuredWidth
+                width + margins
+            }
+            requiredWidth <= availableWidth
+        }
+        val actions = when (result) {
+            is ToolbarAction.PresentationResult.Fits -> result.actions
+            // No post-Emoji product policy is selected; retain the accepted suppression result.
+            is ToolbarAction.PresentationResult.StillInsufficient -> result.actions
+        }
+        actions.forEach { action ->
+            buttons[action]?.let(root::addView)
+        }
+    }
+
+    init {
+        root.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+            if (right - left != oldRight - oldLeft) renderMeasured()
+        }
     }
 
 }

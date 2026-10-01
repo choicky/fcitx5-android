@@ -320,6 +320,8 @@
     <string name="status_area">Status area</string>
     <string name="toolbar_tools">Tools</string>
     <string name="edit_toolbar">Edit toolbar</string>
+    <string name="toolbar_current_actions">Current Toolbar</string>
+    <string name="toolbar_available_actions">Available actions</string>
     <string name="quickphrase">Quick Phrase</string>
     <string name="restore_default">Restore default</string>
     <string name="expand_candidates_list">Expand candidates list</string>

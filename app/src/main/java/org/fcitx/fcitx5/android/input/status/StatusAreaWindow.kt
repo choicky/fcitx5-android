@@ -5,13 +5,14 @@
 package org.fcitx.fcitx5.android.input.status
 
 import android.app.AlertDialog
+import android.content.ClipData
 import android.os.Build
 import android.view.View
 import android.widget.PopupMenu
 import android.widget.Toast
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.text.buildSpannedString
 import androidx.core.text.color
 import androidx.lifecycle.lifecycleScope
@@ -101,9 +102,9 @@ class StatusAreaWindow(
         StatusAreaEntry.Android(
             context.getString(if (toggle == ToolbarAction.ToolbarToggle.Collapse) R.string.collapse_toolbar else R.string.expand_toolbar),
             if (toggle == ToolbarAction.ToolbarToggle.Collapse) {
-                R.drawable.ic_baseline_expand_more_24
+                R.drawable.ic_baseline_keyboard_arrow_left_24
             } else {
-                R.drawable.ic_baseline_expand_less_24
+                R.drawable.ic_baseline_keyboard_arrow_right_24
             },
             ToolbarCollapse
         )
@@ -116,6 +117,12 @@ class StatusAreaWindow(
             orientation = LinearLayout.VERTICAL
             setPadding(context.dp(20), 0, context.dp(20), 0)
         }
+        val currentContainer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        val availableContainer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        val footer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        container.addView(currentContainer)
+        container.addView(availableContainer)
+        container.addView(footer)
         val dialog = AlertDialog.Builder(context)
             .setTitle(R.string.edit_toolbar)
             .setView(container)
@@ -136,43 +143,92 @@ class StatusAreaWindow(
                 ToolbarAction.Redo -> R.string.redo
             }
         )
-        fun render() {
-            container.removeAllViews()
-            ToolbarAction.editorOrder(actions).forEach { action ->
-                val enabled = action in actions
-                val index = actions.indexOf(action)
-                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-                val check = CheckBox(context).apply {
-                    text = label(action)
-                    isChecked = enabled
-                    setOnCheckedChangeListener { _, checked ->
-                        actions = if (checked) (actions + action).distinct() else actions - action
-                        render()
-                    }
-                }
-                row.addView(check, LinearLayout.LayoutParams(0, context.dp(48), 1f))
-                Button(context).apply {
-                    text = "↑"
-                    isEnabled = enabled && index > 0
-                    setOnClickListener {
-                        if (index > 0) actions = actions.toMutableList().apply { add(index - 1, removeAt(index)) }
-                        render()
-                    }
-                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(48), context.dp(48))) }
-                Button(context).apply {
-                    text = "↓"
-                    isEnabled = enabled && index >= 0 && index < actions.lastIndex
-                    setOnClickListener {
-                        if (index >= 0 && index < actions.lastIndex) actions = actions.toMutableList().apply { add(index + 1, removeAt(index)) }
-                        render()
-                    }
-                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(48), context.dp(48))) }
-                container.addView(row)
+        fun actionFromDrag(event: android.view.DragEvent): ToolbarAction? {
+            val id = event.clipData?.getItemAt(0)?.text?.toString() ?: return null
+            return ToolbarAction.entries.firstOrNull { it.id == id }
+        }
+
+        fun acceptDrop(event: android.view.DragEvent) =
+            event.clipDescription?.hasMimeType("text/plain") == true
+
+        fun dropListener(onDrop: (ToolbarAction) -> Unit) = View.OnDragListener { view, event ->
+            if (!acceptDrop(event)) return@OnDragListener false
+            when (event.action) {
+                android.view.DragEvent.ACTION_DRAG_ENTERED -> view.alpha = 0.65f
+                android.view.DragEvent.ACTION_DRAG_EXITED,
+                android.view.DragEvent.ACTION_DRAG_ENDED -> view.alpha = 1f
+                android.view.DragEvent.ACTION_DROP -> actionFromDrag(event)?.let(onDrop)
             }
+            true
+        }
+
+        fun startDrag(row: View, action: ToolbarAction): Boolean {
+            val data = ClipData.newPlainText("toolbar-action", action.id)
+            @Suppress("DEPRECATION")
+            return row.startDrag(data, View.DragShadowBuilder(row), action.id, 0)
+        }
+
+        fun render() {
+            currentContainer.removeAllViews()
+            availableContainer.removeAllViews()
+            TextView(context).apply { setText(R.string.toolbar_current_actions) }
+                .also { currentContainer.addView(it) }
+            TextView(context).apply { setText(R.string.toolbar_available_actions) }
+                .also { availableContainer.addView(it) }
+
+            availableContainer.setOnDragListener(dropListener { action ->
+                actions = actions - action
+                render()
+            })
+
+            fun insertionZone(index: Int): View = View(context).apply {
+                minimumHeight = context.dp(12)
+                setOnDragListener(dropListener { dropped ->
+                    actions = if (dropped in actions) {
+                        ToolbarAction.moveTo(actions, dropped, index)
+                    } else {
+                        ToolbarAction.insertAt(actions, dropped, index)
+                    }
+                    render()
+                })
+            }
+
+            actions.forEachIndexed { index, action ->
+                currentContainer.addView(insertionZone(index))
+                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                val labelView = TextView(context).apply {
+                    text = label(action)
+                }
+                row.addView(labelView, LinearLayout.LayoutParams(0, context.dp(48), 1f))
+                Button(context).apply {
+                    text = "−"
+                    contentDescription = "Remove ${label(action)}"
+                    setOnClickListener { actions = actions - action; render() }
+                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(56), context.dp(48))) }
+                row.setOnLongClickListener { startDrag(row, action) }
+                currentContainer.addView(row)
+            }
+            currentContainer.addView(insertionZone(actions.size))
+
+            ToolbarAction.All.filterNot { it in actions }.forEach { action ->
+                val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                val labelView = TextView(context).apply {
+                    text = label(action)
+                }
+                row.addView(labelView, LinearLayout.LayoutParams(0, context.dp(48), 1f))
+                Button(context).apply {
+                    text = "+"
+                    contentDescription = "Add ${label(action)}"
+                    setOnClickListener { actions = ToolbarAction.append(actions, action); render() }
+                }.also { row.addView(it, LinearLayout.LayoutParams(context.dp(56), context.dp(48))) }
+                row.setOnLongClickListener { startDrag(row, action) }
+                availableContainer.addView(row)
+            }
+            footer.removeAllViews()
             Button(context).apply {
                 text = context.getString(R.string.restore_default)
                 setOnClickListener { actions = ToolbarAction.Default; render() }
-            }.also { container.addView(it) }
+            }.also { footer.addView(it) }
         }
         render()
         service.showDialog(dialog)
