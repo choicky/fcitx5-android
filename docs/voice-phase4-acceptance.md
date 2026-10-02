@@ -82,11 +82,11 @@ governed by the current Change Contract and CI evidence, not by this report.
 
 ### Three-model release evidence (2026-10-02)
 
-Debug CI run `36980804642` passed the debug APK, release Kotlin compilation,
+Debug CI run `36983652048` passed the debug APK, release Kotlin compilation,
 and instrumented-test compilation steps (instrumented tests were not run
-because CI has no device). Formal Release `v0.1.3-moqi.4` was then built and
-published by run `36981898289`; its arm64-v8a APK SHA-256 is
-`fd35e5627a36ec23a342534969cc5c93bbb7bed55633cab9fc60fae39a623e88`.
+because CI has no device). Formal Release `v0.1.3-moqi.5` was then built and
+published by run `36984661240`; its arm64-v8a APK SHA-256 is
+`5e51f7895efd876a6f5d565fd7c95346449866af65628772ebd31f0423fb6d38`.
 The release was intentionally not gated on new real-device acceptance.
 
 ## Remaining historical/other voice checks
