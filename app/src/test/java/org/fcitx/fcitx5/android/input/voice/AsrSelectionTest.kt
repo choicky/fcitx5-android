@@ -169,6 +169,7 @@ class AsrSelectionTest {
     fun recommendationSkipsUnavailableLocalModelsBeforeSystem() {
         val offline = AsrServiceId.Local(LocalAsrModel.XAsrOffline)
         val selection = VoiceSelection(null, setOf(offline), true)
+        val disabledSelection = selection.copy(enabled = emptySet())
         assertEquals(
             AsrResolution.NeedsRecommendation(Recommendation.Nothing),
             resolveCurrentService(
@@ -190,7 +191,7 @@ class AsrSelectionTest {
         assertEquals(
             AsrResolution.NeedsRecommendation(Recommendation.Nothing),
             resolveCurrentService(
-                selection,
+                disabledSelection,
                 LocalStatus(runtimeAvailable = true, installed = setOf(LocalAsrModel.XAsrOffline)),
                 Declined,
                 systemNotQueried
