@@ -171,6 +171,7 @@ class ToolbarEditorUi(
 
     private fun actionBody(action: ToolbarAction, add: Boolean, size: Int): View =
         FrameLayout(ctx).apply {
+            val body = this
             contentDescription = actionLabel(action)
             isLongClickable = true
             setOnLongClickListener { startDrag(this, action) }
@@ -190,6 +191,10 @@ class ToolbarEditorUi(
                         ToolbarAction.editorAppendCurrent(state, action), revealCurrentEnd = true
                     )
                     else update(ToolbarAction.editorAppendAvailable(state, action))
+                }.apply {
+                    // The Current badge covers the icon center: keep taps as Remove, but
+                    // let a long press there drag the same complete cell as the main body.
+                    if (!add) setOnLongClickListener { startDrag(body, action) }
                 },
                 FrameLayout.LayoutParams(ctx.dp(32), ctx.dp(32), Gravity.TOP or Gravity.END)
             )
