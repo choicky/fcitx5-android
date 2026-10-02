@@ -7,7 +7,13 @@ package org.fcitx.fcitx5.android.ui.main.settings.behavior
 import android.content.Intent
 import androidx.preference.Preference
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
+import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.input.voice.LocalAsrModel
+import org.fcitx.fcitx5.android.input.voice.LocalModels
+import org.fcitx.fcitx5.android.input.voice.ModelCatalogEntry
+import org.fcitx.fcitx5.android.input.voice.ModelFile
 import org.fcitx.fcitx5.android.input.voice.ModelJobs
 import org.fcitx.fcitx5.android.input.voice.ModelTasks
 import org.fcitx.fcitx5.android.ui.main.MainActivity
@@ -16,8 +22,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
+import java.net.ServerSocket
+import java.security.MessageDigest
+import kotlin.concurrent.thread
 
 /**
  * The Voice settings page while a model task reports progress (vivo, 6007c8ca: the page
@@ -28,12 +38,10 @@ import java.util.concurrent.CountDownLatch
  */
 class VoiceSettingsProgressTest {
 
-<<<<<<< HEAD
-=======
     @Test
     fun aPausedDownloadStaysPausedAcrossActivityRecreationAndReopening() {
         val ctx = instrumentation.targetContext
-        val model = LocalAsrModel.XAsrOffline
+        val model = LocalAsrModel.ZipformerBilingual
         // Do not replace a device's existing model or unfinished download.
         assumeTrue(!ModelJobs.isRunning(model) && !LocalModels.isInstalled(ctx, model) &&
             LocalModels.stagedBytes(ctx, model) == 0L)
@@ -101,7 +109,6 @@ class VoiceSettingsProgressTest {
         }
     }
 
->>>>>>> 1075184f (feat: converge local ASR on three production models)
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
     private fun openVoiceSettings(): MainActivity {
@@ -199,7 +206,7 @@ class VoiceSettingsProgressTest {
 
     @Test
     fun aReopenedPageFollowsARunningTaskInPlace() {
-        val model = LocalAsrModel.XAsrOffline
+        val model = LocalAsrModel.ZipformerBilingual
         val go = CountDownLatch(1)
         val end = CountDownLatch(1)
         val first = openVoiceSettings()

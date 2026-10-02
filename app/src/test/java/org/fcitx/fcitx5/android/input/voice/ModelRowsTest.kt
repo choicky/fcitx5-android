@@ -19,6 +19,22 @@ import org.junit.Test
 
 class ModelRowsTest {
 
+    @Test
+    fun pauseActionsFollowActualWorkerPhaseAndOwnership() {
+        assertEquals(listOf(ModelAction.Pause, Cancel, Details),
+            row(task = ModelTasks.State.Running(1, 2, canPause = true), busy = true).actions)
+        assertEquals(listOf(Cancel, Details),
+            row(task = ModelTasks.State.Running(1, 2, canPause = false), busy = true).actions)
+        assertEquals(ModelRow(ModelStatus.Pausing, listOf(Cancel, Details)),
+            row(task = ModelTasks.State.Pausing, busy = true))
+        // New UI projections (e.g. a recreated page) read the same stable process-local state.
+        repeat(2) {
+            assertEquals(ModelRow(ModelStatus.Paused, listOf(ModelAction.Resume, Cancel, Details)),
+                row(task = ModelTasks.State.Paused, staged = 5))
+        }
+        assertEquals(ModelStatus.Partial, row(task = null, staged = 5).status)
+    }
+
     private fun row(
         installed: Boolean = false,
         task: ModelTasks.State? = null,
