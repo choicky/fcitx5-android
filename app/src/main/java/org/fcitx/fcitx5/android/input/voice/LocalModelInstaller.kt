@@ -79,6 +79,7 @@ internal data class ModelCatalogEntry(
             limitation = "Research model; the tested export produced empty final results for about 34–39 second utterances."
         )
 
+<<<<<<< HEAD
         /**
          * C: Apache-2.0 on the sherpa-onnx mirror and on the upstream
          * pfluo/k2fsa-zipformer-chinese-english-mixed; training data not published.
@@ -104,6 +105,54 @@ internal data class ModelCatalogEntry(
 
         /** User-facing catalog and recommendation order. */
         val entries = listOf(FunAsrNano, ZipformerBilingual)
+=======
+        /** Exact files extracted from the pinned GitHub archive. */
+        val XAsrOffline = ModelCatalogEntry(
+            LocalAsrModel.XAsrOffline,
+            version = "2026-06-03 (asset 460927314)",
+            files = listOf(
+                ModelFile("encoder-epoch-99-avg-1.int8.onnx", 161015713, "7f6aa62056efd8af9da13e0faa81cd3f284d2fb2e3b63de56fd2dfd3450910dc"),
+                ModelFile("decoder-epoch-99-avg-1.onnx", 11309084, "72f47405d3c1033bebccbef82f90071e7b4ba3e71b9c986f2b74244b25723aed"),
+                ModelFile("joiner-epoch-99-avg-1.int8.onnx", 2581422, "aedb7fa697b2ab43f20499826fff7c997eea7d67db77be97769aeeeb726e63b3"),
+                ModelFile("tokens.txt", 58806, "b818a60878b9aae978cbb8ad594acbd403d76d1af2e31ef4197c84e2dbdba27c")
+            ),
+            downloadBase = null,
+            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03.tar.bz2",
+            archiveSize = 136396739,
+            archiveSha256 = "5d02c36d7b44e886b7c8f0d8e051f8713acab96c264bb6ef9e718be39a6a2224",
+            sourceName = "k2-fsa/sherpa-onnx/sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03",
+            sourceUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03.tar.bz2",
+            license = "Apache-2.0 (author declaration; archive has no LICENSE/NOTICE)",
+            licenseUrl = "https://huggingface.co/GilgameshWind/X-ASR-zh-en/blob/689ff18c584d29910da37b6fe904db0c1489c9d1/README.md",
+            attribution = "Gilgamesh-J/X-ASR; Fangjun Kuang / Xiaomi sherpa-onnx export; k2-fsa/icefall",
+            limitation = "Fixed archive download; package has no embedded LICENSE/NOTICE, so distribution attribution remains recorded in the details."
+        )
+
+        /** Exact files extracted from the pinned GitHub archive. */
+        val XAsrStreaming960 = ModelCatalogEntry(
+            LocalAsrModel.XAsrStreaming960,
+            version = "2026-06-05 (asset 460927089)",
+            files = listOf(
+                ModelFile("encoder.int8.onnx", 155276576, "017e3cf23097302dbc57ebd72cf4a209cf55c367920669e2d9ce9c0381a96ddd"),
+                ModelFile("decoder.onnx", 11309084, "a1cbc9eac2d5e3fb6617a218c67ad6daaa7f4e0fd225f08b2c22ab0413c8c257"),
+                ModelFile("joiner.int8.onnx", 2581422, "aedb7fa697b2ab43f20499826fff7c997eea7d67db77be97769aeeeb726e63b3"),
+                ModelFile("tokens.txt", 58806, "b818a60878b9aae978cbb8ad594acbd403d76d1af2e31ef4197c84e2dbdba27c")
+            ),
+            downloadBase = null,
+            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05.tar.bz2",
+            archiveSize = 133895831,
+            archiveSha256 = "0a92b798bd6801c333c7ce8aebf5ba769bfe7f3f3511699a67837b2288428603",
+            sourceName = "k2-fsa/sherpa-onnx/sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05",
+            sourceUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05.tar.bz2",
+            license = "Apache-2.0 (author declaration; archive has no LICENSE/NOTICE)",
+            licenseUrl = "https://huggingface.co/GilgameshWind/X-ASR-zh-en/blob/689ff18c584d29910da37b6fe904db0c1489c9d1/README.md",
+            attribution = "Gilgamesh-J/X-ASR; Fangjun Kuang / Xiaomi sherpa-onnx export; k2-fsa/icefall",
+            limitation = "Fixed archive download; package has no embedded LICENSE/NOTICE, so distribution attribution remains recorded in the details."
+        )
+
+        /** User-facing order; recommendation eligibility is separate. */
+        val entries = listOf(FunAsrNano, XAsrOffline, XAsrStreaming960)
+>>>>>>> 1075184f (feat: converge local ASR on three production models)
 
         private val HF_RESOLVE = Regex("""https://huggingface\.co/([^/]+/[^/]+)/resolve/([0-9a-f]{40})/?""")
 

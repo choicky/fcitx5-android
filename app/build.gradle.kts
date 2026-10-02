@@ -133,8 +133,14 @@ dependencies {
     implementation(libs.flexbox)
     implementation(libs.dependency)
     implementation(libs.okhttp)
+<<<<<<< HEAD
     // Phase 4B.3b-1 Local ASR PoC: official AAR (Kotlin API + JNI), debug builds only
     debugImplementation("com.k2fsa.sherpa.onnx:sherpa-onnx:${libs.versions.sherpaOnnx.get()}@aar")
+=======
+    implementation(libs.commons.compress)
+    // Local ASR runtime: official AAR (Kotlin API + JNI), shared by debug and release.
+    implementation("com.k2fsa.sherpa.onnx:sherpa-onnx:${libs.versions.sherpaOnnx.get()}@aar")
+>>>>>>> 1075184f (feat: converge local ASR on three production models)
     implementation(libs.timber)
     implementation(libs.splitties.bitflags)
     implementation(libs.splitties.dimensions)

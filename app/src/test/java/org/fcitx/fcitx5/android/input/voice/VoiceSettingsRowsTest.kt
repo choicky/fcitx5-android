@@ -73,7 +73,7 @@ class VoiceSettingsRowsTest {
     // --- the current-service dialog ---
 
     private val b = AsrServiceId.Local(LocalAsrModel.FunAsrNano)
-    private val c = AsrServiceId.Local(LocalAsrModel.ZipformerBilingual)
+    private val c = AsrServiceId.Local(LocalAsrModel.XAsrOffline)
     private val secure = SelfHostedInstance("s1", "home", SelfHostedProtocol.SherpaOnnx, "wss://asr.example.org/ws")
     private val cleartext = SelfHostedInstance("s2", "lan", SelfHostedProtocol.SherpaOnnx, "ws://192.168.1.2/ws")
     private val candidates = AsrServiceId.entries + listOf(secure.service, cleartext.service)
@@ -107,7 +107,7 @@ class VoiceSettingsRowsTest {
             listOf(AsrServiceId.System, c, AsrServiceId.Qwen, secure.service),
             selectable(
                 all,
-                installed = setOf(LocalAsrModel.ZipformerBilingual),
+                installed = setOf(LocalAsrModel.XAsrOffline),
                 external = external(AsrServiceId.Qwen)
             )
         )
@@ -119,9 +119,15 @@ class VoiceSettingsRowsTest {
     }
 
     @Test
+<<<<<<< HEAD
     fun localCatalogIsOrderedNanoThenBilingual() {
         assertEquals(
             listOf(LocalAsrModel.FunAsrNano, LocalAsrModel.ZipformerBilingual),
+=======
+    fun localCatalogKeepsNanoBeforeManualXAsr() {
+        assertEquals(
+            listOf(LocalAsrModel.FunAsrNano, LocalAsrModel.XAsrOffline, LocalAsrModel.XAsrStreaming960),
+>>>>>>> 1075184f (feat: converge local ASR on three production models)
             ModelCatalogEntry.entries.map { it.model }
         )
     }
@@ -138,7 +144,7 @@ class VoiceSettingsRowsTest {
     @Test
     fun localModelsNeedToBeInstalledAndEnabledEachOnTheirOwn() {
         // enabled but not installed: not listed; installed but not enabled: not listed
-        assertEquals(listOf(c), selectable(setOf(b, c), installed = setOf(LocalAsrModel.ZipformerBilingual)))
+        assertEquals(listOf(c), selectable(setOf(b, c), installed = setOf(LocalAsrModel.XAsrOffline)))
     }
 
     @Test

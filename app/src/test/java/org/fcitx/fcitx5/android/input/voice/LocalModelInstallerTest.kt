@@ -100,11 +100,28 @@ class LocalModelInstallerTest {
         ModelCatalogEntry.entries.forEach { e ->
             assertEquals(e.model.requiredFiles.toSet(), e.files.map { it.path }.toSet())
             e.files.forEach { assertTrue(it.sha256.matches(Regex("[0-9a-f]{64}"))) }
+<<<<<<< HEAD
             assertFalse(e.model.production)
             // every download is a pinned upstream revision over HTTPS
             assertTrue(e.downloadBase!!.matches(Regex("https://huggingface\\.co/[^/]+/[^/]+/resolve/[0-9a-f]{40}")))
             // test builds offer both retained models
             assertTrue(e.downloadOffered(testBuild = true))
+=======
+            assertTrue(e.model.production)
+            // Nano uses per-file downloads; X-ASR uses its fixed archive.
+            if (e.model == LocalAsrModel.FunAsrNano) {
+                assertTrue(e.downloadBase!!.matches(Regex("https://huggingface\\.co/[^/]+/[^/]+/resolve/[0-9a-f]{40}")))
+                // Test builds still offer both retained models.
+                assertTrue(e.downloadOffered(testBuild = true))
+            } else {
+                assertNull(e.downloadBase)
+                assertTrue(e.archiveUrl!!.endsWith(".tar.bz2"))
+                assertTrue(e.archiveSize!! > 0)
+                assertEquals(64, e.archiveSha256!!.length)
+                assertTrue(e.downloadOffered(testBuild = true))
+                assertTrue(e.downloadOffered(testBuild = false))
+            }
+>>>>>>> 1075184f (feat: converge local ASR on three production models)
             assertTrue(e.sourceName!!.isNotBlank())
             assertTrue(e.sourceUrl!!.startsWith("https://"))
             assertTrue(e.license!!.isNotBlank())

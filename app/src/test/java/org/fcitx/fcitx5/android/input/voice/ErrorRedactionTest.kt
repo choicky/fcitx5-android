@@ -58,11 +58,11 @@ class ErrorRedactionTest {
     @Test
     fun randomLookingRunsAreMaskedButNamesAndLogIdsStay() {
         val out = ErrorRedaction.redact(
-            "InvalidApiKey $qwenKey model sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20 " +
+            "InvalidApiKey $qwenKey model sherpa-onnx-x-asr-960ms-streaming-2026-06-05 " +
                     "(HTTP 403, X-Tt-Logid=20260928011500AB12CD34EF56GH78)"
         )
         assertFalse(out, out.contains(qwenKey.drop(3)))
-        assertTrue(out, out.contains("sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"))
+        assertTrue(out, out.contains("sherpa-onnx-x-asr-960ms-streaming-2026-06-05"))
         assertTrue(out, out.contains("X-Tt-Logid=20260928011500AB12CD34EF56GH78"))
     }
 

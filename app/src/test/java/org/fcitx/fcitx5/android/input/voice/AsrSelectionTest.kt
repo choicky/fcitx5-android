@@ -119,22 +119,20 @@ class AsrSelectionTest {
     }
 
     @Test
-    fun recommendationPrefersFunAsrNanoThenBilingual() {
+    fun recommendationPrefersFunAsrNanoAndDoesNotPromoteManualXAsr() {
         val nano = AsrServiceId.Local(LocalAsrModel.FunAsrNano)
-        val bilingual = AsrServiceId.Local(LocalAsrModel.ZipformerBilingual)
-        val both = VoiceSelection(null, setOf(nano, bilingual), true)
-        val all = LocalStatus(true, setOf(LocalAsrModel.FunAsrNano, LocalAsrModel.ZipformerBilingual))
+        val offline = AsrServiceId.Local(LocalAsrModel.XAsrOffline)
+        val both = VoiceSelection(null, setOf(nano, offline), true)
+        val all = LocalStatus(true, setOf(LocalAsrModel.FunAsrNano, LocalAsrModel.XAsrOffline))
         assertEquals(
             AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.FunAsrNano)),
             resolveCurrentService(both, all, Allowed, systemNotQueried)
         )
-        val bilingualOnly = both.copy(enabled = setOf(bilingual))
+        val offlineOnly = both.copy(enabled = setOf(offline))
+        assertEquals(AsrResolution.NeedsRecommendation(Recommendation.SelectSystem),
+            resolveCurrentService(offlineOnly, all, Allowed, { true }))
         assertEquals(
-            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.ZipformerBilingual)),
-            resolveCurrentService(bilingualOnly, all, Allowed, systemNotQueried)
-        )
-        assertEquals(
-            VoiceSelection(nano, setOf(nano, bilingual), true),
+            VoiceSelection(nano, setOf(nano, offline), true),
             both.applyRecommendation(Recommendation.SelectLocal(LocalAsrModel.FunAsrNano))
         )
     }
@@ -238,12 +236,11 @@ class AsrSelectionTest {
     }
 
     @Test
-    fun onlyExternalServicesFallBackAndNeverToResearchModels() {
+    fun onlyExternalServicesFallBackAndNeverToSystemOrLocal() {
         // selected Local or System report their own failure (D035)
         AsrServiceId.entries.forEach { assertNull(fallbackTarget(it, selection(it), localReady)) }
         assertNull(fallbackTarget(null, selection(null), localReady))
-        // Recommendation eligibility does not make research models D035 targets.
-        LocalAsrModel.entries.forEach { assertFalse(it.production) }
+        assertTrue(LocalAsrModel.entries.all { it.production })
     }
 
     @Test
@@ -266,8 +263,7 @@ class AsrSelectionTest {
     @Test
     fun externalServiceFallsBackOnlyToAProductionLocalModel() {
         val doubao = VoiceSelection(AsrServiceId.Doubao, setOf(AsrServiceId.Doubao, localService), true)
-        // research models are not production: no fallback
-        assertNull(fallbackTarget(AsrServiceId.Doubao, doubao, localReady))
+        assertEquals(VoiceBackendKind.LocalAsr(model), fallbackTarget(AsrServiceId.Doubao, doubao, localReady))
         // never to System, even when System is enabled and allowed
         assertNull(fallbackTarget(AsrServiceId.Doubao, doubao.withEnabled(AsrServiceId.System, true), noLocal))
     }
@@ -315,10 +311,9 @@ class AsrSelectionTest {
             AsrResolution.CurrentUnavailable(AsrServiceId.Local(a), UnavailableReason.Disabled),
             resolve(both.copy(current = AsrServiceId.Local(a)).withEnabled(AsrServiceId.Local(a), false), onlyA)
         )
-        // research models are never a fallback target
         val all = LocalStatus(runtimeAvailable = true, installed = LocalAsrModel.entries.toSet())
         val qwen = VoiceSelection(AsrServiceId.Qwen, setOf(AsrServiceId.Qwen) + LocalAsrModel.userVisibleEntries.map(AsrServiceId::Local), true)
-        assertNull(fallbackTarget(AsrServiceId.Qwen, qwen, all))
+        assertEquals(VoiceBackendKind.LocalAsr(LocalAsrModel.XAsrOffline), fallbackTarget(AsrServiceId.Qwen, qwen, all))
     }
 
     @Test
@@ -401,7 +396,7 @@ class AsrSelectionTest {
     @Test
     fun selfHostedFallsBackOnlyToProductionLocal() {
         val s = AsrServiceId.SelfHosted("abc123")
-        assertNull(fallbackTarget(s, VoiceSelection(s, setOf(s, localService, AsrServiceId.System), true), localReady))
+        assertEquals(VoiceBackendKind.LocalAsr(model), fallbackTarget(s, VoiceSelection(s, setOf(s, localService, AsrServiceId.System), true), localReady))
     }
 
     @Test

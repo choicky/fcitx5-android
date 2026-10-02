@@ -28,6 +28,80 @@ import java.util.concurrent.CountDownLatch
  */
 class VoiceSettingsProgressTest {
 
+<<<<<<< HEAD
+=======
+    @Test
+    fun aPausedDownloadStaysPausedAcrossActivityRecreationAndReopening() {
+        val ctx = instrumentation.targetContext
+        val model = LocalAsrModel.XAsrOffline
+        // Do not replace a device's existing model or unfinished download.
+        assumeTrue(!ModelJobs.isRunning(model) && !LocalModels.isInstalled(ctx, model) &&
+            LocalModels.stagedBytes(ctx, model) == 0L)
+        val bytes = ByteArray(128 * 1024) { it.toByte() }
+        val sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        val server = ServerSocket(0)
+        val release = CountDownLatch(1)
+        val serving = thread(isDaemon = true) {
+            runCatching {
+                server.accept().use { socket ->
+                    val reader = socket.getInputStream().bufferedReader()
+                    while (!reader.readLine().isNullOrEmpty()) { }
+                    val out = socket.getOutputStream()
+                    out.write("HTTP/1.1 200 OK\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n".toByteArray())
+                    out.write(bytes, 0, 8192)
+                    out.flush()
+                    release.await()
+                }
+            }
+        }
+        val entry = ModelCatalogEntry.of(model).copy(
+            version = "pause-recreation-test",
+            files = model.requiredFiles.map { ModelFile(it, bytes.size.toLong(), sha) }
+        )
+        var activity: MainActivity? = null
+        try {
+            val first = openVoiceSettings()
+            activity = first
+            first.voiceSettings()
+            assertTrue(ModelJobs.download(ctx, entry, "http://127.0.0.1:${server.localPort}"))
+            waitUntil("copy progress") { (ModelJobs.state(model) as? ModelTasks.State.Running)?.done?.let { it > 0 } == true }
+            ModelJobs.pause(model)
+            waitUntil("stable Paused") { ModelJobs.state(model) == ModelTasks.State.Paused && !ModelJobs.isRunning(model) }
+
+            onMain { first.recreate() }
+            var recreated: MainActivity? = null
+            waitUntil("recreated activity") {
+                recreated = onMain {
+                    ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                        .filterIsInstance<MainActivity>().firstOrNull { it !== first }
+                }
+                recreated != null
+            }
+            val replacement = recreated!!
+            activity = replacement
+            val fragment = replacement.voiceSettings()
+            val summary = onMain { fragment.findPreference<Preference>(rowKey(model))!!.summary.toString() }
+            val total = (ModelCatalogEntry.of(model).totalBytes + 999_999) / 1_000_000
+            assertEquals(ctx.getString(R.string.voice_model_paused, 0L, total), summary)
+            assertEquals(ModelTasks.State.Paused, ModelJobs.state(model))
+            onMain { activity!!.finish() }
+            instrumentation.waitForIdleSync()
+            val reopened = openVoiceSettings()
+            activity = reopened
+            reopened.voiceSettings()
+            assertEquals(ModelTasks.State.Paused, ModelJobs.state(model))
+            ModelJobs.cancel(model)
+            assertEquals(0L, LocalModels.stagedBytes(ctx, model))
+        } finally {
+            ModelJobs.cancel(model)
+            release.countDown()
+            server.close()
+            serving.join(2000)
+            onMain { activity?.finish() }
+        }
+    }
+
+>>>>>>> 1075184f (feat: converge local ASR on three production models)
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
     private fun openVoiceSettings(): MainActivity {
@@ -125,7 +199,7 @@ class VoiceSettingsProgressTest {
 
     @Test
     fun aReopenedPageFollowsARunningTaskInPlace() {
-        val model = LocalAsrModel.ZipformerBilingual
+        val model = LocalAsrModel.XAsrOffline
         val go = CountDownLatch(1)
         val end = CountDownLatch(1)
         val first = openVoiceSettings()

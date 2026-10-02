@@ -19,7 +19,7 @@ import timber.log.Timber
 import java.io.File
 
 /**
- * Local ASR (Phase 4B.3b-1, debug-only PoC). Records from the Fcitx-owned [AudioCapture] and
+ * Local ASR records from the Fcitx-owned [AudioCapture] and
  * feeds a sherpa-onnx recognizer from [LocalAsrRecognizerCache]: a streaming model decodes while
  * audio arrives, a non-streaming one decodes the buffered utterance on stop. Partial text is only
  * logged, never shown in the editor. The final text goes through [VoiceBackend.Events.onFinal].

@@ -15,7 +15,7 @@ import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import java.io.File
 
-/** Debug builds: sherpa-onnx v1.13.8 (official AAR, its own JNI and Kotlin API). */
+/** sherpa-onnx v1.13.8 is included in every build variant. */
 internal object LocalAsrEngines {
 
     const val AVAILABLE = true
@@ -23,10 +23,17 @@ internal object LocalAsrEngines {
     fun load(model: LocalAsrModel, modelDir: File, threads: Int): LocalAsrRecognizer =
         when (model) {
             LocalAsrModel.FunAsrNano -> funAsrNano(modelDir, threads)
+<<<<<<< HEAD:app/src/debug/java/org/fcitx/fcitx5/android/input/voice/LocalAsrEngines.kt
             // model type left empty: sherpa-onnx reads it from the model metadata
             LocalAsrModel.ZipformerBilingual -> zipformer(
                 modelDir, threads, "encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.onnx",
                 "joiner-epoch-99-avg-1.int8.onnx", ""
+=======
+            LocalAsrModel.XAsrOffline -> xAsrOffline(modelDir, threads)
+            LocalAsrModel.XAsrStreaming960 -> zipformer(
+                modelDir, threads, "encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "",
+                trailingSilenceSamples = AudioCapture.SAMPLE_RATE * 960 / 1000
+>>>>>>> 1075184f (feat: converge local ASR on three production models):app/src/main/java/org/fcitx/fcitx5/android/input/voice/LocalAsrEngines.kt
             )
         }
 
@@ -50,7 +57,6 @@ internal object LocalAsrEngines {
                     numThreads = threads,
                     modelType = modelType
                 ),
-                // push-to-talk: the user ends the utterance, not the endpoint detector
                 enableEndpoint = false
             )
         )
@@ -67,7 +73,6 @@ internal object LocalAsrEngines {
                     }
 
                     override fun inputFinished() = stream.inputFinished()
-
                     override fun release() = stream.release()
                 })
             }

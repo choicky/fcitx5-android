@@ -40,7 +40,7 @@ The historical tests covered A non-selection/non-start and old A current state. 
 cover A removal, B/C ordering, System ASR authorization states, cloud enablement and credential
 availability behavior. APK compilation is not a real-device PASS.
 
-## Current Local ASR recommendation acceptance — PASS
+## Current Local ASR recommendation acceptance — historical PASS
 
 The project owner completed physical-device acceptance for the current Local ASR cleanup and
 recommendation batch using Android implementation HEAD `c916d3e144d5e057936723f3e221930409dc2229`.
@@ -66,6 +66,18 @@ The device acceptance PASS covers:
 This is a device PASS for retained Local model/recommendation behavior. It does not change the
 separate public-distribution status: FunASR Nano and bilingual Zipformer remain research/private
 models with public in-product distribution pending their documented license/provenance review.
+
+## Current three-model owner report (2026-10-02)
+
+The owner reports having used both X-ASR models and subjectively finding their recognition better
+than the retired bilingual Zipformer. The owner also reports that the current debug Voice Settings
+made Nano and both X-ASR models convenient to download. This is recorded as owner-reported basic
+device use and subjective comparison only. Device names, APK/commit, exact cases, and quantitative
+measurements were not provided. It does not establish PASS for offline operation, pause/resume/
+cancel/continuation, checksum failure, long utterances, latency/memory, cancellation/duplicate
+submission, or the new D035 order. The current implementation target is Nano plus the two X-ASR
+models; the bilingual model is removed without compatibility migration. Release eligibility is
+governed by the current Change Contract and CI evidence, not by this report.
 
 ## Remaining historical/other voice checks
 

@@ -283,7 +283,7 @@ internal fun resolveCurrentService(
 /**
  * D035: only a selected external (Managed Cloud / Self-hosted) service falls back, and only to
  * an enabled, installed production Local model. Recommendation eligibility is intentionally
- * separate: a research model may be user-recommended but is not a D035 fallback target.
+ * separate from this explicit fallback order.
  */
 internal fun fallbackTarget(
     selected: AsrServiceId?,
@@ -291,7 +291,7 @@ internal fun fallbackTarget(
     local: LocalStatus
 ): VoiceBackendKind? {
     if (selected == null || !selected.external) return null
-    return LocalAsrModel.userVisibleEntries
+    return LocalAsrModel.fallbackEntries
         .firstOrNull { it.production && local.usable(it, selection) }
         ?.let(VoiceBackendKind::LocalAsr)
 }

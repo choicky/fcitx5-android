@@ -148,7 +148,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     private fun modelLabel(model: LocalAsrModel) = getString(
         when (model) {
-            LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c
             LocalAsrModel.FunAsrNano -> R.string.voice_model_b
         }
     )

@@ -28,8 +28,7 @@ internal object ErrorRedaction {
 
     /**
      * Runs as long as typical keys (32 hex, `sk-…`, `AKID…`, UUIDs). Only runs where letters and
-     * digits alternate like random text are masked, so names such as
-     * `sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20` stay readable. Log IDs are
+     * digits alternate like random text are masked, so model names stay readable. Log IDs are
      * kept (see [redact]).
      */
     private val opaque = Regex("""[A-Za-z0-9+/_\-]{24,}={0,2}""")
