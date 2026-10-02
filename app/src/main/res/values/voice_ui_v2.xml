@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="voice_v2_section_triggers">Voice input methods</string>
-    <string name="voice_v2_section_service">Speech recognition service</string>
+    <string name="voice_v2_section_service">Current speech recognition</string>
     <string name="voice_v2_section_local">Local speech recognition</string>
     <string name="voice_v2_section_cloud">Cloud speech recognition</string>
     <string name="voice_v2_section_other">Other speech recognition services</string>
