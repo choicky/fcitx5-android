@@ -424,9 +424,9 @@
     <string name="voice_model_now_used">现在使用 %1$s 进行识别</string>
     <string name="voice_model_download_other">从其他地址下载…</string>
     <string name="voice_model_source_title">下载地址</string>
-    <string name="voice_model_source_hint">文件按 &lt;地址&gt;/&lt;文件名&gt; 获取。请填写固定的上游版本，或完全相同版本的副本（如镜像站或局域网内的电脑）。每个文件都必须与固定的 SHA-256 一致，否则不会安装。http:// 仅限测试构建。</string>
+    <string name="voice_model_source_hint">文件或固定归档从你填写的地址获取。请填写固定的上游版本，或完全相同版本的副本（如镜像站或局域网内的电脑）。每个文件或归档都必须与固定的 SHA-256 一致，否则不会安装。http:// 仅限测试构建。</string>
     <string name="voice_model_source_invalid">地址须以 https:// 开头（测试构建可用 http://），且不能包含 ? 或 #</string>
-    <string name="voice_model_download_confirm_custom">将从你填写的地址（而非固定的上游来源）下载约 %1$d MB：\n%2$s\n\n每个文件都必须与固定的 SHA-256 一致，否则不会安装。</string>
+    <string name="voice_model_download_confirm_custom">将从你填写的地址（而非固定的上游来源）下载约 %1$d MB：\n%2$s\n\n每个文件或归档都必须与固定的 SHA-256 一致，否则不会安装。</string>
     <string name="voice_model_source">来源：%1$s</string>
     <string name="voice_model_discard">丢弃未完成的下载</string>
     <string name="voice_section_other">其他</string>

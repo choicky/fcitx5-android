@@ -10,19 +10,26 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 
 /** One pinned file of a Local model: its path inside the model directory, size and SHA-256. */
 internal data class ModelFile(val path: String, val size: Long, val sha256: String)
 
 /**
  * The Model Manager catalog (D037). Files are fetched from the pinned upstream revision at
- * [downloadBase] (never mirrored or bundled) and always checked against the pinned SHA-256.
+ * [downloadBase] or [archiveUrl] (never mirrored or bundled) and always checked against the
+ * pinned SHA-256.
  */
 internal data class ModelCatalogEntry(
     val model: LocalAsrModel,
     val version: String,
     val files: List<ModelFile>,
     val downloadBase: String?,
+    /** Optional fixed archive source used when the upstream publishes no stable file URLs. */
+    val archiveUrl: String? = null,
+    val archiveSize: Long? = null,
+    val archiveSha256: String? = null,
     /** Compliance metadata shown in the model details and first-download disclosure. */
     val sourceName: String? = null,
     val sourceUrl: String? = null,
@@ -38,9 +45,11 @@ internal data class ModelCatalogEntry(
     val testBuildDownloadOnly: Boolean = false
 ) {
     val totalBytes get() = files.sumOf { it.size }
+    val downloadTotalBytes get() = archiveSize ?: totalBytes
 
     /** Whether this build offers the pinned download (and a user-supplied source for it). */
-    fun downloadOffered(testBuild: Boolean) = downloadBase != null && (testBuild || !testBuildDownloadOnly)
+    fun downloadOffered(testBuild: Boolean) = (downloadBase != null || archiveUrl != null) &&
+        (testBuild || !testBuildDownloadOnly)
 
     fun downloadUrl(file: ModelFile, base: String? = downloadBase) =
         base?.let { "${it.trimEnd('/')}/${file.path}" }
@@ -48,7 +57,7 @@ internal data class ModelCatalogEntry(
     /** Staged files of a different catalog version are not reused. */
     val stamp get() = version + "\n" + files.joinToString("\n") { "${it.path} ${it.size} ${it.sha256}" }
 
-    /** "huggingface.co/<owner>/<repo> @ <revision>" for display; null without a download. */
+    /** "huggingface.co/<owner>/<repo> @ <revision>" for display; null for archive-only sources. */
     val sourceLabel: String?
         get() = downloadBase?.let {
             HF_RESOLVE.matchEntire(it)?.let { m -> "huggingface.co/${m.groupValues[1]} @ ${m.groupValues[2].take(8)}" } ?: it
@@ -102,7 +111,7 @@ internal data class ModelCatalogEntry(
             limitation = "Research candidate; training-data provenance is not published in the model materials."
         )
 
-        /** Exact files extracted from the pinned GitHub archive; import only pending distribution audit. */
+        /** Exact files extracted from the pinned GitHub archive. */
         val XAsrOffline = ModelCatalogEntry(
             LocalAsrModel.XAsrOffline,
             version = "2026-06-03 (asset 460927314)",
@@ -113,15 +122,18 @@ internal data class ModelCatalogEntry(
                 ModelFile("tokens.txt", 58806, "b818a60878b9aae978cbb8ad594acbd403d76d1af2e31ef4197c84e2dbdba27c")
             ),
             downloadBase = null,
+            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03.tar.bz2",
+            archiveSize = 136396739,
+            archiveSha256 = "5d02c36d7b44e886b7c8f0d8e051f8713acab96c264bb6ef9e718be39a6a2224",
             sourceName = "k2-fsa/sherpa-onnx/sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03",
             sourceUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03.tar.bz2",
             license = "Apache-2.0 (author declaration; archive has no LICENSE/NOTICE)",
             licenseUrl = "https://huggingface.co/GilgameshWind/X-ASR-zh-en/blob/689ff18c584d29910da37b6fe904db0c1489c9d1/README.md",
             attribution = "Gilgamesh-J/X-ASR; Fangjun Kuang / Xiaomi sherpa-onnx export; k2-fsa/icefall",
-            limitation = "Manual comparison model; import the four verified recognition files from the fixed archive. Public download/distribution audit pending."
+            limitation = "Fixed archive download; package has no embedded LICENSE/NOTICE, so distribution attribution remains recorded in the details."
         )
 
-        /** Exact files extracted from the pinned GitHub archive; import only pending distribution audit. */
+        /** Exact files extracted from the pinned GitHub archive. */
         val XAsrStreaming960 = ModelCatalogEntry(
             LocalAsrModel.XAsrStreaming960,
             version = "2026-06-05 (asset 460927089)",
@@ -132,12 +144,15 @@ internal data class ModelCatalogEntry(
                 ModelFile("tokens.txt", 58806, "b818a60878b9aae978cbb8ad594acbd403d76d1af2e31ef4197c84e2dbdba27c")
             ),
             downloadBase = null,
+            archiveUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05.tar.bz2",
+            archiveSize = 133895831,
+            archiveSha256 = "0a92b798bd6801c333c7ce8aebf5ba769bfe7f3f3511699a67837b2288428603",
             sourceName = "k2-fsa/sherpa-onnx/sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05",
             sourceUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05.tar.bz2",
             license = "Apache-2.0 (author declaration; archive has no LICENSE/NOTICE)",
             licenseUrl = "https://huggingface.co/GilgameshWind/X-ASR-zh-en/blob/689ff18c584d29910da37b6fe904db0c1489c9d1/README.md",
             attribution = "Gilgamesh-J/X-ASR; Fangjun Kuang / Xiaomi sherpa-onnx export; k2-fsa/icefall",
-            limitation = "Manual comparison model; import the four verified recognition files from the fixed archive. Public download/distribution audit pending."
+            limitation = "Fixed archive download; package has no embedded LICENSE/NOTICE, so distribution attribution remains recorded in the details."
         )
 
         /** User-facing order; recommendation eligibility is separate. */
@@ -179,6 +194,8 @@ internal class LocalModelInstaller(private val root: File) {
 
     private fun stagingDir(model: LocalAsrModel) = root.resolve(".tmp-${model.dirName}")
 
+    fun archiveFile(model: LocalAsrModel) = root.resolve(".archive-${model.dirName}.part")
+
     fun isInstalled(model: LocalAsrModel) = model.missingFiles(modelDir(model)).isEmpty()
 
     /**
@@ -193,13 +210,93 @@ internal class LocalModelInstaller(private val root: File) {
     }
 
     /** Bytes staged by an unfinished install, which a retry can reuse; 0 if none. */
-    fun stagedBytes(model: LocalAsrModel): Long = stagingDir(model).walkTopDown()
-        .filter { it.isFile && it.name != STAMP }.sumOf { it.length() }
+    fun stagedBytes(model: LocalAsrModel): Long {
+        val archive = archiveFile(model)
+        if (archive.isFile) return archive.length()
+        return stagingDir(model).walkTopDown()
+            .filter { it.isFile && it.name != STAMP }.sumOf { it.length() }
+    }
 
     /** Discard only download staging, never the installed or legacy model. */
     fun discardStaging(model: LocalAsrModel) {
         val tmp = stagingDir(model)
         if (tmp.exists() && !tmp.deleteRecursively()) throw IOException("cannot discard ${tmp.name}")
+        archiveFile(model).delete()
+    }
+
+    /** Extracts a verified tar.bz2 archive into the normal per-file installer. */
+    fun installArchive(
+        entry: ModelCatalogEntry,
+        archive: File,
+        archiveSize: Long,
+        archiveSha256: String,
+        onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
+        cancelled: () -> Boolean = { false }
+    ) {
+        if (!archive.isFile || archive.length() != archiveSize || sha256(archive) != archiveSha256) {
+            archive.delete()
+            throw InstallFailure.Mismatch("archive")
+        }
+        val extracted = root.resolve(".extract-${entry.model.dirName}")
+        extracted.deleteRecursively()
+        extracted.mkdirs()
+        try {
+            var count = 0
+            var bytes = 0L
+            var unpacked = 0L
+            BZip2CompressorInputStream(archive.inputStream().buffered(), true).use { bz ->
+                TarArchiveInputStream(bz).use { tar ->
+                    while (true) {
+                        if (cancelled()) throw InstallFailure.Cancelled()
+                        val item = tar.nextTarEntry ?: break
+                        if (++count > 32 || item.isSymbolicLink || item.isLink) {
+                            throw InstallFailure.Mismatch("archive entry")
+                        }
+                        val name = item.name.replace('\\', '/')
+                        if (name.startsWith('/') || name.split('/').any { it == ".." }) {
+                            throw InstallFailure.Mismatch("archive path")
+                        }
+                        if (item.isDirectory) continue
+                        unpacked += item.size
+                        if (item.size > entry.totalBytes + 32L * 1024 * 1024 ||
+                            unpacked > entry.totalBytes + 32L * 1024 * 1024) {
+                            throw InstallFailure.Mismatch("archive size")
+                        }
+                        val wanted = entry.files.firstOrNull { name == it.path || name.endsWith("/${it.path}") }
+                        if (wanted == null) continue
+                        if (item.size != wanted.size || bytes + item.size > entry.totalBytes) {
+                            throw InstallFailure.Mismatch(name)
+                        }
+                        val target = extracted.resolve(wanted.path)
+                        require(target.canonicalPath.startsWith(extracted.canonicalPath + File.separator)) { "bad path" }
+                        target.parentFile!!.mkdirs()
+                        target.outputStream().use { out ->
+                            val buffer = ByteArray(64 * 1024)
+                            var left = item.size
+                            while (left > 0) {
+                                if (cancelled()) throw InstallFailure.Cancelled()
+                                val n = tar.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
+                                if (n <= 0) throw InstallFailure.Mismatch(name)
+                                out.write(buffer, 0, n)
+                                left -= n
+                            }
+                        }
+                        bytes += item.size
+                    }
+                }
+            }
+            if (entry.files.any { !extracted.resolve(it.path).isFile }) throw InstallFailure.Missing("archive files")
+            install(entry, ModelSources.directory(extracted), onProgress = { done, total ->
+                onProgress(archiveSize, archiveSize)
+            }, cancelled = cancelled)
+        } catch (e: InstallFailure) {
+            throw e
+        } catch (e: Exception) {
+            throw InstallFailure.Io("archive", IOException(e.message, e))
+        } finally {
+            extracted.deleteRecursively()
+            archive.delete()
+        }
     }
 
     /** Import sources and tests: whole files only. */

@@ -35,16 +35,16 @@ class XAsrModelTest {
     }
 
     @Test
-    fun importOnlyRowsUseExistingActionsAndVerifiedFourFileCatalog() {
+    fun archiveRowsUseExistingDownloadAndImportActionsAndVerifiedFourFileCatalog() {
         models.forEach { model ->
             val entry = ModelCatalogEntry.of(model)
             assertEquals(model.requiredFiles.toSet(), entry.files.map { it.path }.toSet())
             assertEquals(4, entry.files.size)
             assertNull(entry.downloadBase)
             assertFalse(entry.distributionApproved)
-            assertFalse(entry.downloadOffered(true))
+            assertTrue(entry.downloadOffered(true))
             val row = modelRow(false, null, false, { 0 }, entry.downloadOffered(true), false, false)
-            assertEquals(listOf(ModelAction.Import, ModelAction.Details), row.actions)
+            assertEquals(listOf(ModelAction.Download, ModelAction.DownloadFrom, ModelAction.Import, ModelAction.Details), row.actions)
             assertEquals(listOf(ModelAction.Use, ModelAction.Remove, ModelAction.Details),
                 modelRow(true, null, false, { 0 }, false, false, false).actions)
         }
