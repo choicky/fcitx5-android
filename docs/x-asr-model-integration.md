@@ -3,31 +3,42 @@
 ## Change Contract
 
 Goal: add the exact X-ASR offline INT8 and 960 ms streaming INT8 artifacts to the
-existing Local model manager and manual service selection. Allowed scope: pinned
+existing Local model manager and manual service selection. Both X-ASR models are
+production Local models for D035 and are eligible for the existing one-click
+recommendation when installed, enabled and runtime-ready. Allowed scope: pinned
 model metadata, file verification, necessary recognizer adapters, two labels,
 focused tests and progress/license records. Preserve Provider/VoiceInputFlow,
 existing model recommendation/fallback behavior, installation/download/pause/
 resume/cancel/SHA/atomic replacement, Mic/Space/Stop/Cancel, current capture limit,
 and all Toolbar/Dictionary behavior. Preserve every existing Voice Settings
 section, order, title, component, style and interaction. Expected delta: two new
-manual Local choices; neither is recommended or a D035 target.
+ manual Local choices; recommendation follows the existing user-visible model order.
+ D035 fallback order is explicitly
+ X-ASR offline → FunASR Nano → X-ASR 960 ms streaming.
 
 ## Current implementation boundary
 
-Both models are **import-only** in this batch (`downloadBase=null`), using the
-existing multiple-file import, SHA verification, atomic install, enable/use,
-delete and details controls. Download the fixed archive separately, extract it,
-then pick its four recognition files together in the existing Import action.
-No archive parser/downloader, hotwords, new Provider, section or page was added.
-Existing model rows retain their order; X-ASR rows follow them. Both new entries
-have `recommendationEligible=false` and `production=false`. Here production only
-means automatic-fallback eligibility has not been approved; it does not decide
-manual usability, licensing or build capability. Existing model qualifications,
+Historical boundary: the first implementation was **import-only**
+(`downloadBase=null`) because the existing installer accepted only per-file URLs.
+The current implementation adds a fixed tar.bz2 archive source for each model.
+The archive uses the existing ModelJobs/ModelTasks lifecycle, HTTP Range resume,
+the same pause/cancel handle, whole-archive verification, safe temporary
+extraction, and then the existing per-file SHA and atomic installer. Multiple-file
+Import remains available. No new UI section, page, Provider or hotword path was added.
+The single stable local-model order is X-ASR offline INT8 → X-ASR 960 ms streaming INT8 →
+FunASR Nano. The same explicit order drives the model-management rows, Provider selector,
+one-click recommendation traversal, and D035 candidate priority; recommendation and D035
+still apply independent qualifications. Both new entries
+have `recommendationEligible=true` by default and `production=true`. Existing model
+qualifications,
 defaults and download paths are unchanged.
 
-The current project has sherpa-onnx 1.13.8 in **debug only**; release LocalAsrEngines
-is still an unavailable stub. This batch does not add release runtime or publish
-an APK. A release build may manage/import the files but cannot recognize locally.
+The project includes sherpa-onnx 1.13.8 and the same LocalAsrEngines adapter in
+both debug and release. The AAR's Kotlin API and JNI/native libraries are
+available to both variants; model weights remain on-demand and are not bundled.
+The archive adapter uses Apache Commons Compress 1.27.1 (Apache-2.0), recorded in
+the MoQi third-party inventory; its transitive notices remain part of final SBOM
+and release review.
 
 ## Exact artifacts and file verification
 
@@ -74,15 +85,16 @@ All entries are under `sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh
 
 Each archive also contains bpe.model, README.md, test_onnx.py and test_wavs/0–3.wav.
 Neither archive contains LICENSE or NOTICE. bpe.model is a SentencePiece model
-used by the standalone scripts and vinput's hotword vocabulary preparation; the
-project's recognizer config uses tokens.txt without hotwords and **does not need
-bpe.model or generated bpe.vocab**. Only the four recognition files are installed.
+used by vinput's optional hotword vocabulary preparation; the actual packaged
+test_onnx.py scripts both decode using tokens.txt without reading bpe.model.
+The project's recognizer config also uses tokens.txt without hotwords and
+**does not need bpe.model or generated bpe.vocab**. Only the four recognition files are installed.
 No model weights, test audio or exporter script is committed or bundled in APK.
 The previously researched offline HF mirror is **not the same binary**: its
 encoder/decoder SHA-256 differ from this verified archive. It is not a substituted
 download source. No matching fixed per-file streaming source was established.
 
-## Licenses and download gate
+## Licenses and download record
 
 - Original model card: GilgameshWind/X-ASR-zh-en revision
   `689ff18c584d29910da37b6fe904db0c1489c9d1`, metadata and License section
@@ -98,15 +110,17 @@ download source. No matching fixed per-file streaming source was established.
   bundled test script attributes Copyright 2026 Xiaomi Corp., author Fangjun Kuang.
   Scripts use the author's punctuation-finetuned checkpoint and tokens through
   mutable main URLs, then icefall ONNX exporters. Icefall's current root LICENSE
-  was separately checked as Apache-2.0; the historical exporter revision is not pinned.
+  at `3f848bb6d0acc970c9b294a30ca0a04a7c9c78d1` was separately checked as Apache-2.0;
+  the historical exporter revision is not pinned.
 - Actual package README links the author; it supplies no License/Notice text.
   Missing package notices and precise historical export/checkpoint mapping remain
   distribution-audit gaps. Author declaration is evidence for private testing,
   **not a claim that every archive redistribution obligation is closed**.
-- Before offering a public in-product download, record exact weight/export
-  attribution and applicable original notices, retain Apache license and any
-  required modification notice, establish a fixed byte-matching source compatible
-  with the existing installer, and decide distribution approval separately.
+- The app now exposes the fixed upstream archive URL through the existing
+  download action. The archive and each extracted recognition file are pinned by
+  size and SHA-256; `distributionApproved` remains false until the missing package
+  notice and precise historical weight/export mapping are resolved. This records
+  a concrete source without claiming that every redistribution obligation is closed.
   Archive sample audio/export test script licensing would need separate review if
   redistributed; neither is used by the app. No weights are hosted or mirrored by us.
 
@@ -143,12 +157,13 @@ only numeric/boolean results; no combined audio or transcript text was saved.
 Focused JVM checks cover manual selection, persistence identity parsing,
 recommendation exclusion, fallback exclusion, runtime/file/enable prerequisites,
 existing actions, padding/final order, cancel-without-finalize, installation,
-pause/resume/cancel and preservation of old models. Optional XAsrImportInteropTest
+archive extraction/path rejection, archive hash preservation, archive pause/resume
+Range behavior, pause/resume/cancel and preservation of old models. Optional XAsrImportInteropTest
 (set X_ASR_FIXTURES to the extracted archive parent) imports the real pinned
 files and rejects altered tokens while preserving the verified installation.
 Existing exact catalog-list expectations were expanded for the requested new
-entries; old model order and download assertions remain, with additional
-assertions for the import-only gate. No failing test expectation was weakened.
+entries; old model order and download assertions remain, with archive source and
+hash assertions for X-ASR. No failing test expectation was weakened.
 
 Local Gradle Android build cannot configure because no Android SDK is installed.
 Debug loader compilation against the real pinned 1.13.8 AAR classes passed
@@ -159,11 +174,13 @@ report/ROADMAP; never infer device PASS from compilation.
 ## Physical-device comparison checklist (pending)
 
 1. On vivo/Redmi, install this branch's debug APK. Keep existing data and models.
-   In the existing Local section import each extracted package's four files;
-   verify details/size/attribution, enable then Use/current-service display.
-2. Verify X-ASR is excluded from One-click recommendation and D035 fallback;
-   existing Nano/bilingual order and current selection stay intact. Do not rely on
-   a release APK: its Local runtime remains unavailable.
+   In the existing Local section download each fixed archive; verify progress,
+   pause/resume/cancel, checksum/install, details/attribution, enable and Use/current-service display.
+2. Verify an installed and enabled X-ASR is selected by One-click recommendation before
+   System ASR, while D035 uses the same explicit X-ASR offline → X-ASR streaming → Nano order
+   and skips disabled, incomplete, or runtime-unavailable models. Verify this in both debug
+   and release. Historical records that excluded X-ASR from recommendation apply only before
+   the recommendation-fix batch.
 3. Use the same short Chinese and mixed-language phrases with a final pause;
    compare omissions, substitutions, punctuation and sentence ending. Record
    results voluntarily outside the app; do not enable full transcript logging.
@@ -184,14 +201,14 @@ Those are separate future decisions; strict full-session 60s is not claimed.
 
 ## Release evidence (2026-10-02)
 
-The three-model convergence is included in signed release `v0.1.3-moqi.4`,
-source commit `c0a9f95964a92d674ebcae965cf334dae2f76257`. The GitHub Release
+The three-model convergence is included in signed release `v0.1.3-moqi.5`,
+source commit `82b7fcf44ec916b54de1d9295d14f93ac9372a7c`. The GitHub Release
 workflow passed its release build and package/signature checks ([run
-36981898289](https://github.com/choicky/fcitx5-android/actions/runs/36981898289)).
+36984661240](https://github.com/choicky/fcitx5-android/actions/runs/36984661240)).
 The attached arm64-v8a APK is
-`org.fcitx.fcitx5.android-v0.1.3-moqi.4-0-gc0a9f959-arm64-v8a-release.apk`,
+`org.fcitx.fcitx5.android-v0.1.3-moqi.5-0-g82b7fcf4-arm64-v8a-release.apk`,
 package `org.fcitx.fcitx5.android.moqi`, versionCode `112`, and SHA-256
-`fd35e5627a36ec23a342534969cc5c93bbb7bed55633cab9fc60fae39a623e88`.
+`5e51f7895efd876a6f5d565fd7c95346449866af65628772ebd31f0423fb6d38`.
 The APK contains the shared sherpa-onnx runtime and arm64 JNI libraries;
 models remain user-downloaded through Voice Settings. This release did not
 require new real-device acceptance. The owner-reported basic X-ASR use and

@@ -11,7 +11,7 @@ class XAsrModelTest {
     private val models = listOf(LocalAsrModel.XAsrOffline, LocalAsrModel.XAsrStreaming960)
 
     @Test
-    fun installedEnabledXAsrIsManuallySelectableButNeverRecommendedOrFallback() {
+    fun installedEnabledXAsrIsManuallySelectableAndRecommended() {
         models.forEach { model ->
             val service = AsrServiceId.Local(model)
             val selection = VoiceSelection(service, setOf(service), recommendationDone = true)
@@ -21,13 +21,11 @@ class XAsrModelTest {
                 resolveCurrentService(selection, local, SystemAsrAuthorization.Declined, { false }, ExternalServices.None))
             assertEquals(listOf(service), selectableServices(AsrServiceId.entries, selection, local,
                 SystemAsrAuthorization.Declined, { false }, ExternalServices.None))
-            assertEquals(Recommendation.Nothing,
-                recommend(local, selection, SystemAsrAuthorization.Declined) { false })
-            assertEquals(Recommendation.SelectSystem,
-                recommend(local, selection, SystemAsrAuthorization.Allowed) { true })
-            assertNull(fallbackTarget(AsrServiceId.Doubao, selection, local))
-            assertFalse(model.production)
-            assertFalse(model.recommendationEligible)
+            assertEquals(Recommendation.SelectLocal(model),
+                recommend(local, selection, SystemAsrAuthorization.Declined) { throw AssertionError("System ASR queried") })
+            assertEquals(VoiceBackendKind.LocalAsr(model), fallbackTarget(AsrServiceId.Doubao, selection, local))
+            assertTrue(model.production)
+            assertTrue(model.recommendationEligible)
             assertFalse(local.usable(model, selection.withEnabled(service, false)))
             assertFalse(LocalStatus(false, setOf(model)).usable(model, selection))
             assertFalse(LocalStatus(true, emptySet()).usable(model, selection))
@@ -35,16 +33,48 @@ class XAsrModelTest {
     }
 
     @Test
-    fun importOnlyRowsUseExistingActionsAndVerifiedFourFileCatalog() {
+    fun fallbackUsesTheStableOrderAndSkipsUnavailableModels() {
+        val external = AsrServiceId.Doubao
+        val services = LocalAsrModel.userVisibleEntries.map(AsrServiceId::Local).toSet() + external
+        val allInstalled = LocalStatus(true, LocalAsrModel.entries.toSet())
+        val allEnabled = VoiceSelection(external, services, recommendationDone = true)
+        assertEquals(
+            VoiceBackendKind.LocalAsr(LocalAsrModel.XAsrOffline),
+            fallbackTarget(external, allEnabled, allInstalled)
+        )
+
+        val offlineDisabled = allEnabled.withEnabled(AsrServiceId.Local(LocalAsrModel.XAsrOffline), false)
+        assertEquals(
+            VoiceBackendKind.LocalAsr(LocalAsrModel.FunAsrNano),
+            fallbackTarget(external, offlineDisabled, allInstalled)
+        )
+
+        val streamingDisabled = offlineDisabled.withEnabled(AsrServiceId.Local(LocalAsrModel.XAsrStreaming960), false)
+        assertEquals(
+            VoiceBackendKind.LocalAsr(LocalAsrModel.XAsrStreaming960),
+            fallbackTarget(external, offlineDisabled, allInstalled)
+        )
+
+        assertEquals(
+            VoiceBackendKind.LocalAsr(LocalAsrModel.FunAsrNano),
+            fallbackTarget(external, streamingDisabled, allInstalled)
+        )
+
+        assertNull(fallbackTarget(external, streamingDisabled, LocalStatus(false, allInstalled.installed)))
+        assertNull(fallbackTarget(external, streamingDisabled, LocalStatus(true, emptySet())))
+    }
+
+    @Test
+    fun archiveRowsUseExistingDownloadAndImportActionsAndVerifiedFourFileCatalog() {
         models.forEach { model ->
             val entry = ModelCatalogEntry.of(model)
             assertEquals(model.requiredFiles.toSet(), entry.files.map { it.path }.toSet())
             assertEquals(4, entry.files.size)
             assertNull(entry.downloadBase)
             assertFalse(entry.distributionApproved)
-            assertFalse(entry.downloadOffered(true))
+            assertTrue(entry.downloadOffered(true))
             val row = modelRow(false, null, false, { 0 }, entry.downloadOffered(true), false, false)
-            assertEquals(listOf(ModelAction.Import, ModelAction.Details), row.actions)
+            assertEquals(listOf(ModelAction.Download, ModelAction.DownloadFrom, ModelAction.Import, ModelAction.Details), row.actions)
             assertEquals(listOf(ModelAction.Use, ModelAction.Remove, ModelAction.Details),
                 modelRow(true, null, false, { 0 }, false, false, false).actions)
         }
