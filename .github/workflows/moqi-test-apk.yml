@@ -85,16 +85,18 @@ jobs:
           test "${#apks[@]}" = 1
           apk=${apks[0]}
           original=${apk##*/}
-          prefix=org.fcitx.fcitx5.android.debug-
-          case "$original" in "$prefix"*) ;; *) echo "unexpected APK prefix: $original"; exit 1 ;; esac
-          version=${original#"$prefix"}
-          case "$version" in *moqi*) expected_version=${version/moqi/fusion} ;; *) expected_version="$version" ;; esac
-          renamed="$prefix$expected_version"
+          input_prefix=org.fcitx.fcitx5.android-
+          target_prefix=org.fcitx.fcitx5.android.debug-
+          case "$original" in "$input_prefix"*) ;; *) echo "unexpected Gradle APK prefix: $original"; exit 1 ;; esac
+          version=${original#"$input_prefix"}
+          case "$version" in *.apk) ;; *) echo "unexpected Gradle APK version suffix: $version"; exit 1 ;; esac
+          case "$version" in *moqi*) expected_version=${version/moqi/fusion} ;; *fusion*) expected_version="$version" ;; *) expected_version="$version" ;; esac
+          renamed="$target_prefix$expected_version"
           digest=$(sha256sum "$apk" | cut -d' ' -f1)
           mv "$apk" "fusion-debug-apk/$renamed"
           test "$digest" = "$(sha256sum "fusion-debug-apk/$renamed" | cut -d' ' -f1)"
-          case "$renamed" in "$prefix"*) ;; *) echo "renamed APK prefix changed: $renamed"; exit 1 ;; esac
-          test "${renamed#"$prefix"}" = "$expected_version"
+          case "$renamed" in "$target_prefix"*) ;; *) echo "renamed APK prefix changed: $renamed"; exit 1 ;; esac
+          test "${renamed#"$target_prefix"}" = "$expected_version"
           test -f "fusion-debug-apk/$renamed"
           sha256sum "fusion-debug-apk/$renamed"
 
