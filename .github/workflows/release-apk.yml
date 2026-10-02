@@ -20,7 +20,7 @@ on:
 # fcitx5-chinese-addons, not whatever the branch points at by then. The commit
 # and the MoQi table hash are recorded in the release notes by this workflow.
 env:
-  ADDON_COMMIT: 0d0102b82b35debf4cf22ce192060c07f10e7b35
+  ADDON_COMMIT: 022028550c3827f7018df47dab96be7317298c27
 
 permissions:
   contents: write
@@ -40,10 +40,7 @@ jobs:
         run: |
           cd lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
           url=https://github.com/choicky/fcitx5-chinese-addons.git
-          if ! git fetch --depth 1 "$url" "$ADDON_COMMIT"; then
-            echo "single commit fetch refused, falling back to the branch"
-            git fetch "$url" feature/moqi-filter
-          fi
+          git fetch --depth 1 "$url" "$ADDON_COMMIT"
           git checkout --detach "$ADDON_COMMIT"
           test "$(git rev-parse HEAD)" = "$ADDON_COMMIT"
           echo "addon commit checked out: $(git rev-parse HEAD)"
@@ -132,6 +129,14 @@ jobs:
           addon=$(git -C lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons rev-parse HEAD)
           pin_file=lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons/modules/pinyinhelper/moqima-gb18030.cmake
           table=$(grep -oE '[0-9a-f]{64}' "$pin_file")
+          apk=$(find fusion-release-apk -maxdepth 1 -type f -name '*.apk' -print -quit)
+          test -n "$apk"
+          apk_name=${apk##*/}
+          apk_sha256=$(sha256sum "$apk" | cut -d' ' -f1)
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -print -quit)
+          test -n "$apksigner"
+          cert=$($apksigner verify --print-certs "$apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          test -n "$cert"
           {
             echo ""
             echo "## 可追溯性"
@@ -139,8 +144,11 @@ jobs:
             echo "- fcitx5-chinese-addons：\`$addon\`"
             echo "- MoQi 码表 SHA256：\`$table\`"
             echo "- fcitx5-android：\`$GITHUB_SHA\`（tag \`$GITHUB_REF_NAME\`）"
+            echo "- APK 文件名：\`$apk_name\`"
+            echo "- APK SHA256：\`$apk_sha256\`"
+            echo "- APK signing certificate SHA-256：\`$cert\`"
             echo ""
-            echo "本构建固定 addon commit，因此同一个 tag 可复现。"
+            echo "本构建固定 addon commit；源码含 Auxiliary Filter 翻译，APK 资源由该固定 addon 构建，真机中文显示需另行验收。"
           } >> .github/moqi-release-notes.md
           tail -8 .github/moqi-release-notes.md
 

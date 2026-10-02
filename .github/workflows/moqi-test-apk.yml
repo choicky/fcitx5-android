@@ -19,6 +19,9 @@ concurrency:
   group: moqi-test-apk-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  ADDON_COMMIT: 022028550c3827f7018df47dab96be7317298c27
+
 jobs:
   build_debug_apk:
     runs-on: ubuntu-24.04
@@ -30,11 +33,12 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Use the MoQi auxiliary filter branch
+      - name: Check out the pinned MoQi auxiliary filter commit
         run: |
           cd lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
-          git fetch --depth 1 https://github.com/choicky/fcitx5-chinese-addons.git feature/moqi-filter
-          git checkout --detach FETCH_HEAD
+          git fetch --depth 1 https://github.com/choicky/fcitx5-chinese-addons.git "$ADDON_COMMIT"
+          git checkout --detach "$ADDON_COMMIT"
+          test "$(git rev-parse HEAD)" = "$ADDON_COMMIT"
           git log --oneline -1
           grep -q "AuxiliaryFilter" im/pinyin/pinyin.h
           grep -q "AuxiliaryFilter" test/testpinyin.cpp
