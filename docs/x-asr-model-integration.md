@@ -1,5 +1,8 @@
 # X-ASR manual model comparison (2026-10-02)
 
+The original integration batch below is a historical boundary. Its model-order wording is
+superseded by the current unified order documented in the implementation boundary.
+
 ## Change Contract
 
 Goal: add the exact X-ASR offline INT8 and 960 ms streaming INT8 artifacts to the
@@ -13,8 +16,8 @@ resume/cancel/SHA/atomic replacement, Mic/Space/Stop/Cancel, current capture lim
 and all Toolbar/Dictionary behavior. Preserve every existing Voice Settings
 section, order, title, component, style and interaction. Expected delta: two new
  manual Local choices; recommendation follows the existing user-visible model order.
- D035 fallback order is explicitly
- X-ASR offline → FunASR Nano → X-ASR 960 ms streaming.
+ Historical D035 fallback order in the original batch was X-ASR offline → FunASR Nano →
+ X-ASR 960 ms streaming; the current order is X-ASR offline → X-ASR 960 ms streaming → Nano.
 
 ## Current implementation boundary
 
