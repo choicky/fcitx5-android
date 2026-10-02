@@ -568,6 +568,10 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 getString(R.string.voice_model_progress, (it.done * 100 / it.total.coerceAtLeast(1)).toInt())
             } ?: getString(R.string.voice_model_progress, 0)
             ModelStatus.Stopping -> getString(R.string.voice_model_cancelling)
+            ModelStatus.Pausing -> getString(R.string.voice_model_pausing)
+            ModelStatus.Paused -> getString(
+                R.string.voice_model_paused, stagedBytes(entry.model) / 1_000_000, size
+            )
             ModelStatus.Failed -> getString(
                 R.string.voice_model_status_failed,
                 (ModelJobs.state(entry.model) as? ModelTasks.State.Failed)?.let(::failureText).orEmpty()
@@ -713,7 +717,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             detail.controls.addView(Button(requireContext()).apply {
                 text = modelActionLabel(entry, action)
                 setOnClickListener {
-                    detail.dialog.dismiss()
+                    if (action != ModelAction.Pause && action != ModelAction.Resume) detail.dialog.dismiss()
                     performModelAction(entry, action)
                 }
             }, LinearLayout.LayoutParams(-1, -2))
@@ -730,6 +734,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             ModelAction.Import -> getString(R.string.voice_model_import)
             ModelAction.Discard -> getString(R.string.voice_model_discard)
             ModelAction.Cancel -> getString(R.string.voice_model_cancel)
+            ModelAction.Pause -> getString(R.string.voice_model_pause)
+            ModelAction.Resume -> getString(R.string.voice_model_continue)
             ModelAction.Use -> getString(
                 if (store.load().isEnabled(AsrServiceId.Local(model))) R.string.voice_model_use
                 else R.string.voice_model_enable_and_use
@@ -754,6 +760,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 render()
             }
             ModelAction.Cancel -> ModelJobs.cancel(model)
+            ModelAction.Pause -> ModelJobs.pause(model)
+            ModelAction.Resume -> startedOrBusy(ModelJobs.resume(model))
             ModelAction.Use -> useModel(model)
             ModelAction.Remove -> confirmRemove(entry)
             ModelAction.Details -> modelActions(entry)

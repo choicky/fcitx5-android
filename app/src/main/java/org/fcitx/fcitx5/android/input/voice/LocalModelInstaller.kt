@@ -114,6 +114,7 @@ internal data class ModelCatalogEntry(
 /** Why an installation stopped; nothing incomplete is ever installed in any of these cases. */
 internal sealed class InstallFailure(message: String) : Exception(message) {
     class Cancelled : InstallFailure("cancelled")
+    class Paused : InstallFailure("paused")
     class NotEnoughSpace(val needed: Long, val available: Long) :
         InstallFailure("needs $needed bytes, $available available")
     class Missing(val path: String) : InstallFailure("missing $path")
@@ -157,6 +158,12 @@ internal class LocalModelInstaller(private val root: File) {
     fun stagedBytes(model: LocalAsrModel): Long = stagingDir(model).walkTopDown()
         .filter { it.isFile && it.name != STAMP }.sumOf { it.length() }
 
+    /** Discard only download staging, never the installed or legacy model. */
+    fun discardStaging(model: LocalAsrModel) {
+        val tmp = stagingDir(model)
+        if (tmp.exists() && !tmp.deleteRecursively()) throw IOException("cannot discard ${tmp.name}")
+    }
+
     /** Import sources and tests: whole files only. */
     fun install(
         entry: ModelCatalogEntry,
@@ -176,7 +183,9 @@ internal class LocalModelInstaller(private val root: File) {
         source: ModelFileSource,
         onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
         cancelled: () -> Boolean = { false },
-        attempts: Int = 1
+        attempts: Int = 1,
+        paused: () -> Boolean = { false },
+        downloadPhase: (Boolean) -> Unit = {}
     ) {
         root.mkdirs()
         cleanStale(entry.model)
@@ -198,10 +207,13 @@ internal class LocalModelInstaller(private val root: File) {
                 var attempt = 0
                 while (true) {
                     try {
-                        copyVerified(file, source, tmp, cancelled) { n -> onProgress(done + n, needed) }
+                        copyVerified(file, source, tmp, cancelled, paused, downloadPhase) { n ->
+                            onProgress(done + n, needed)
+                        }
                         break
                     } catch (e: InstallFailure) {
-                        if (e is InstallFailure.Cancelled || e is InstallFailure.Missing || ++attempt >= attempts) {
+                        if (e is InstallFailure.Cancelled || e is InstallFailure.Paused ||
+                            e is InstallFailure.Missing || ++attempt >= attempts) {
                             // verified files stay for a retry, unless the user cancelled
                             keepStaged = e !is InstallFailure.Cancelled
                             throw e
@@ -223,6 +235,8 @@ internal class LocalModelInstaller(private val root: File) {
         source: ModelFileSource,
         tmp: File,
         cancelled: () -> Boolean,
+        paused: () -> Boolean,
+        downloadPhase: (Boolean) -> Unit,
         progress: (Long) -> Unit
     ) {
         val target = tmp.resolve(file.path)
@@ -241,17 +255,23 @@ internal class LocalModelInstaller(private val root: File) {
         val digest = MessageDigest.getInstance("SHA-256")
         var copied = 0L
         try {
+            downloadPhase(true)
             val stream = source(file, have) ?: throw InstallFailure.Missing(file.path)
             stream.input.use { src ->
                 // append only when the source really continues where the staged bytes end
                 val append = have > 0 && stream.offset == have
-                if (append) target.inputStream().use { digest.update(it) } else have = 0
+                if (append) {
+                    downloadPhase(false)
+                    target.inputStream().use { digest.update(it) }
+                    downloadPhase(true)
+                } else have = 0
                 copied = have
                 progress(copied)
                 FileOutputStream(target, append).use { out ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
                         if (cancelled()) throw InstallFailure.Cancelled()
+                        if (paused()) throw InstallFailure.Paused()
                         val n = src.read(buffer)
                         if (n < 0) break
                         copied += n
@@ -262,16 +282,19 @@ internal class LocalModelInstaller(private val root: File) {
                     }
                 }
             }
+            // Closing the gate checks a pending Pause before digest/final install can proceed.
+            downloadPhase(false)
         } catch (e: IOException) {
             // a cancelled download fails its blocking read on purpose
             if (cancelled()) {
                 target.delete()
                 throw InstallFailure.Cancelled()
             }
+            if (paused()) throw InstallFailure.Paused()
             // the bytes written so far stay staged, so a retry can resume after them
             throw InstallFailure.Io(file.path, e)
         } catch (e: InstallFailure) {
-            if (e !is InstallFailure.Missing) target.delete()
+            if (e !is InstallFailure.Missing && e !is InstallFailure.Paused) target.delete()
             throw e
         }
         val hash = digest.digest().hex()

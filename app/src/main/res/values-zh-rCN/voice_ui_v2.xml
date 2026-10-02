@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="voice_model_pause">暂停</string>
+    <string name="voice_model_continue">继续</string>
+    <string name="voice_model_pausing">正在暂停…</string>
+    <string name="voice_model_paused">已暂停 · 已保留 %1$d / %2$d MB</string>
     <string name="voice_v2_section_triggers">语音输入方式</string>
     <string name="voice_v2_section_service">当前语音识别</string>
     <string name="voice_v2_section_local">本地语音识别</string>

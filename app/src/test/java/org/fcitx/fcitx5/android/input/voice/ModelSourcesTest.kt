@@ -80,6 +80,24 @@ class ModelSourcesTest {
     private fun download() = ModelSources.download(http, entry, base, allowCleartext = true)
 
     @Test
+    fun intentionalPauseRetainsPartialBytesAndResumeUsesTheExistingHttpRangePath() {
+        dropFirst = "encoder_adaptor.int8.onnx"
+        var paused = false
+        val failure = runCatching {
+            installer.install(entry, download(),
+                onProgress = { done, _ -> if (done > 0) paused = true },
+                paused = { paused })
+        }.exceptionOrNull()
+        assertTrue(failure is InstallFailure.Paused)
+        val retained = installer.stagedBytes(model)
+        assertTrue(retained > 0 && retained < contents.getValue("encoder_adaptor.int8.onnx").size)
+        assertFalse(installer.isInstalled(model))
+        installer.install(entry, download())
+        assertTrue(installer.isInstalled(model))
+        assertEquals("bytes=$retained-", requests.filter { it.first == "encoder_adaptor.int8.onnx" }[1].second)
+    }
+
+    @Test
     fun interruptedFileResumesWithARangeRequest() {
         dropFirst = "encoder_adaptor.int8.onnx"
         installer.install(entry, download(), attempts = 2)
