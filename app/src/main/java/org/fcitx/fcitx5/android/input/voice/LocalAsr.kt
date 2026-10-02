@@ -30,7 +30,6 @@ internal enum class LocalAsrModel(
         "sherpa-onnx-funasr-nano-int8-2025-12-30",
         streaming = false,
         recommendationEligible = true,
-        production = true,
         requiredFiles = listOf(
             "encoder_adaptor.int8.onnx",
             "llm.int8.onnx",
@@ -41,7 +40,6 @@ internal enum class LocalAsrModel(
         )
     ),
 
-<<<<<<< HEAD
     /**
      * Streaming Zipformer bilingual zh-en INT8 (sherpa-onnx OnlineRecognizer), a candidate
      * under evaluation with Apache-2.0 declared by the mirror and the upstream author; not a
@@ -57,12 +55,13 @@ internal enum class LocalAsrModel(
             "joiner-epoch-99-avg-1.int8.onnx",
             "tokens.txt"
         )
-=======
+    ),
+
     XAsrOffline(
         "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03",
         streaming = false,
         recommendationEligible = false,
-        production = true,
+        production = false,
         requiredFiles = listOf(
             "encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.onnx",
             "joiner-epoch-99-avg-1.int8.onnx", "tokens.txt"
@@ -73,9 +72,8 @@ internal enum class LocalAsrModel(
         "sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05",
         streaming = true,
         recommendationEligible = false,
-        production = true,
+        production = false,
         requiredFiles = listOf("encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "tokens.txt")
->>>>>>> 1075184f (feat: converge local ASR on three production models)
     );
 
     fun missingFiles(modelDir: File): List<String> =
@@ -84,16 +82,8 @@ internal enum class LocalAsrModel(
     companion object {
         const val ROOT_DIR = "local-asr"
 
-<<<<<<< HEAD
-        /** User-facing and recommendation order: FunASR Nano before bilingual Zipformer. */
-        val userVisibleEntries = listOf(FunAsrNano, ZipformerBilingual)
-=======
-        /** User-facing order; recommendation and fallback use separate explicit orders. */
-        val userVisibleEntries = listOf(FunAsrNano, XAsrOffline, XAsrStreaming960)
-
-        /** D035 order; never derive fallback priority from the settings row order. */
-        val fallbackEntries = listOf(XAsrOffline, FunAsrNano, XAsrStreaming960)
->>>>>>> 1075184f (feat: converge local ASR on three production models)
+        /** Retained models keep their order; X-ASR entries are manual choices only. */
+        val userVisibleEntries = listOf(FunAsrNano, ZipformerBilingual, XAsrOffline, XAsrStreaming960)
     }
 }
 
@@ -124,7 +114,11 @@ internal interface StreamingDecoder {
 }
 
 /** Streaming: decodes while audio arrives; stop flushes the tail. */
-internal class StreamingLocalAsrSession(private val decoder: StreamingDecoder) : LocalAsrSession {
+internal class StreamingLocalAsrSession(
+    private val decoder: StreamingDecoder,
+    /** Model-specific end padding; zero preserves the existing model's flush behavior. */
+    private val trailingSilenceSamples: Int = 0
+) : LocalAsrSession {
     private var released = false
 
     override fun accept(samples: FloatArray): String {
@@ -133,6 +127,7 @@ internal class StreamingLocalAsrSession(private val decoder: StreamingDecoder) :
     }
 
     override fun finish(): String {
+        if (trailingSilenceSamples > 0) decoder.acceptWaveform(FloatArray(trailingSilenceSamples))
         decoder.inputFinished()
         return decoder.decodeReady()
     }
