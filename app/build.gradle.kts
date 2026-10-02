@@ -54,6 +54,10 @@ android {
 
     buildTypes {
         release {
+            // MoQi fork: ship under its own application id so it can be
+            // installed next to the official Fcitx5 and updated in place
+            // across our own releases.
+            applicationIdSuffix = ".moqi"
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round")
             resValue("string", "app_name", "@string/app_name_release")
@@ -61,6 +65,9 @@ android {
             doubaoAsrCredentials.keys.forEach { buildConfigField("String", it, "\"\"") }
         }
         debug {
+            // MoQi fork: keep test builds separate from both the official app
+            // and the release line above.
+            applicationIdSuffix = ".debug"
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher_debug")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round_debug")
             resValue("string", "app_name", "@string/app_name_debug")
@@ -133,14 +140,9 @@ dependencies {
     implementation(libs.flexbox)
     implementation(libs.dependency)
     implementation(libs.okhttp)
-<<<<<<< HEAD
+    implementation(libs.commons.compress)
     // Phase 4B.3b-1 Local ASR PoC: official AAR (Kotlin API + JNI), debug builds only
     debugImplementation("com.k2fsa.sherpa.onnx:sherpa-onnx:${libs.versions.sherpaOnnx.get()}@aar")
-=======
-    implementation(libs.commons.compress)
-    // Local ASR runtime: official AAR (Kotlin API + JNI), shared by debug and release.
-    implementation("com.k2fsa.sherpa.onnx:sherpa-onnx:${libs.versions.sherpaOnnx.get()}@aar")
->>>>>>> 1075184f (feat: converge local ASR on three production models)
     implementation(libs.timber)
     implementation(libs.splitties.bitflags)
     implementation(libs.splitties.dimensions)

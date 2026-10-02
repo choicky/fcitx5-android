@@ -10,19 +10,26 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 
 /** One pinned file of a Local model: its path inside the model directory, size and SHA-256. */
 internal data class ModelFile(val path: String, val size: Long, val sha256: String)
 
 /**
  * The Model Manager catalog (D037). Files are fetched from the pinned upstream revision at
- * [downloadBase] (never mirrored or bundled) and always checked against the pinned SHA-256.
+ * [downloadBase] or [archiveUrl] (never mirrored or bundled) and always checked against the
+ * pinned SHA-256.
  */
 internal data class ModelCatalogEntry(
     val model: LocalAsrModel,
     val version: String,
     val files: List<ModelFile>,
     val downloadBase: String?,
+    /** Optional fixed archive source used when the upstream publishes no stable file URLs. */
+    val archiveUrl: String? = null,
+    val archiveSize: Long? = null,
+    val archiveSha256: String? = null,
     /** Compliance metadata shown in the model details and first-download disclosure. */
     val sourceName: String? = null,
     val sourceUrl: String? = null,
@@ -38,9 +45,11 @@ internal data class ModelCatalogEntry(
     val testBuildDownloadOnly: Boolean = false
 ) {
     val totalBytes get() = files.sumOf { it.size }
+    val downloadTotalBytes get() = archiveSize ?: totalBytes
 
     /** Whether this build offers the pinned download (and a user-supplied source for it). */
-    fun downloadOffered(testBuild: Boolean) = downloadBase != null && (testBuild || !testBuildDownloadOnly)
+    fun downloadOffered(testBuild: Boolean) = (downloadBase != null || archiveUrl != null) &&
+        (testBuild || !testBuildDownloadOnly)
 
     fun downloadUrl(file: ModelFile, base: String? = downloadBase) =
         base?.let { "${it.trimEnd('/')}/${file.path}" }
@@ -48,7 +57,7 @@ internal data class ModelCatalogEntry(
     /** Staged files of a different catalog version are not reused. */
     val stamp get() = version + "\n" + files.joinToString("\n") { "${it.path} ${it.size} ${it.sha256}" }
 
-    /** "huggingface.co/<owner>/<repo> @ <revision>" for display; null without a download. */
+    /** "huggingface.co/<owner>/<repo> @ <revision>" for display; null for archive-only sources. */
     val sourceLabel: String?
         get() = downloadBase?.let {
             HF_RESOLVE.matchEntire(it)?.let { m -> "huggingface.co/${m.groupValues[1]} @ ${m.groupValues[2].take(8)}" } ?: it
@@ -79,7 +88,6 @@ internal data class ModelCatalogEntry(
             limitation = "Research model; the tested export produced empty final results for about 34–39 second utterances."
         )
 
-<<<<<<< HEAD
         /**
          * C: Apache-2.0 on the sherpa-onnx mirror and on the upstream
          * pfluo/k2fsa-zipformer-chinese-english-mixed; training data not published.
@@ -103,9 +111,6 @@ internal data class ModelCatalogEntry(
             limitation = "Research candidate; training-data provenance is not published in the model materials."
         )
 
-        /** User-facing catalog and recommendation order. */
-        val entries = listOf(FunAsrNano, ZipformerBilingual)
-=======
         /** Exact files extracted from the pinned GitHub archive. */
         val XAsrOffline = ModelCatalogEntry(
             LocalAsrModel.XAsrOffline,
@@ -151,8 +156,7 @@ internal data class ModelCatalogEntry(
         )
 
         /** User-facing order; recommendation eligibility is separate. */
-        val entries = listOf(FunAsrNano, XAsrOffline, XAsrStreaming960)
->>>>>>> 1075184f (feat: converge local ASR on three production models)
+        val entries = listOf(FunAsrNano, ZipformerBilingual, XAsrOffline, XAsrStreaming960)
 
         private val HF_RESOLVE = Regex("""https://huggingface\.co/([^/]+/[^/]+)/resolve/([0-9a-f]{40})/?""")
 
@@ -163,6 +167,7 @@ internal data class ModelCatalogEntry(
 /** Why an installation stopped; nothing incomplete is ever installed in any of these cases. */
 internal sealed class InstallFailure(message: String) : Exception(message) {
     class Cancelled : InstallFailure("cancelled")
+    class Paused : InstallFailure("paused")
     class NotEnoughSpace(val needed: Long, val available: Long) :
         InstallFailure("needs $needed bytes, $available available")
     class Missing(val path: String) : InstallFailure("missing $path")
@@ -189,6 +194,8 @@ internal class LocalModelInstaller(private val root: File) {
 
     private fun stagingDir(model: LocalAsrModel) = root.resolve(".tmp-${model.dirName}")
 
+    fun archiveFile(model: LocalAsrModel) = root.resolve(".archive-${model.dirName}.part")
+
     fun isInstalled(model: LocalAsrModel) = model.missingFiles(modelDir(model)).isEmpty()
 
     /**
@@ -203,8 +210,94 @@ internal class LocalModelInstaller(private val root: File) {
     }
 
     /** Bytes staged by an unfinished install, which a retry can reuse; 0 if none. */
-    fun stagedBytes(model: LocalAsrModel): Long = stagingDir(model).walkTopDown()
-        .filter { it.isFile && it.name != STAMP }.sumOf { it.length() }
+    fun stagedBytes(model: LocalAsrModel): Long {
+        val archive = archiveFile(model)
+        if (archive.isFile) return archive.length()
+        return stagingDir(model).walkTopDown()
+            .filter { it.isFile && it.name != STAMP }.sumOf { it.length() }
+    }
+
+    /** Discard only download staging, never the installed or legacy model. */
+    fun discardStaging(model: LocalAsrModel) {
+        val tmp = stagingDir(model)
+        if (tmp.exists() && !tmp.deleteRecursively()) throw IOException("cannot discard ${tmp.name}")
+        archiveFile(model).delete()
+    }
+
+    /** Extracts a verified tar.bz2 archive into the normal per-file installer. */
+    fun installArchive(
+        entry: ModelCatalogEntry,
+        archive: File,
+        archiveSize: Long,
+        archiveSha256: String,
+        onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
+        cancelled: () -> Boolean = { false }
+    ) {
+        if (!archive.isFile || archive.length() != archiveSize || sha256(archive) != archiveSha256) {
+            archive.delete()
+            throw InstallFailure.Mismatch("archive")
+        }
+        val extracted = root.resolve(".extract-${entry.model.dirName}")
+        extracted.deleteRecursively()
+        extracted.mkdirs()
+        try {
+            var count = 0
+            var bytes = 0L
+            var unpacked = 0L
+            BZip2CompressorInputStream(archive.inputStream().buffered(), true).use { bz ->
+                TarArchiveInputStream(bz).use { tar ->
+                    while (true) {
+                        if (cancelled()) throw InstallFailure.Cancelled()
+                        val item = tar.nextTarEntry ?: break
+                        if (++count > 32 || item.isSymbolicLink || item.isLink) {
+                            throw InstallFailure.Mismatch("archive entry")
+                        }
+                        val name = item.name.replace('\\', '/')
+                        if (name.startsWith('/') || name.split('/').any { it == ".." }) {
+                            throw InstallFailure.Mismatch("archive path")
+                        }
+                        if (item.isDirectory) continue
+                        unpacked += item.size
+                        if (item.size > entry.totalBytes + 32L * 1024 * 1024 ||
+                            unpacked > entry.totalBytes + 32L * 1024 * 1024) {
+                            throw InstallFailure.Mismatch("archive size")
+                        }
+                        val wanted = entry.files.firstOrNull { name == it.path || name.endsWith("/${it.path}") }
+                        if (wanted == null) continue
+                        if (item.size != wanted.size || bytes + item.size > entry.totalBytes) {
+                            throw InstallFailure.Mismatch(name)
+                        }
+                        val target = extracted.resolve(wanted.path)
+                        require(target.canonicalPath.startsWith(extracted.canonicalPath + File.separator)) { "bad path" }
+                        target.parentFile!!.mkdirs()
+                        target.outputStream().use { out ->
+                            val buffer = ByteArray(64 * 1024)
+                            var left = item.size
+                            while (left > 0) {
+                                if (cancelled()) throw InstallFailure.Cancelled()
+                                val n = tar.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
+                                if (n <= 0) throw InstallFailure.Mismatch(name)
+                                out.write(buffer, 0, n)
+                                left -= n
+                            }
+                        }
+                        bytes += item.size
+                    }
+                }
+            }
+            if (entry.files.any { !extracted.resolve(it.path).isFile }) throw InstallFailure.Missing("archive files")
+            install(entry, ModelSources.directory(extracted), onProgress = { done, total ->
+                onProgress(archiveSize, archiveSize)
+            }, cancelled = cancelled)
+        } catch (e: InstallFailure) {
+            throw e
+        } catch (e: Exception) {
+            throw InstallFailure.Io("archive", IOException(e.message, e))
+        } finally {
+            extracted.deleteRecursively()
+            archive.delete()
+        }
+    }
 
     /** Import sources and tests: whole files only. */
     fun install(
@@ -225,7 +318,9 @@ internal class LocalModelInstaller(private val root: File) {
         source: ModelFileSource,
         onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
         cancelled: () -> Boolean = { false },
-        attempts: Int = 1
+        attempts: Int = 1,
+        paused: () -> Boolean = { false },
+        downloadPhase: (Boolean) -> Unit = {}
     ) {
         root.mkdirs()
         cleanStale(entry.model)
@@ -247,10 +342,13 @@ internal class LocalModelInstaller(private val root: File) {
                 var attempt = 0
                 while (true) {
                     try {
-                        copyVerified(file, source, tmp, cancelled) { n -> onProgress(done + n, needed) }
+                        copyVerified(file, source, tmp, cancelled, paused, downloadPhase) { n ->
+                            onProgress(done + n, needed)
+                        }
                         break
                     } catch (e: InstallFailure) {
-                        if (e is InstallFailure.Cancelled || e is InstallFailure.Missing || ++attempt >= attempts) {
+                        if (e is InstallFailure.Cancelled || e is InstallFailure.Paused ||
+                            e is InstallFailure.Missing || ++attempt >= attempts) {
                             // verified files stay for a retry, unless the user cancelled
                             keepStaged = e !is InstallFailure.Cancelled
                             throw e
@@ -272,6 +370,8 @@ internal class LocalModelInstaller(private val root: File) {
         source: ModelFileSource,
         tmp: File,
         cancelled: () -> Boolean,
+        paused: () -> Boolean,
+        downloadPhase: (Boolean) -> Unit,
         progress: (Long) -> Unit
     ) {
         val target = tmp.resolve(file.path)
@@ -290,17 +390,23 @@ internal class LocalModelInstaller(private val root: File) {
         val digest = MessageDigest.getInstance("SHA-256")
         var copied = 0L
         try {
+            downloadPhase(true)
             val stream = source(file, have) ?: throw InstallFailure.Missing(file.path)
             stream.input.use { src ->
                 // append only when the source really continues where the staged bytes end
                 val append = have > 0 && stream.offset == have
-                if (append) target.inputStream().use { digest.update(it) } else have = 0
+                if (append) {
+                    downloadPhase(false)
+                    target.inputStream().use { digest.update(it) }
+                    downloadPhase(true)
+                } else have = 0
                 copied = have
                 progress(copied)
                 FileOutputStream(target, append).use { out ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
                         if (cancelled()) throw InstallFailure.Cancelled()
+                        if (paused()) throw InstallFailure.Paused()
                         val n = src.read(buffer)
                         if (n < 0) break
                         copied += n
@@ -311,16 +417,19 @@ internal class LocalModelInstaller(private val root: File) {
                     }
                 }
             }
+            // Closing the gate checks a pending Pause before digest/final install can proceed.
+            downloadPhase(false)
         } catch (e: IOException) {
             // a cancelled download fails its blocking read on purpose
             if (cancelled()) {
                 target.delete()
                 throw InstallFailure.Cancelled()
             }
+            if (paused()) throw InstallFailure.Paused()
             // the bytes written so far stay staged, so a retry can resume after them
             throw InstallFailure.Io(file.path, e)
         } catch (e: InstallFailure) {
-            if (e !is InstallFailure.Missing) target.delete()
+            if (e !is InstallFailure.Missing && e !is InstallFailure.Paused) target.delete()
             throw e
         }
         val hash = digest.digest().hex()

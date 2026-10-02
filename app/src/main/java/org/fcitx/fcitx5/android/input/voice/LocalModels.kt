@@ -89,7 +89,9 @@ internal object ModelJobs {
     fun download(context: Context, entry: ModelCatalogEntry, base: String? = entry.downloadBase): Boolean {
         // A's download is a test-build exception (D037); a release build never starts it
         if (!entry.downloadOffered(BuildConfig.DEBUG)) return false
-        return run(context, entry, attempts = 3) { handle ->
+        return if (entry.archiveUrl != null) {
+            runArchive(context, entry, base ?: entry.archiveUrl)
+        } else run(context, entry, attempts = 3, allowPause = true) { handle ->
             // cancelling also cancels the HTTP call, so a blocking read ends promptly
             ModelSources.download(http, entry, base, allowCleartext = BuildConfig.DEBUG) { call ->
                 handle.onCancel(call::cancel)
@@ -113,25 +115,78 @@ internal object ModelJobs {
 
     fun cancel(model: LocalAsrModel) = tasks.cancel(model)
 
+    fun pause(model: LocalAsrModel) = tasks.pause(model)
+
+    fun resume(model: LocalAsrModel) = tasks.resume(model)
+
     /** False while the model is still occupied, for example by a download that is stopping. */
     private fun run(
         context: Context,
         entry: ModelCatalogEntry,
         attempts: Int,
+        allowPause: Boolean = false,
         source: (ModelTasks.Handle) -> ModelFileSource
     ): Boolean {
         val installer = LocalModels.installer(context.applicationContext)
-        return tasks.start(entry.model, entry.totalBytes) { handle ->
+        return tasks.start(
+            entry.model, entry.totalBytes, allowPause,
+            discardStaging = { if (allowPause) installer.discardStaging(entry.model) }
+        ) { handle ->
             try {
                 installer.install(
                     entry, source(handle),
                     onProgress = handle::progress,
                     cancelled = { handle.cancelled },
-                    attempts = attempts
+                    attempts = attempts,
+                    paused = { handle.paused },
+                    downloadPhase = if (allowPause) handle::downloadPhase else { _ -> }
                 )
             } catch (e: Exception) {
+                if (e is InstallFailure.Paused) throw e
                 Timber.w("Local model ${entry.model.name} install failed: ${ErrorRedaction.redact(e.message.orEmpty())}")
                 throw e
+            }
+        }
+    }
+
+    private fun runArchive(
+        context: Context,
+        entry: ModelCatalogEntry,
+        url: String
+    ): Boolean {
+        val installer = LocalModels.installer(context.applicationContext)
+        val archiveSize = entry.archiveSize ?: return false
+        val archiveSha = entry.archiveSha256 ?: return false
+        return tasks.start(
+            entry.model, archiveSize, allowPause = true,
+            discardStaging = { installer.discardStaging(entry.model) }
+        ) { rawHandle ->
+            val handle = rawHandle
+            val archive = installer.archiveFile(entry.model)
+            var attempt = 0
+            while (true) {
+                try {
+                    ModelSources.downloadArchive(
+                        http, url, archive, archiveSize, archiveSha,
+                        allowCleartext = BuildConfig.DEBUG,
+                        onCall = { call -> handle.onCancel(call::cancel) },
+                        cancelled = { handle.cancelled },
+                        paused = { handle.paused },
+                        downloadPhase = handle::downloadPhase,
+                        onProgress = handle::progress
+                    )
+                    installer.installArchive(
+                        entry, archive, archiveSize, archiveSha,
+                        cancelled = { handle.cancelled }
+                    )
+                    break
+                } catch (e: InstallFailure) {
+                    if (e is InstallFailure.Cancelled || e is InstallFailure.Paused) throw e
+                    if (e is InstallFailure.Mismatch) archive.delete()
+                    if (++attempt >= 3) throw e
+                } catch (e: java.io.IOException) {
+                    if (++attempt >= 3) throw e
+                }
             }
         }
     }

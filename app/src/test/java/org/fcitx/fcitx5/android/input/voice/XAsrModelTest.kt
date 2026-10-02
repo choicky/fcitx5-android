@@ -11,7 +11,7 @@ class XAsrModelTest {
     private val models = listOf(LocalAsrModel.XAsrOffline, LocalAsrModel.XAsrStreaming960)
 
     @Test
-    fun installedEnabledXAsrIsManuallySelectableButNeverRecommended() {
+    fun installedEnabledXAsrIsManuallySelectableButNeverRecommendedOrFallback() {
         models.forEach { model ->
             val service = AsrServiceId.Local(model)
             val selection = VoiceSelection(service, setOf(service), recommendationDone = true)
@@ -25,40 +25,13 @@ class XAsrModelTest {
                 recommend(local, selection, SystemAsrAuthorization.Declined) { false })
             assertEquals(Recommendation.SelectSystem,
                 recommend(local, selection, SystemAsrAuthorization.Allowed) { true })
-            assertEquals(VoiceBackendKind.LocalAsr(model), fallbackTarget(AsrServiceId.Doubao, selection, local))
-            assertTrue(model.production)
+            assertNull(fallbackTarget(AsrServiceId.Doubao, selection, local))
+            assertFalse(model.production)
             assertFalse(model.recommendationEligible)
             assertFalse(local.usable(model, selection.withEnabled(service, false)))
             assertFalse(LocalStatus(false, setOf(model)).usable(model, selection))
             assertFalse(LocalStatus(true, emptySet()).usable(model, selection))
         }
-    }
-
-    @Test
-    fun fallbackUsesExplicitXOfflineNanoStreamingOrderAndSkipsUnavailableModels() {
-        val external = AsrServiceId.Doubao
-        val services = LocalAsrModel.userVisibleEntries.map(AsrServiceId::Local).toSet() + external
-        val allInstalled = LocalStatus(true, LocalAsrModel.entries.toSet())
-        val allEnabled = VoiceSelection(external, services, recommendationDone = true)
-        assertEquals(
-            VoiceBackendKind.LocalAsr(LocalAsrModel.XAsrOffline),
-            fallbackTarget(external, allEnabled, allInstalled)
-        )
-
-        val offlineDisabled = allEnabled.withEnabled(AsrServiceId.Local(LocalAsrModel.XAsrOffline), false)
-        assertEquals(
-            VoiceBackendKind.LocalAsr(LocalAsrModel.FunAsrNano),
-            fallbackTarget(external, offlineDisabled, allInstalled)
-        )
-
-        val nanoDisabled = offlineDisabled.withEnabled(AsrServiceId.Local(LocalAsrModel.FunAsrNano), false)
-        assertEquals(
-            VoiceBackendKind.LocalAsr(LocalAsrModel.XAsrStreaming960),
-            fallbackTarget(external, nanoDisabled, allInstalled)
-        )
-
-        assertNull(fallbackTarget(external, nanoDisabled, LocalStatus(false, allInstalled.installed)))
-        assertNull(fallbackTarget(external, nanoDisabled, LocalStatus(true, emptySet())))
     }
 
     @Test

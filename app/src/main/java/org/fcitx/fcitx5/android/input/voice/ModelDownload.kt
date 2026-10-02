@@ -9,9 +9,11 @@ import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.URI
+import java.security.MessageDigest
 
 /**
  * Why a model source address cannot be used: files are fetched as `<base>/<path>` over HTTPS;
@@ -32,6 +34,86 @@ internal fun modelSourceProblem(base: String, allowCleartext: Boolean): Endpoint
  * SHA-256, whichever address it came from.
  */
 internal object ModelSources {
+
+    fun downloadArchive(
+        client: OkHttpClient,
+        url: String,
+        target: File,
+        expectedSize: Long,
+        expectedSha256: String,
+        allowCleartext: Boolean = false,
+        onCall: (Call) -> Unit = {},
+        cancelled: () -> Boolean = { false },
+        paused: () -> Boolean = { false },
+        downloadPhase: (Boolean) -> Unit = {},
+        onProgress: (Long, Long) -> Unit = { _, _ -> }
+    ) {
+        require(modelSourceProblem(url, allowCleartext) == null) { "unsupported model source" }
+        target.parentFile!!.mkdirs()
+        var from = target.takeIf { it.isFile }?.length() ?: 0L
+        if (from > expectedSize) {
+            target.delete()
+            from = 0
+        }
+        downloadPhase(true)
+        var response = client.newCall(Request.Builder().url(url).apply {
+            if (from > 0) header("Range", "bytes=$from-")
+        }.build()).also(onCall).execute()
+        val resumed = from > 0 && response.code == 206 &&
+            response.header("Content-Range")?.startsWith("bytes $from-") == true
+        if (from > 0 && !resumed && (response.code == 206 || response.code == 416)) {
+            response.close()
+            from = 0
+            response = client.newCall(Request.Builder().url(url).build()).also(onCall).execute()
+        }
+        if (response.code !in listOf(200, 206) || response.body == null) {
+            response.close()
+            throw IOException("HTTP ${response.code}")
+        }
+        val append = resumed
+        var done = if (append) from else 0L
+        if (!append && target.exists()) target.delete()
+        try {
+            response.body!!.byteStream().use { input ->
+                FileOutputStream(target, append).use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    onProgress(done, expectedSize)
+                    while (true) {
+                        if (cancelled()) throw InstallFailure.Cancelled()
+                        if (paused()) throw InstallFailure.Paused()
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        done += n
+                        if (done > expectedSize) throw InstallFailure.Mismatch("archive")
+                        output.write(buffer, 0, n)
+                        onProgress(done, expectedSize)
+                    }
+                }
+            }
+        } catch (e: IOException) {
+            if (cancelled()) throw InstallFailure.Cancelled()
+            if (paused()) throw InstallFailure.Paused()
+            throw e
+        } finally {
+            response.close()
+        }
+        if (done != expectedSize) throw InstallFailure.Mismatch("archive")
+        downloadPhase(false)
+        val digest = MessageDigest.getInstance("SHA-256")
+        target.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                if (cancelled()) throw InstallFailure.Cancelled()
+                val n = input.read(buffer)
+                if (n < 0) break
+                digest.update(buffer, 0, n)
+            }
+        }
+        if (digest.digest().joinToString("") { "%02x".format(it) } != expectedSha256) {
+            target.delete()
+            throw InstallFailure.Mismatch("archive")
+        }
+    }
 
     /**
      * Files from [base]: the catalog's pinned upstream revision, or an address the user entered
