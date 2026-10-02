@@ -19,6 +19,18 @@ fcitx5-android 的**自构建发布版**，包含 fcitx5-chinese-addons 的 **Mo
 3. 例：`xian` → **`** → `ak`（西 = `ak`）；安 = `bn`，你 = `rx`。
 4. Backspace 逐步退码并退出筛选；Escape 退出但保留已选前缀；筛选与部分选择后仍可继续输入并再次触发。
 
+## Local ASR
+
+- FunASR Nano、X-ASR 离线 INT8、X-ASR 960 ms 流式 INT8 均可在 Voice Settings
+  中由用户按需下载、启用、管理和使用；debug 与 release 均包含 Local ASR
+  runtime 及其 JNI 库。
+- 旧 bilingual Zipformer 已移除，且本轮不做旧模型兼容迁移。
+- D035 本地回落顺序固定为：X-ASR 离线 → FunASR Nano → X-ASR 流式；每一步只
+  选择已启用、完整安装且当前 runtime 可用的模型。
+- 本发布由 GitHub Actions 在 debug 检查成功后构建；本轮未以真机验收为发布前置，
+  所有者已报告两款 X-ASR 的基础使用及主观效果比较。长语音等未完成验收仍不代表
+  已通过。
+
 ## 许可
 
 基于 [fcitx5-android](https://github.com/fcitx5-android/fcitx5-android)（LGPL-2.1）构建，对应源代码见上方两个 fork 的相应提交/标签。墨奇码表来自 `gaboolic/moqima-tables`（MIT），许可证文本见 [moqima-tables.LICENSE](https://github.com/choicky/fcitx5-chinese-addons/blob/feature/moqi-filter/third_party/moqima-tables.LICENSE)。
