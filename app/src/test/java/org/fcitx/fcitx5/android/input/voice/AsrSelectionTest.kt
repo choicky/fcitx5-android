@@ -119,7 +119,7 @@ class AsrSelectionTest {
     }
 
     @Test
-    fun recommendationPrefersFunAsrNanoAndDoesNotPromoteManualXAsr() {
+    fun recommendationUsesLocalPriorityAndDoesNotAskSystemWhenLocalIsUsable() {
         val nano = AsrServiceId.Local(LocalAsrModel.FunAsrNano)
         val offline = AsrServiceId.Local(LocalAsrModel.XAsrOffline)
         val both = VoiceSelection(null, setOf(nano, offline), true)
@@ -129,12 +129,86 @@ class AsrSelectionTest {
             resolveCurrentService(both, all, Allowed, systemNotQueried)
         )
         val offlineOnly = both.copy(enabled = setOf(offline))
-        assertEquals(AsrResolution.NeedsRecommendation(Recommendation.SelectSystem),
-            resolveCurrentService(offlineOnly, all, Allowed, { true }))
+        assertEquals(
+            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.XAsrOffline)),
+            resolveCurrentService(
+                offlineOnly,
+                LocalStatus(true, setOf(LocalAsrModel.XAsrOffline)),
+                Declined,
+                systemNotQueried
+            )
+        )
+        val streaming = AsrServiceId.Local(LocalAsrModel.XAsrStreaming960)
+        assertEquals(
+            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.XAsrOffline)),
+            resolveCurrentService(
+                VoiceSelection(null, setOf(offline, streaming), true),
+                LocalStatus(true, setOf(LocalAsrModel.XAsrOffline, LocalAsrModel.XAsrStreaming960)),
+                Declined,
+                systemNotQueried
+            )
+        )
         assertEquals(
             VoiceSelection(nano, setOf(nano, offline), true),
             both.applyRecommendation(Recommendation.SelectLocal(LocalAsrModel.FunAsrNano))
         )
+    }
+
+    @Test
+    fun recommendationUsesInstalledEnabledStreamingXAsrWhenNanoIsMissing() {
+        val streaming = AsrServiceId.Local(LocalAsrModel.XAsrStreaming960)
+        val selection = VoiceSelection(null, setOf(streaming), true)
+        val local = LocalStatus(runtimeAvailable = true, installed = setOf(LocalAsrModel.XAsrStreaming960))
+        assertEquals(
+            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.XAsrStreaming960)),
+            resolveCurrentService(selection, local, Declined, systemNotQueried)
+        )
+    }
+
+    @Test
+    fun recommendationSkipsUnavailableLocalModelsBeforeSystem() {
+        val offline = AsrServiceId.Local(LocalAsrModel.XAsrOffline)
+        val selection = VoiceSelection(null, setOf(offline), true)
+        assertEquals(
+            AsrResolution.NeedsRecommendation(Recommendation.Nothing),
+            resolveCurrentService(
+                selection,
+                LocalStatus(runtimeAvailable = true, installed = emptySet()),
+                Declined,
+                systemNotQueried
+            )
+        )
+        assertEquals(
+            AsrResolution.NeedsRecommendation(Recommendation.Nothing),
+            resolveCurrentService(
+                selection,
+                LocalStatus(runtimeAvailable = false, installed = setOf(LocalAsrModel.XAsrOffline)),
+                Declined,
+                systemNotQueried
+            )
+        )
+        assertEquals(
+            AsrResolution.NeedsRecommendation(Recommendation.Nothing),
+            resolveCurrentService(
+                selection,
+                LocalStatus(runtimeAvailable = true, installed = setOf(LocalAsrModel.XAsrOffline)),
+                Declined,
+                systemNotQueried
+            )
+        )
+    }
+
+    @Test
+    fun recommendationEligibilityDefaultsToTrueForEveryLocalModel() {
+        assertTrue(LocalAsrModel.entries.all { it.recommendationEligible })
+    }
+
+    @Test
+    fun failedRecommendationAndSystemDeclinePreserveCurrentSelection() {
+        val current = AsrServiceId.Local(LocalAsrModel.XAsrOffline)
+        val selection = VoiceSelection(current, setOf(current), true)
+        assertEquals(selection, selection.applyRecommendation(Recommendation.Nothing))
+        assertEquals(selection, selection.afterSystemDisclosure(allowed = false))
     }
 
     @Test

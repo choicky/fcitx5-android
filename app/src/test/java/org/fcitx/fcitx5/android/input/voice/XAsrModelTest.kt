@@ -11,7 +11,7 @@ class XAsrModelTest {
     private val models = listOf(LocalAsrModel.XAsrOffline, LocalAsrModel.XAsrStreaming960)
 
     @Test
-    fun installedEnabledXAsrIsManuallySelectableButNeverRecommended() {
+    fun installedEnabledXAsrIsManuallySelectableAndRecommended() {
         models.forEach { model ->
             val service = AsrServiceId.Local(model)
             val selection = VoiceSelection(service, setOf(service), recommendationDone = true)
@@ -21,13 +21,11 @@ class XAsrModelTest {
                 resolveCurrentService(selection, local, SystemAsrAuthorization.Declined, { false }, ExternalServices.None))
             assertEquals(listOf(service), selectableServices(AsrServiceId.entries, selection, local,
                 SystemAsrAuthorization.Declined, { false }, ExternalServices.None))
-            assertEquals(Recommendation.Nothing,
-                recommend(local, selection, SystemAsrAuthorization.Declined) { false })
-            assertEquals(Recommendation.SelectSystem,
-                recommend(local, selection, SystemAsrAuthorization.Allowed) { true })
+            assertEquals(Recommendation.SelectLocal(model),
+                recommend(local, selection, SystemAsrAuthorization.Declined) { throw AssertionError("System ASR queried") })
             assertEquals(VoiceBackendKind.LocalAsr(model), fallbackTarget(AsrServiceId.Doubao, selection, local))
             assertTrue(model.production)
-            assertFalse(model.recommendationEligible)
+            assertTrue(model.recommendationEligible)
             assertFalse(local.usable(model, selection.withEnabled(service, false)))
             assertFalse(LocalStatus(false, setOf(model)).usable(model, selection))
             assertFalse(LocalStatus(true, emptySet()).usable(model, selection))

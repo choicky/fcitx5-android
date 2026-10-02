@@ -17,7 +17,7 @@ internal enum class LocalAsrModel(
     val streaming: Boolean,
     val requiredFiles: List<String>,
     /** Whether this model may be selected by the user-initiated recommendation. */
-    val recommendationEligible: Boolean,
+    val recommendationEligible: Boolean = true,
     /** D035 fallback maturity; deliberately separate from recommendation eligibility. */
     val production: Boolean = false
 ) {
@@ -29,7 +29,6 @@ internal enum class LocalAsrModel(
     FunAsrNano(
         "sherpa-onnx-funasr-nano-int8-2025-12-30",
         streaming = false,
-        recommendationEligible = true,
         production = true,
         requiredFiles = listOf(
             "encoder_adaptor.int8.onnx",
@@ -44,7 +43,6 @@ internal enum class LocalAsrModel(
     XAsrOffline(
         "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03",
         streaming = false,
-        recommendationEligible = false,
         production = true,
         requiredFiles = listOf(
             "encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.onnx",
@@ -55,7 +53,6 @@ internal enum class LocalAsrModel(
     XAsrStreaming960(
         "sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05",
         streaming = true,
-        recommendationEligible = false,
         production = true,
         requiredFiles = listOf("encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "tokens.txt")
     );

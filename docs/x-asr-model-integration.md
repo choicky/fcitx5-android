@@ -4,15 +4,16 @@
 
 Goal: add the exact X-ASR offline INT8 and 960 ms streaming INT8 artifacts to the
 existing Local model manager and manual service selection. Both X-ASR models are
-production Local models for D035, but remain separate from the existing one-click
-recommendation policy. Allowed scope: pinned
+production Local models for D035 and are eligible for the existing one-click
+recommendation when installed, enabled and runtime-ready. Allowed scope: pinned
 model metadata, file verification, necessary recognizer adapters, two labels,
 focused tests and progress/license records. Preserve Provider/VoiceInputFlow,
 existing model recommendation/fallback behavior, installation/download/pause/
 resume/cancel/SHA/atomic replacement, Mic/Space/Stop/Cancel, current capture limit,
 and all Toolbar/Dictionary behavior. Preserve every existing Voice Settings
 section, order, title, component, style and interaction. Expected delta: two new
- manual Local choices; neither is recommended. D035 fallback order is explicitly
+ manual Local choices; recommendation follows the existing user-visible model order.
+ D035 fallback order is explicitly
  X-ASR offline → FunASR Nano → X-ASR 960 ms streaming.
 
 ## Current implementation boundary
@@ -25,7 +26,7 @@ the same pause/cancel handle, whole-archive verification, safe temporary
 extraction, and then the existing per-file SHA and atomic installer. Multiple-file
 Import remains available. No new UI section, page, Provider or hotword path was added.
 Existing model rows retain their order; X-ASR rows follow them. Both new entries
-have `recommendationEligible=false` and `production=true`. Existing model
+have `recommendationEligible=true` by default and `production=true`. Existing model
 qualifications,
 defaults and download paths are unchanged.
 
@@ -172,9 +173,11 @@ report/ROADMAP; never infer device PASS from compilation.
 1. On vivo/Redmi, install this branch's debug APK. Keep existing data and models.
    In the existing Local section download each fixed archive; verify progress,
    pause/resume/cancel, checksum/install, details/attribution, enable and Use/current-service display.
-2. Verify X-ASR is excluded from One-click recommendation, while D035 uses the
-   explicit X-ASR offline → Nano → X-ASR streaming order and skips disabled,
-   incomplete, or runtime-unavailable models. Verify this in both debug and release.
+2. Verify an installed and enabled X-ASR is selected by One-click recommendation before
+   System ASR, while D035 uses the explicit X-ASR offline → Nano → X-ASR streaming order
+   and skips disabled, incomplete, or runtime-unavailable models. Verify this in both debug
+   and release. Historical records that excluded X-ASR from recommendation apply only before
+   the recommendation-fix batch.
 3. Use the same short Chinese and mixed-language phrases with a final pause;
    compare omissions, substitutions, punctuation and sentence ending. Record
    results voluntarily outside the app; do not enable full transcript logging.

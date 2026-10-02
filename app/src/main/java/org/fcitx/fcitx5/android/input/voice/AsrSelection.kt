@@ -171,13 +171,10 @@ internal fun recommend(
     selection: VoiceSelection,
     systemAuthorization: SystemAsrAuthorization,
     systemAvailable: () -> Boolean
-): Recommendation = when {
-    local.runtimeAvailable -> LocalAsrModel.userVisibleEntries
-        .firstOrNull { it.recommendationEligible && local.usable(it, selection) }
-        ?.let(Recommendation::SelectLocal)
-        ?: recommendSystem(systemAuthorization, systemAvailable)
-    else -> recommendSystem(systemAuthorization, systemAvailable)
-}
+): Recommendation = LocalAsrModel.userVisibleEntries
+    .firstOrNull { it.recommendationEligible && local.usable(it, selection) }
+    ?.let(Recommendation::SelectLocal)
+    ?: recommendSystem(systemAuthorization, systemAvailable)
 
 private fun recommendSystem(
     systemAuthorization: SystemAsrAuthorization,
