@@ -237,8 +237,11 @@ class AsrSelectionTest {
 
     @Test
     fun onlyExternalServicesFallBackAndNeverToSystemOrLocal() {
-        // selected Local or System report their own failure (D035)
-        AsrServiceId.entries.forEach { assertNull(fallbackTarget(it, selection(it), localReady)) }
+        // selected Local or System report their own failure; external services may use Nano.
+        AsrServiceId.entries.filterNot { it.external }
+            .forEach { assertNull(fallbackTarget(it, selection(it), localReady)) }
+        AsrServiceId.entries.filter { it.external }
+            .forEach { assertEquals(VoiceBackendKind.LocalAsr(model), fallbackTarget(it, selection(it), localReady)) }
         assertNull(fallbackTarget(null, selection(null), localReady))
         assertTrue(LocalAsrModel.entries.all { it.production })
     }
