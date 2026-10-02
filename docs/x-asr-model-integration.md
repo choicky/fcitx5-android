@@ -181,3 +181,20 @@ report/ROADMAP; never infer device PASS from compilation.
 Keep current approximately 60s capture cutoff. Do not test or implement 90/120s,
 5-minute accumulation, Nano segmentation or longer recording in this batch.
 Those are separate future decisions; strict full-session 60s is not claimed.
+
+## Release evidence (2026-10-02)
+
+The three-model convergence is included in signed release `v0.1.3-moqi.4`,
+source commit `c0a9f95964a92d674ebcae965cf334dae2f76257`. The GitHub Release
+workflow passed its release build and package/signature checks ([run
+36981898289](https://github.com/choicky/fcitx5-android/actions/runs/36981898289)).
+The attached arm64-v8a APK is
+`org.fcitx.fcitx5.android-v0.1.3-moqi.4-0-gc0a9f959-arm64-v8a-release.apk`,
+package `org.fcitx.fcitx5.android.moqi`, versionCode `112`, and SHA-256
+`fd35e5627a36ec23a342534969cc5c93bbb7bed55633cab9fc60fae39a623e88`.
+The APK contains the shared sherpa-onnx runtime and arm64 JNI libraries;
+models remain user-downloaded through Voice Settings. This release did not
+require new real-device acceptance. The owner-reported basic X-ASR use and
+subjective comparison remain limited evidence; long-utterance, latency/memory,
+offline, cancellation/repeat-submission, and detailed download/fallback checks
+remain unverified on device.

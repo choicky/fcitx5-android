@@ -16,8 +16,9 @@ acceptance record was present in this checkout to edit.
   (`ZipformerBilingual`). The current implementation removes A from the supported set; no
   external-user migration is required. A-specific preferences are no longer parsed as a current
   model, while shared Zipformer runtime code remains for C.
-- The current user-facing order is B (`FunAsrNano`) followed by C (`ZipformerBilingual`). B/C
-  IDs, paths, checksums, installed state, enablement, and current selection remain persisted.
+- The historical B/C order and persistence statements above apply to that acceptance version.
+  The current user-facing set is FunASR Nano plus X-ASR offline and X-ASR streaming; the
+  retired bilingual model is removed without compatibility migration.
 - The system group is named “系统自带 ASR”. Its one-row enablement, unavailable, authorization,
   and disclosure behavior remains covered separately.
 - Doubao, Qwen, and Tencent switch titles use short service names. Credential storage, redaction,
@@ -78,6 +79,15 @@ cancel/continuation, checksum failure, long utterances, latency/memory, cancella
 submission, or the new D035 order. The current implementation target is Nano plus the two X-ASR
 models; the bilingual model is removed without compatibility migration. Release eligibility is
 governed by the current Change Contract and CI evidence, not by this report.
+
+### Three-model release evidence (2026-10-02)
+
+Debug CI run `36980804642` passed the debug APK, release Kotlin compilation,
+and instrumented-test compilation steps (instrumented tests were not run
+because CI has no device). Formal Release `v0.1.3-moqi.4` was then built and
+published by run `36981898289`; its arm64-v8a APK SHA-256 is
+`fd35e5627a36ec23a342534969cc5c93bbb7bed55633cab9fc60fae39a623e88`.
+The release was intentionally not gated on new real-device acceptance.
 
 ## Remaining historical/other voice checks
 
