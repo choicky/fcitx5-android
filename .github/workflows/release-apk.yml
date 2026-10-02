@@ -80,14 +80,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p fusion-release-apk
-          apk=$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
-          test -n "$apk"
-          suffix=${apk##*/}
-          suffix=${suffix#org.fcitx.fcitx5.android.moqi-}
-          renamed="fusion-release-${suffix}"
+          mapfile -t apks < <(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print)
+          test "${#apks[@]}" = 1
+          apk=${apks[0]}
+          original=${apk##*/}
+          prefix=org.fcitx.fcitx5.android.moqi-
+          case "$original" in "$prefix"*) ;; *) echo "unexpected APK prefix: $original"; exit 1 ;; esac
+          version=${original#"$prefix"}
+          case "$version" in *moqi*) expected_version=${version/moqi/fusion} ;; *) expected_version="$version" ;; esac
+          renamed="$prefix$expected_version"
           digest=$(sha256sum "$apk" | cut -d' ' -f1)
           mv "$apk" "fusion-release-apk/$renamed"
           test "$digest" = "$(sha256sum "fusion-release-apk/$renamed" | cut -d' ' -f1)"
+          case "$renamed" in "$prefix"*) ;; *) echo "renamed APK prefix changed: $renamed"; exit 1 ;; esac
+          test "${renamed#"$prefix"}" = "$expected_version"
           test -f "fusion-release-apk/$renamed"
           pin_file=lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons/modules/pinyinhelper/moqima-gb18030.cmake
           pinned=$(grep -oE '[0-9a-f]{64}' "$pin_file")
@@ -101,7 +107,7 @@ jobs:
           PINNED = sys.argv[1]
           TABLE = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
           apks = glob.glob("fusion-release-apk/*.apk")
-          assert apks, "no release APK found"
+          assert len(apks) == 1, f"expected exactly one release APK, found {len(apks)}"
           print("release APK:", apks[0])
           with zipfile.ZipFile(apks[0]) as zf:
               names = zf.namelist()

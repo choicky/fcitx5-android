@@ -77,18 +77,24 @@ jobs:
       - name: Report APK
         run: ls -l app/build/outputs/apk/debug/
 
-      - name: Rename debug APK for the Fusion distribution line
+      - name: Rename debug APK version identifier for the Fusion distribution line
         run: |
           set -euo pipefail
           mkdir -p fusion-debug-apk
-          apk=$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)
-          test -n "$apk"
-          suffix=${apk##*/}
-          suffix=${suffix#org.fcitx.fcitx5.android.debug-}
-          renamed="fusion-debug-${suffix}"
+          mapfile -t apks < <(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print)
+          test "${#apks[@]}" = 1
+          apk=${apks[0]}
+          original=${apk##*/}
+          prefix=org.fcitx.fcitx5.android.debug-
+          case "$original" in "$prefix"*) ;; *) echo "unexpected APK prefix: $original"; exit 1 ;; esac
+          version=${original#"$prefix"}
+          case "$version" in *moqi*) expected_version=${version/moqi/fusion} ;; *) expected_version="$version" ;; esac
+          renamed="$prefix$expected_version"
           digest=$(sha256sum "$apk" | cut -d' ' -f1)
           mv "$apk" "fusion-debug-apk/$renamed"
           test "$digest" = "$(sha256sum "fusion-debug-apk/$renamed" | cut -d' ' -f1)"
+          case "$renamed" in "$prefix"*) ;; *) echo "renamed APK prefix changed: $renamed"; exit 1 ;; esac
+          test "${renamed#"$prefix"}" = "$expected_version"
           test -f "fusion-debug-apk/$renamed"
           sha256sum "fusion-debug-apk/$renamed"
 
@@ -104,7 +110,7 @@ jobs:
           PINNED = "66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923"
           EXPECTED = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
           apks = glob.glob("fusion-debug-apk/*.apk")
-          assert apks, "no APK found"
+          assert len(apks) == 1, f"expected exactly one APK, found {len(apks)}"
           with zipfile.ZipFile(apks[0]) as zf:
               names = zf.namelist()
               print("MoQi table present:", EXPECTED in names)
