@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.input.voice
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -101,10 +102,16 @@ class LocalModelInstallerTest {
             assertEquals(e.model.requiredFiles.toSet(), e.files.map { it.path }.toSet())
             e.files.forEach { assertTrue(it.sha256.matches(Regex("[0-9a-f]{64}"))) }
             assertFalse(e.model.production)
-            // every download is a pinned upstream revision over HTTPS
-            assertTrue(e.downloadBase!!.matches(Regex("https://huggingface\\.co/[^/]+/[^/]+/resolve/[0-9a-f]{40}")))
-            // test builds offer both retained models
-            assertTrue(e.downloadOffered(testBuild = true))
+            // Retained models still use their pinned downloads; new X-ASR is import-only.
+            if (e.model == LocalAsrModel.FunAsrNano || e.model == LocalAsrModel.ZipformerBilingual) {
+                assertTrue(e.downloadBase!!.matches(Regex("https://huggingface\\.co/[^/]+/[^/]+/resolve/[0-9a-f]{40}")))
+                // Test builds still offer both retained models.
+                assertTrue(e.downloadOffered(testBuild = true))
+            } else {
+                assertNull(e.downloadBase)
+                assertFalse(e.downloadOffered(testBuild = true))
+                assertFalse(e.downloadOffered(testBuild = false))
+            }
             assertTrue(e.sourceName!!.isNotBlank())
             assertTrue(e.sourceUrl!!.startsWith("https://"))
             assertTrue(e.license!!.isNotBlank())

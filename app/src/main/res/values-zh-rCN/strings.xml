@@ -525,4 +525,6 @@
     <string name="keyboard_height_percent_base">键盘高度百分比</string>
     <string name="display_metrics">显示指标 (Resources.getDisplayMetrics)</string>
     <string name="real_size">真实尺寸 (Display.getRealSize)</string>
+    <string name="voice_model_x_asr_offline">X-ASR 离线中英双语 INT8（带标点）</string>
+    <string name="voice_model_x_asr_streaming">X-ASR 960 ms 流式中英双语 INT8（带标点）</string>
 </resources>
