@@ -78,6 +78,17 @@ jobs:
 
       - name: Verify the release APK is signed, .moqi and packs the MoQi table
         run: |
+          set -euo pipefail
+          mkdir -p fusion-release-apk
+          apk=$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)
+          test -n "$apk"
+          suffix=${apk##*/}
+          suffix=${suffix#org.fcitx.fcitx5.android.moqi-}
+          renamed="fusion-release-${suffix}"
+          digest=$(sha256sum "$apk" | cut -d' ' -f1)
+          mv "$apk" "fusion-release-apk/$renamed"
+          test "$digest" = "$(sha256sum "fusion-release-apk/$renamed" | cut -d' ' -f1)"
+          test -f "fusion-release-apk/$renamed"
           pin_file=lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons/modules/pinyinhelper/moqima-gb18030.cmake
           pinned=$(grep -oE '[0-9a-f]{64}' "$pin_file")
           echo "pinned table sha256 (from the addon pin file): $pinned"
@@ -89,7 +100,7 @@ jobs:
 
           PINNED = sys.argv[1]
           TABLE = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
-          apks = glob.glob("app/build/outputs/apk/release/*.apk")
+          apks = glob.glob("fusion-release-apk/*.apk")
           assert apks, "no release APK found"
           print("release APK:", apks[0])
           with zipfile.ZipFile(apks[0]) as zf:
@@ -130,7 +141,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF_NAME}"
-          gh release create "$tag" app/build/outputs/apk/release/*.apk \
+          gh release create "$tag" fusion-release-apk/*.apk \
             --repo "$GITHUB_REPOSITORY" \
             --title "MoQi Auxiliary Filter $tag" \
             --notes-file .github/moqi-release-notes.md \

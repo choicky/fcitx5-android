@@ -40,7 +40,7 @@ internal object PinyinDictionaryCatalog {
     const val RELEASE_TAG = "dictionary-v1.1.1"
 
     private const val RELEASE_BASE =
-        "https://github.com/choicky/fcitx5-moqi/releases/download/$RELEASE_TAG"
+        "https://github.com/choicky/fcitx5-fusion/releases/download/$RELEASE_TAG"
 
     val entries = listOf(
         PinyinDictionaryCatalogEntry(

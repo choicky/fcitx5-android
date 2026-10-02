@@ -77,6 +77,21 @@ jobs:
       - name: Report APK
         run: ls -l app/build/outputs/apk/debug/
 
+      - name: Rename debug APK for the Fusion distribution line
+        run: |
+          set -euo pipefail
+          mkdir -p fusion-debug-apk
+          apk=$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)
+          test -n "$apk"
+          suffix=${apk##*/}
+          suffix=${suffix#org.fcitx.fcitx5.android.debug-}
+          renamed="fusion-debug-${suffix}"
+          digest=$(sha256sum "$apk" | cut -d' ' -f1)
+          mv "$apk" "fusion-debug-apk/$renamed"
+          test "$digest" = "$(sha256sum "fusion-debug-apk/$renamed" | cut -d' ' -f1)"
+          test -f "fusion-debug-apk/$renamed"
+          sha256sum "fusion-debug-apk/$renamed"
+
       - name: Verify the APK packs the MoQi table and the filter code
         # No staging step above on purpose: the table has to reach the APK
         # through the addon's own install rule, exactly like a normal build.
@@ -88,7 +103,7 @@ jobs:
 
           PINNED = "66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923"
           EXPECTED = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
-          apks = glob.glob("app/build/outputs/apk/debug/*.apk")
+          apks = glob.glob("fusion-debug-apk/*.apk")
           assert apks, "no APK found"
           with zipfile.ZipFile(apks[0]) as zf:
               names = zf.namelist()
@@ -113,7 +128,7 @@ jobs:
           EXPECTED_DEBUG_CERT_SHA256: 41:70:5B:C9:4F:42:26:FF:FA:E9:60:91:B7:BA:36:F2:C0:55:B6:2A:93:DF:4E:B9:58:9C:A9:96:A3:7C:7A:7E
         run: |
           set -euo pipefail
-          apk=$(find app/build/outputs/apk/debug -name '*.apk' -print -quit)
+          apk=$(find fusion-debug-apk -name '*.apk' -print -quit)
           test -n "$apk"
           aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f -print -quit)
           package=$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")
@@ -131,6 +146,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: moqi-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: fusion-debug-apk
+          path: fusion-debug-apk/*.apk
           if-no-files-found: error
