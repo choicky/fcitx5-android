@@ -77,15 +77,6 @@ object PreferenceScreenFactory {
         save: () -> Unit
     ) {
 
-        // Pinyin and Shuangpin share one LibIME dictionary manager. It has a
-        // canonical top-level entry in MainFragment rather than one copy in
-        // each input-method configuration screen.
-        if (descriptor is ConfigExternal &&
-            descriptor.knownType == ConfigExternal.ETy.PinyinDict
-        ) {
-            return
-        }
-
         // Hide key related configs
         if (hideKeyConfig && ConfigType.pretty(descriptor.ty).contains("Key")) {
             return
