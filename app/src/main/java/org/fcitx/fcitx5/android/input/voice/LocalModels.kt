@@ -89,7 +89,9 @@ internal object ModelJobs {
     fun download(context: Context, entry: ModelCatalogEntry, base: String? = entry.downloadBase): Boolean {
         // A's download is a test-build exception (D037); a release build never starts it
         if (!entry.downloadOffered(BuildConfig.DEBUG)) return false
-        return run(context, entry, attempts = 3, allowPause = true) { handle ->
+        return if (entry.archiveUrl != null) {
+            runArchive(context, entry, base ?: entry.archiveUrl)
+        } else run(context, entry, attempts = 3, allowPause = true) { handle ->
             // cancelling also cancels the HTTP call, so a blocking read ends promptly
             ModelSources.download(http, entry, base, allowCleartext = BuildConfig.DEBUG) { call ->
                 handle.onCancel(call::cancel)
@@ -143,6 +145,48 @@ internal object ModelJobs {
                 if (e is InstallFailure.Paused) throw e
                 Timber.w("Local model ${entry.model.name} install failed: ${ErrorRedaction.redact(e.message.orEmpty())}")
                 throw e
+            }
+        }
+    }
+
+    private fun runArchive(
+        context: Context,
+        entry: ModelCatalogEntry,
+        url: String
+    ): Boolean {
+        val installer = LocalModels.installer(context.applicationContext)
+        val archiveSize = entry.archiveSize ?: return false
+        val archiveSha = entry.archiveSha256 ?: return false
+        return tasks.start(
+            entry.model, archiveSize, allowPause = true,
+            discardStaging = { installer.discardStaging(entry.model) }
+        ) { rawHandle ->
+            val handle = rawHandle
+            val archive = installer.archiveFile(entry.model)
+            var attempt = 0
+            while (true) {
+                try {
+                    ModelSources.downloadArchive(
+                        http, url, archive, archiveSize, archiveSha,
+                        allowCleartext = BuildConfig.DEBUG,
+                        onCall = { call -> handle.onCancel(call::cancel) },
+                        cancelled = { handle.cancelled },
+                        paused = { handle.paused },
+                        downloadPhase = handle::downloadPhase,
+                        onProgress = handle::progress
+                    )
+                    installer.installArchive(
+                        entry, archive, archiveSize, archiveSha,
+                        cancelled = { handle.cancelled }
+                    )
+                    break
+                } catch (e: InstallFailure) {
+                    if (e is InstallFailure.Cancelled || e is InstallFailure.Paused) throw e
+                    if (e is InstallFailure.Mismatch) archive.delete()
+                    if (++attempt >= 3) throw e
+                } catch (e: java.io.IOException) {
+                    if (++attempt >= 3) throw e
+                }
             }
         }
     }

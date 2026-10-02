@@ -424,9 +424,9 @@
     <string name="voice_model_now_used">%1$s is now used for recognition</string>
     <string name="voice_model_download_other">Download from another address…</string>
     <string name="voice_model_source_title">Download address</string>
-    <string name="voice_model_source_hint">Files are fetched as &lt;address&gt;/&lt;file name&gt;. Enter the pinned upstream revision or a copy of exactly that revision, for example a mirror or a computer on your network. Every file must match the pinned SHA-256, otherwise nothing is installed. http:// works in test builds only.</string>
+    <string name="voice_model_source_hint">Files or a fixed archive are fetched from the address you enter. Use the pinned upstream revision or an exact copy, such as a mirror or a computer on your network. Every file and archive must match the pinned SHA-256, otherwise nothing is installed. http:// works in test builds only.</string>
     <string name="voice_model_source_invalid">The address must start with https:// (http:// in test builds only) and contain no ? or #</string>
-    <string name="voice_model_download_confirm_custom">About %1$d MB will be downloaded from an address you entered, not the pinned upstream source:\n%2$s\n\nEvery file must match the pinned SHA-256, otherwise nothing is installed.</string>
+    <string name="voice_model_download_confirm_custom">About %1$d MB will be downloaded from an address you entered, not the pinned upstream source:\n%2$s\n\nEvery file or archive must match the pinned SHA-256, otherwise nothing is installed.</string>
     <string name="voice_model_source">Source: %1$s</string>
     <string name="voice_model_discard">Discard partial download</string>
     <string name="voice_section_other">Other</string>

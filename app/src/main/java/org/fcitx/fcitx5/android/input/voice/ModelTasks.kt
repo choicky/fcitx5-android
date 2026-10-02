@@ -169,25 +169,36 @@ internal class ModelTasks(
     }
 
     fun cancel(model: LocalAsrModel) {
-        val (job, aborts) = synchronized(this) {
+        val (job, aborts, pausedTask) = synchronized(this) {
             val task = owners[model]
             if (task == null) {
                 val paused = pausedTasks[model] ?: return
-                // Exclude Resume until cleanup finishes; never remove an installed copy here.
-                val failure = runCatching(paused.discardStaging).exceptionOrNull()
+                // Keep ownership until cleanup finishes; never remove an installed copy here.
                 pausedTasks.remove(model)
-                states[model] = cancellationResult(failure)
-                null to emptyList<() -> Unit>()
+                owners[model] = paused
+                states[model] = State.Cancelling
+                Triple(null, emptyList<() -> Unit>(), paused)
             } else {
                 if (task.cancelled) return
                 task.stopReason = StopReason.Cancel // Cancel wins over an outstanding Pause.
                 states[model] = State.Cancelling
-                (task.job to task.aborts.toList()).also { task.aborts.clear() }
+                Triple(task.job, task.aborts.toList(), null).also { task.aborts.clear() }
             }
         }
         onChange(model)
         aborts.forEach { runCatching(it) }
-        job?.cancel()
+        if (pausedTask != null) {
+            val failure = runCatching(pausedTask.discardStaging).exceptionOrNull()
+            synchronized(this) {
+                if (owners[model] === pausedTask) {
+                    owners -= model
+                    states[model] = cancellationResult(failure)
+                }
+            }
+            onChange(model)
+        } else {
+            job?.cancel()
+        }
     }
 
     private fun update(task: Task, state: State) {
@@ -206,19 +217,33 @@ internal class ModelTasks(
     }
 
     private fun finish(task: Task, failure: Throwable?) {
-        synchronized(this) {
-            // the first of the body's end and the job's completion releases the model
+        val cancelled = synchronized(this) {
+            // A cancelled task retains ownership until its staging cleanup finishes.
             if (owners[task.model] !== task) return
-            states[task.model] = when {
-                task.cancelled -> cancellationResult(runCatching(task.discardStaging).exceptionOrNull())
-                failure == null -> State.Finished
-                task.paused && failure is InstallFailure.Paused -> {
-                    pausedTasks[task.model] = task
-                    State.Paused
+            if (task.cancelled) {
+                states[task.model] = State.Cancelling
+                true
+            } else {
+                states[task.model] = when {
+                    failure == null -> State.Finished
+                    task.paused && failure is InstallFailure.Paused -> {
+                        pausedTasks[task.model] = task
+                        State.Paused
+                    }
+                    else -> State.Failed(failure as? InstallFailure, ErrorRedaction.redact(failure.message.orEmpty()))
                 }
-                else -> State.Failed(failure as? InstallFailure, ErrorRedaction.redact(failure.message.orEmpty()))
+                owners -= task.model
+                false
             }
-            owners -= task.model
+        }
+        if (cancelled) {
+            val cleanupFailure = runCatching(task.discardStaging).exceptionOrNull()
+            synchronized(this) {
+                if (owners[task.model] === task) {
+                    states[task.model] = cancellationResult(cleanupFailure)
+                    owners -= task.model
+                }
+            }
         }
         onChange(task.model)
     }

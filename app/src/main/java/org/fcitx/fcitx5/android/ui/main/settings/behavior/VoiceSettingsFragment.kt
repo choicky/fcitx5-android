@@ -556,7 +556,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     /** One short line: status and next step. Source, licence, size and limits are in the details. */
     private fun modelSummary(entry: ModelCatalogEntry, row: ModelRow = modelRowOf(entry)): String {
-        val size = megabytes(entry.totalBytes)
+        val size = megabytes(entry.downloadTotalBytes)
         return when (row.status) {
             ModelStatus.NotInstalled -> getString(
                 if (ModelAction.Download in row.actions) R.string.voice_model_status_not_installed
@@ -621,7 +621,9 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         append("\n\n").append(getString(R.string.voice_model_offline_note))
         append("\n").append(getString(if (entry.model.streaming)
             R.string.voice_v2_streaming else R.string.voice_v2_nonstreaming))
-        entry.downloadBase?.let { append("\n\n").append(getString(R.string.voice_v2_download_source, it)) }
+        (entry.downloadBase ?: entry.archiveUrl)?.let {
+            append("\n\n").append(getString(R.string.voice_v2_download_source, it))
+        }
         entry.limitation?.let { append("\n\n").append(it) }
         if (!entry.distributionApproved) {
             append("\n\n").append(getString(R.string.voice_model_research_status))
@@ -802,7 +804,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val ctx = requireContext()
         val pad = (16 * resources.displayMetrics.density).toInt()
         val address = EditText(ctx).apply {
-            setText(entry.downloadBase.orEmpty())
+            setText((entry.downloadBase ?: entry.archiveUrl).orEmpty())
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
         }
         val form = LinearLayout(ctx).apply {
@@ -819,7 +821,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 when {
                     modelSourceProblem(base, BuildConfig.DEBUG) != null ->
                         ctx.toast(R.string.voice_model_source_invalid)
-                    base == entry.downloadBase -> confirmDownload(entry)
+                    base == (entry.downloadBase ?: entry.archiveUrl) -> confirmDownload(entry)
                     else -> AlertDialog.Builder(ctx)
                         .setTitle(modelLabel(entry.model))
                         .setMessage(
