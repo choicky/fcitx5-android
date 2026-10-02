@@ -132,8 +132,8 @@ internal data class ModelCatalogEntry(
             limitation = "Fixed archive download; package has no embedded LICENSE/NOTICE, so distribution attribution remains recorded in the details."
         )
 
-        /** User-facing order; recommendation eligibility is separate. */
-        val entries = listOf(FunAsrNano, XAsrOffline, XAsrStreaming960)
+        /** User-facing model-management order; eligibility is separate. */
+        val entries = listOf(XAsrOffline, XAsrStreaming960, FunAsrNano)
 
         private val HF_RESOLVE = Regex("""https://huggingface\.co/([^/]+/[^/]+)/resolve/([0-9a-f]{40})/?""")
 

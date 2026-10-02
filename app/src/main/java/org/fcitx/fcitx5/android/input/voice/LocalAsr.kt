@@ -63,11 +63,11 @@ internal enum class LocalAsrModel(
     companion object {
         const val ROOT_DIR = "local-asr"
 
-        /** User-facing order; recommendation and fallback use separate explicit orders. */
-        val userVisibleEntries = listOf(FunAsrNano, XAsrOffline, XAsrStreaming960)
+        /** Stable product order shared by the UI, recommendation, and D035 priority. */
+        val userVisibleEntries = listOf(XAsrOffline, XAsrStreaming960, FunAsrNano)
 
-        /** D035 order; never derive fallback priority from the settings row order. */
-        val fallbackEntries = listOf(XAsrOffline, FunAsrNano, XAsrStreaming960)
+        /** D035 traverses the same order, but retains its independent eligibility rules. */
+        val fallbackEntries = userVisibleEntries
     }
 }
 

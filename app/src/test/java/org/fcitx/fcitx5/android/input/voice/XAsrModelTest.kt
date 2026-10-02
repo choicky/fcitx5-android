@@ -33,7 +33,7 @@ class XAsrModelTest {
     }
 
     @Test
-    fun fallbackUsesExplicitXOfflineNanoStreamingOrderAndSkipsUnavailableModels() {
+    fun fallbackUsesTheStableOrderAndSkipsUnavailableModels() {
         val external = AsrServiceId.Doubao
         val services = LocalAsrModel.userVisibleEntries.map(AsrServiceId::Local).toSet() + external
         val allInstalled = LocalStatus(true, LocalAsrModel.entries.toSet())
@@ -49,14 +49,19 @@ class XAsrModelTest {
             fallbackTarget(external, offlineDisabled, allInstalled)
         )
 
-        val nanoDisabled = offlineDisabled.withEnabled(AsrServiceId.Local(LocalAsrModel.FunAsrNano), false)
+        val streamingDisabled = offlineDisabled.withEnabled(AsrServiceId.Local(LocalAsrModel.XAsrStreaming960), false)
         assertEquals(
             VoiceBackendKind.LocalAsr(LocalAsrModel.XAsrStreaming960),
-            fallbackTarget(external, nanoDisabled, allInstalled)
+            fallbackTarget(external, offlineDisabled, allInstalled)
         )
 
-        assertNull(fallbackTarget(external, nanoDisabled, LocalStatus(false, allInstalled.installed)))
-        assertNull(fallbackTarget(external, nanoDisabled, LocalStatus(true, emptySet())))
+        assertEquals(
+            VoiceBackendKind.LocalAsr(LocalAsrModel.FunAsrNano),
+            fallbackTarget(external, streamingDisabled, allInstalled)
+        )
+
+        assertNull(fallbackTarget(external, streamingDisabled, LocalStatus(false, allInstalled.installed)))
+        assertNull(fallbackTarget(external, streamingDisabled, LocalStatus(true, emptySet())))
     }
 
     @Test

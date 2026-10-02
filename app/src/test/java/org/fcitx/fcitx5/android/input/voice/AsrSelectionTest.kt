@@ -122,35 +122,36 @@ class AsrSelectionTest {
     fun recommendationUsesLocalPriorityAndDoesNotAskSystemWhenLocalIsUsable() {
         val nano = AsrServiceId.Local(LocalAsrModel.FunAsrNano)
         val offline = AsrServiceId.Local(LocalAsrModel.XAsrOffline)
-        val both = VoiceSelection(null, setOf(nano, offline), true)
-        val all = LocalStatus(true, setOf(LocalAsrModel.FunAsrNano, LocalAsrModel.XAsrOffline))
+        val streaming = AsrServiceId.Local(LocalAsrModel.XAsrStreaming960)
+        val allServices = setOf(nano, offline, streaming)
+        val both = VoiceSelection(null, allServices, true)
+        val all = LocalStatus(true, LocalAsrModel.entries.toSet())
         assertEquals(
-            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.FunAsrNano)),
+            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.XAsrOffline)),
             resolveCurrentService(both, all, Allowed, systemNotQueried)
         )
-        val offlineOnly = both.copy(enabled = setOf(offline))
+        val withoutOffline = both.copy(enabled = setOf(nano, streaming))
         assertEquals(
-            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.XAsrOffline)),
+            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.XAsrStreaming960)),
             resolveCurrentService(
-                offlineOnly,
-                LocalStatus(true, setOf(LocalAsrModel.XAsrOffline)),
-                Declined,
-                systemNotQueried
-            )
-        )
-        val streaming = AsrServiceId.Local(LocalAsrModel.XAsrStreaming960)
-        assertEquals(
-            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.XAsrOffline)),
-            resolveCurrentService(
-                VoiceSelection(null, setOf(offline, streaming), true),
-                LocalStatus(true, setOf(LocalAsrModel.XAsrOffline, LocalAsrModel.XAsrStreaming960)),
+                withoutOffline,
+                LocalStatus(true, setOf(LocalAsrModel.FunAsrNano, LocalAsrModel.XAsrStreaming960)),
                 Declined,
                 systemNotQueried
             )
         )
         assertEquals(
-            VoiceSelection(nano, setOf(nano, offline), true),
-            both.applyRecommendation(Recommendation.SelectLocal(LocalAsrModel.FunAsrNano))
+            AsrResolution.NeedsRecommendation(Recommendation.SelectLocal(LocalAsrModel.FunAsrNano)),
+            resolveCurrentService(
+                both.copy(enabled = setOf(nano)),
+                LocalStatus(true, setOf(LocalAsrModel.FunAsrNano)),
+                Declined,
+                systemNotQueried
+            )
+        )
+        assertEquals(
+            VoiceSelection(offline, allServices, true),
+            both.applyRecommendation(Recommendation.SelectLocal(LocalAsrModel.XAsrOffline))
         )
     }
 

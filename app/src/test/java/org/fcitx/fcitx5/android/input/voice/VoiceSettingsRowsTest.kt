@@ -119,9 +119,9 @@ class VoiceSettingsRowsTest {
     }
 
     @Test
-    fun localCatalogKeepsNanoBeforeManualXAsr() {
+    fun localCatalogUsesTheStableProductOrder() {
         assertEquals(
-            listOf(LocalAsrModel.FunAsrNano, LocalAsrModel.XAsrOffline, LocalAsrModel.XAsrStreaming960),
+            listOf(LocalAsrModel.XAsrOffline, LocalAsrModel.XAsrStreaming960, LocalAsrModel.FunAsrNano),
             ModelCatalogEntry.entries.map { it.model }
         )
     }

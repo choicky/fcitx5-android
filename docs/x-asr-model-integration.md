@@ -25,7 +25,10 @@ The archive uses the existing ModelJobs/ModelTasks lifecycle, HTTP Range resume,
 the same pause/cancel handle, whole-archive verification, safe temporary
 extraction, and then the existing per-file SHA and atomic installer. Multiple-file
 Import remains available. No new UI section, page, Provider or hotword path was added.
-Existing model rows retain their order; X-ASR rows follow them. Both new entries
+The single stable local-model order is X-ASR offline INT8 → X-ASR 960 ms streaming INT8 →
+FunASR Nano. The same explicit order drives the model-management rows, Provider selector,
+one-click recommendation traversal, and D035 candidate priority; recommendation and D035
+still apply independent qualifications. Both new entries
 have `recommendationEligible=true` by default and `production=true`. Existing model
 qualifications,
 defaults and download paths are unchanged.
@@ -174,7 +177,7 @@ report/ROADMAP; never infer device PASS from compilation.
    In the existing Local section download each fixed archive; verify progress,
    pause/resume/cancel, checksum/install, details/attribution, enable and Use/current-service display.
 2. Verify an installed and enabled X-ASR is selected by One-click recommendation before
-   System ASR, while D035 uses the explicit X-ASR offline → Nano → X-ASR streaming order
+   System ASR, while D035 uses the same explicit X-ASR offline → X-ASR streaming → Nano order
    and skips disabled, incomplete, or runtime-unavailable models. Verify this in both debug
    and release. Historical records that excluded X-ASR from recommendation apply only before
    the recommendation-fix batch.
