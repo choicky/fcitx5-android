@@ -63,7 +63,7 @@ class ToolbarEditorUi(
         flexWrap = FlexWrap.WRAP
         alignItems = AlignItems.FLEX_START
         justifyContent = JustifyContent.FLEX_START
-        setPadding(ctx.dp(8), ctx.dp(4), ctx.dp(8), ctx.dp(4))
+        setPadding(ctx.dp(8), ctx.dp(2), ctx.dp(8), ctx.dp(2))
         setOnDragListener(dropListener { event, x, y -> dropIntoAvailable(event, x, y) })
     }
 
@@ -71,10 +71,11 @@ class ToolbarEditorUi(
         isFillViewport = true
         addView(LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(ctx.dp(16), ctx.dp(12), ctx.dp(16), ctx.dp(12))
+            setPadding(ctx.dp(16), ctx.dp(6), ctx.dp(16), ctx.dp(6))
             addView(TextView(ctx).apply {
                 setText(R.string.toolbar_available_actions)
-                setTextAppearance(android.R.style.TextAppearance_Material_Subhead)
+                setTextAppearance(android.R.style.TextAppearance_Material_Small)
+                setTextColor(theme.altKeyTextColor)
                 contentDescription = ctx.getString(R.string.toolbar_available_actions)
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
@@ -84,8 +85,13 @@ class ToolbarEditorUi(
             ))
             addView(LinearLayout(ctx).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                addView(Button(ctx).apply {
+                addView(Button(ctx, null, android.R.attr.borderlessButtonStyle).apply {
                     text = ctx.getString(R.string.restore_default)
+                    textSize = 12f
+                    isAllCaps = false
+                    minHeight = ctx.dp(48)
+                    minimumHeight = ctx.dp(48)
+                    setPadding(ctx.dp(8), 0, ctx.dp(8), 0)
                     setOnClickListener { onRestore() }
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(Button(ctx).apply {
@@ -140,14 +146,17 @@ class ToolbarEditorUi(
             setOnClickListener { onClick() }
             addView(TextView(ctx).apply {
                 text = symbol
-                textSize = 10f
+                textSize = 9f
                 gravity = Gravity.CENTER
                 setTextColor(theme.genericActiveForegroundColor)
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
                     setColor(theme.genericActiveBackgroundColor)
                 }
-            }, FrameLayout.LayoutParams(ctx.dp(18), ctx.dp(18), Gravity.CENTER))
+            }, FrameLayout.LayoutParams(ctx.dp(14), ctx.dp(14), Gravity.TOP or Gravity.END).apply {
+                topMargin = ctx.dp(4)
+                marginEnd = ctx.dp(6)
+            })
         }
 
     private fun icon(action: ToolbarAction): ImageView = ImageView(ctx).apply {
@@ -170,7 +179,11 @@ class ToolbarEditorUi(
                     update(ToolbarAction.editorAppendCurrent(state, action), revealCurrentEnd = true)
                 }
             }
-            addView(icon(action), FrameLayout.LayoutParams(size, size, Gravity.CENTER))
+            addView(icon(action).apply {
+                if (!add) setPadding(ctx.dp(4), ctx.dp(4), ctx.dp(4), ctx.dp(4))
+            }, FrameLayout.LayoutParams(size, size,
+                if (add) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.CENTER
+            ))
             addView(
                 badge(if (add) "+" else "−", action, add) {
                     if (add) update(
@@ -196,8 +209,8 @@ class ToolbarEditorUi(
             ctx.dp(68), ctx.dp(24), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         ))
         it.contentDescription = actionLabel(action)
-        it.layoutParams = LayoutParams(ctx.dp(72), ctx.dp(76)).apply {
-            setMargins(ctx.dp(4), ctx.dp(4), ctx.dp(4), ctx.dp(4))
+        it.layoutParams = LayoutParams(ctx.dp(72), ctx.dp(68)).apply {
+            setMargins(ctx.dp(4), ctx.dp(2), ctx.dp(4), ctx.dp(2))
         }
     }
 
@@ -212,7 +225,7 @@ class ToolbarEditorUi(
             }
         }
         state.current.forEach { action ->
-            currentContainer.addView(currentBody(action), LinearLayout.LayoutParams(ctx.dp(40), ctx.dp(40)))
+            currentContainer.addView(currentBody(action), LinearLayout.LayoutParams(ctx.dp(48), ctx.dp(40)))
         }
         state.available.forEach { action ->
             availableContainer.addView(availableBody(action))
