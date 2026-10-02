@@ -1,4 +1,4 @@
-name: MoQi test APK
+name: fcitx5 android fusion enhanced apk
 
 # Builds an installable debug APK of fcitx5-android against
 # choicky/fcitx5-chinese-addons@feature/moqi-filter, so that the Auxiliary
@@ -84,7 +84,7 @@ jobs:
       - name: Rename debug APK version identifier for the Fusion distribution line
         run: |
           set -euo pipefail
-          mkdir -p fusion-debug-apk
+          mkdir -p fcitx5-android-fusion-enhanced-apk
           mapfile -t apks < <(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print)
           test "${#apks[@]}" = 1
           apk=${apks[0]}
@@ -94,15 +94,14 @@ jobs:
           case "$original" in "$input_prefix"*) ;; *) echo "unexpected Gradle APK prefix: $original"; exit 1 ;; esac
           version=${original#"$input_prefix"}
           case "$version" in *.apk) ;; *) echo "unexpected Gradle APK version suffix: $version"; exit 1 ;; esac
-          case "$version" in *moqi*) expected_version=${version/moqi/fusion} ;; *fusion*) expected_version="$version" ;; *) expected_version="$version" ;; esac
-          renamed="$target_prefix$expected_version"
+          renamed="$target_prefix$version"
           digest=$(sha256sum "$apk" | cut -d' ' -f1)
-          mv "$apk" "fusion-debug-apk/$renamed"
-          test "$digest" = "$(sha256sum "fusion-debug-apk/$renamed" | cut -d' ' -f1)"
+          mv "$apk" "fcitx5-android-fusion-enhanced-apk/$renamed"
+          test "$digest" = "$(sha256sum "fcitx5-android-fusion-enhanced-apk/$renamed" | cut -d' ' -f1)"
           case "$renamed" in "$target_prefix"*) ;; *) echo "renamed APK prefix changed: $renamed"; exit 1 ;; esac
           test "${renamed#"$target_prefix"}" = "$expected_version"
-          test -f "fusion-debug-apk/$renamed"
-          sha256sum "fusion-debug-apk/$renamed"
+          test -f "fcitx5-android-fusion-enhanced-apk/$renamed"
+          sha256sum "fcitx5-android-fusion-enhanced-apk/$renamed"
 
       - name: Verify the APK packs the MoQi table and the filter code
         # No staging step above on purpose: the table has to reach the APK
@@ -115,7 +114,7 @@ jobs:
 
           PINNED = "66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923"
           EXPECTED = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
-          apks = glob.glob("fusion-debug-apk/*.apk")
+          apks = glob.glob("fcitx5-android-fusion-enhanced-apk/*.apk")
           assert len(apks) == 1, f"expected exactly one APK, found {len(apks)}"
           with zipfile.ZipFile(apks[0]) as zf:
               names = zf.namelist()
@@ -140,7 +139,7 @@ jobs:
           EXPECTED_DEBUG_CERT_SHA256: 41:70:5B:C9:4F:42:26:FF:FA:E9:60:91:B7:BA:36:F2:C0:55:B6:2A:93:DF:4E:B9:58:9C:A9:96:A3:7C:7A:7E
         run: |
           set -euo pipefail
-          apk=$(find fusion-debug-apk -name '*.apk' -print -quit)
+          apk=$(find fcitx5-android-fusion-enhanced-apk -name '*.apk' -print -quit)
           test -n "$apk"
           aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f -print -quit)
           package=$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")
@@ -158,6 +157,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: fusion-debug-apk
-          path: fusion-debug-apk/*.apk
+          name: fcitx5-android-fusion-enhanced-apk
+          path: fcitx5-android-fusion-enhanced-apk/*.apk
           if-no-files-found: error

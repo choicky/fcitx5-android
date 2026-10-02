@@ -76,7 +76,7 @@ jobs:
       - name: Verify the release APK is signed, .moqi and packs the MoQi table
         run: |
           set -euo pipefail
-          mkdir -p fusion-release-apk
+          mkdir -p fcitx5-android-fusion-enhanced-release
           mapfile -t apks < <(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print)
           test "${#apks[@]}" = 1
           apk=${apks[0]}
@@ -86,14 +86,13 @@ jobs:
           case "$original" in "$input_prefix"*) ;; *) echo "unexpected Gradle APK prefix: $original"; exit 1 ;; esac
           version=${original#"$input_prefix"}
           case "$version" in *.apk) ;; *) echo "unexpected Gradle APK version suffix: $version"; exit 1 ;; esac
-          case "$version" in *moqi*) expected_version=${version/moqi/fusion} ;; *fusion*) expected_version="$version" ;; *) expected_version="$version" ;; esac
-          renamed="$target_prefix$expected_version"
+          renamed="$target_prefix$version"
           digest=$(sha256sum "$apk" | cut -d' ' -f1)
-          mv "$apk" "fusion-release-apk/$renamed"
-          test "$digest" = "$(sha256sum "fusion-release-apk/$renamed" | cut -d' ' -f1)"
+          mv "$apk" "fcitx5-android-fusion-enhanced-release/$renamed"
+          test "$digest" = "$(sha256sum "fcitx5-android-fusion-enhanced-release/$renamed" | cut -d' ' -f1)"
           case "$renamed" in "$target_prefix"*) ;; *) echo "renamed APK prefix changed: $renamed"; exit 1 ;; esac
           test "${renamed#"$target_prefix"}" = "$expected_version"
-          test -f "fusion-release-apk/$renamed"
+          test -f "fcitx5-android-fusion-enhanced-release/$renamed"
           pin_file=lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons/modules/pinyinhelper/moqima-gb18030.cmake
           pinned=$(grep -oE '[0-9a-f]{64}' "$pin_file")
           echo "pinned table sha256 (from the addon pin file): $pinned"
@@ -105,7 +104,7 @@ jobs:
 
           PINNED = sys.argv[1]
           TABLE = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
-          apks = glob.glob("fusion-release-apk/*.apk")
+          apks = glob.glob("fcitx5-android-fusion-enhanced-release/*.apk")
           assert len(apks) == 1, f"expected exactly one release APK, found {len(apks)}"
           print("release APK:", apks[0])
           with zipfile.ZipFile(apks[0]) as zf:
@@ -129,7 +128,7 @@ jobs:
           addon=$(git -C lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons rev-parse HEAD)
           pin_file=lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons/modules/pinyinhelper/moqima-gb18030.cmake
           table=$(grep -oE '[0-9a-f]{64}' "$pin_file")
-          apk=$(find fusion-release-apk -maxdepth 1 -type f -name '*.apk' -print -quit)
+          apk=$(find fcitx5-android-fusion-enhanced-release -maxdepth 1 -type f -name '*.apk' -print -quit)
           test -n "$apk"
           apk_name=${apk##*/}
           apk_sha256=$(sha256sum "$apk" | cut -d' ' -f1)
@@ -157,8 +156,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF_NAME}"
-          gh release create "$tag" fusion-release-apk/*.apk \
+          gh release create "$tag" fcitx5-android-fusion-enhanced-release/*.apk \
             --repo "$GITHUB_REPOSITORY" \
-            --title "MoQi Auxiliary Filter $tag" \
+            --title "fcitx5-android-fusion-enhanced $tag" \
             --notes-file .github/moqi-release-notes.md \
             --verify-tag

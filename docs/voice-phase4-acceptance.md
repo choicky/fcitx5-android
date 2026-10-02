@@ -89,6 +89,19 @@ published by run `36984661240`; its arm64-v8a APK SHA-256 is
 `5e51f7895efd876a6f5d565fd7c95346449866af65628772ebd31f0423fb6d38`.
 The release was intentionally not gated on new real-device acceptance.
 
+### Local ASR packaging audit (current product baseline)
+
+The current Android source and addons pin were audited at the same source
+revision used for the debug/release packaging comparison. Both variants carry
+the real sherpa-onnx 1.13.8 runtime and the four arm64-v8a native libraries
+(`libonnxruntime.so`, `libsherpa-onnx-c-api.so`,
+`libsherpa-onnx-cxx-api.so`, and `libsherpa-onnx-jni.so`); their uncompressed
+library hashes match between debug and release. Release is smaller because of
+normal R8/resource shrinking and native stripping/optimization. Model weights
+are external and are downloaded or imported by Model Manager, rather than
+being embedded in the APK. Post-install model download/import and real-device
+recognition E2E were not performed in this release cycle.
+
 ## Remaining historical/other voice checks
 
 - Verify System ASR “未授权” and “已停用” remain distinct, including disclosure and revoke flows;
