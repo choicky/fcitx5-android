@@ -45,16 +45,11 @@ class XAsrModelTest {
 
         val offlineDisabled = allEnabled.withEnabled(AsrServiceId.Local(LocalAsrModel.XAsrOffline), false)
         assertEquals(
-            VoiceBackendKind.LocalAsr(LocalAsrModel.FunAsrNano),
-            fallbackTarget(external, offlineDisabled, allInstalled)
-        )
-
-        val streamingDisabled = offlineDisabled.withEnabled(AsrServiceId.Local(LocalAsrModel.XAsrStreaming960), false)
-        assertEquals(
             VoiceBackendKind.LocalAsr(LocalAsrModel.XAsrStreaming960),
             fallbackTarget(external, offlineDisabled, allInstalled)
         )
 
+        val streamingDisabled = offlineDisabled.withEnabled(AsrServiceId.Local(LocalAsrModel.XAsrStreaming960), false)
         assertEquals(
             VoiceBackendKind.LocalAsr(LocalAsrModel.FunAsrNano),
             fallbackTarget(external, streamingDisabled, allInstalled)
