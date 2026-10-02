@@ -55,6 +55,25 @@ internal enum class LocalAsrModel(
             "joiner-epoch-99-avg-1.int8.onnx",
             "tokens.txt"
         )
+    ),
+
+    XAsrOffline(
+        "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03",
+        streaming = false,
+        recommendationEligible = false,
+        production = false,
+        requiredFiles = listOf(
+            "encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.onnx",
+            "joiner-epoch-99-avg-1.int8.onnx", "tokens.txt"
+        )
+    ),
+
+    XAsrStreaming960(
+        "sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05",
+        streaming = true,
+        recommendationEligible = false,
+        production = false,
+        requiredFiles = listOf("encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "tokens.txt")
     );
 
     fun missingFiles(modelDir: File): List<String> =
@@ -63,8 +82,8 @@ internal enum class LocalAsrModel(
     companion object {
         const val ROOT_DIR = "local-asr"
 
-        /** User-facing and recommendation order: FunASR Nano before bilingual Zipformer. */
-        val userVisibleEntries = listOf(FunAsrNano, ZipformerBilingual)
+        /** Retained models keep their order; X-ASR entries are manual choices only. */
+        val userVisibleEntries = listOf(FunAsrNano, ZipformerBilingual, XAsrOffline, XAsrStreaming960)
     }
 }
 
@@ -95,7 +114,11 @@ internal interface StreamingDecoder {
 }
 
 /** Streaming: decodes while audio arrives; stop flushes the tail. */
-internal class StreamingLocalAsrSession(private val decoder: StreamingDecoder) : LocalAsrSession {
+internal class StreamingLocalAsrSession(
+    private val decoder: StreamingDecoder,
+    /** Model-specific end padding; zero preserves the existing model's flush behavior. */
+    private val trailingSilenceSamples: Int = 0
+) : LocalAsrSession {
     private var released = false
 
     override fun accept(samples: FloatArray): String {
@@ -104,6 +127,7 @@ internal class StreamingLocalAsrSession(private val decoder: StreamingDecoder) :
     }
 
     override fun finish(): String {
+        if (trailingSilenceSamples > 0) decoder.acceptWaveform(FloatArray(trailingSilenceSamples))
         decoder.inputFinished()
         return decoder.decodeReady()
     }

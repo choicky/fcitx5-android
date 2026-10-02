@@ -9,6 +9,7 @@ import com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
 import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
@@ -28,6 +29,12 @@ internal object LocalAsrEngines {
                 modelDir, threads, "encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.onnx",
                 "joiner-epoch-99-avg-1.int8.onnx", ""
             )
+            LocalAsrModel.XAsrOffline -> xAsrOffline(modelDir, threads)
+            LocalAsrModel.XAsrStreaming960 -> zipformer(
+                modelDir, threads, "encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "",
+                // One 960 ms chunk drains the encoder tail; do not change older models.
+                trailingSilenceSamples = AudioCapture.SAMPLE_RATE * 960 / 1000
+            )
         }
 
     private fun zipformer(
@@ -36,7 +43,8 @@ internal object LocalAsrEngines {
         encoder: String,
         decoder: String,
         joiner: String,
-        modelType: String
+        modelType: String,
+        trailingSilenceSamples: Int = 0
     ): LocalAsrRecognizer {
         val recognizer = OnlineRecognizer(
             config = OnlineRecognizerConfig(
@@ -69,7 +77,38 @@ internal object LocalAsrEngines {
                     override fun inputFinished() = stream.inputFinished()
 
                     override fun release() = stream.release()
-                })
+                }, trailingSilenceSamples)
+            }
+
+            override fun release() = recognizer.release()
+        }
+    }
+
+    private fun xAsrOffline(dir: File, threads: Int): LocalAsrRecognizer {
+        val recognizer = OfflineRecognizer(
+            config = OfflineRecognizerConfig(
+                modelConfig = OfflineModelConfig(
+                    transducer = OfflineTransducerModelConfig(
+                        encoder = dir.resolve("encoder-epoch-99-avg-1.int8.onnx").path,
+                        decoder = dir.resolve("decoder-epoch-99-avg-1.onnx").path,
+                        joiner = dir.resolve("joiner-epoch-99-avg-1.int8.onnx").path
+                    ),
+                    tokens = dir.resolve("tokens.txt").path,
+                    numThreads = threads
+                ),
+                decodingMethod = "modified_beam_search"
+            )
+        )
+        return object : LocalAsrRecognizer {
+            override fun newSession(): LocalAsrSession = BufferingLocalAsrSession { samples ->
+                val stream = recognizer.createStream()
+                try {
+                    stream.acceptWaveform(samples, AudioCapture.SAMPLE_RATE)
+                    recognizer.decode(stream)
+                    recognizer.getResult(stream).text
+                } finally {
+                    stream.release()
+                }
             }
 
             override fun release() = recognizer.release()

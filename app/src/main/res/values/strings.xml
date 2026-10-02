@@ -525,4 +525,6 @@
     <string name="keyboard_height_percent_base">Keyboard height percent base</string>
     <string name="display_metrics">Display metrics (Resources.getDisplayMetrics)</string>
     <string name="real_size">Real size (Display.getRealSize)</string>
+    <string name="voice_model_x_asr_offline">X-ASR offline Chinese-English INT8 (punctuation)</string>
+    <string name="voice_model_x_asr_streaming">X-ASR 960 ms streaming Chinese-English INT8 (punctuation)</string>
 </resources>

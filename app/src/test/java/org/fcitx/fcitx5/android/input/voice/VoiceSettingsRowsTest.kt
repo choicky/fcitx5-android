@@ -119,9 +119,10 @@ class VoiceSettingsRowsTest {
     }
 
     @Test
-    fun localCatalogIsOrderedNanoThenBilingual() {
+    fun localCatalogKeepsNanoThenBilingualBeforeManualXAsr() {
         assertEquals(
-            listOf(LocalAsrModel.FunAsrNano, LocalAsrModel.ZipformerBilingual),
+            listOf(LocalAsrModel.FunAsrNano, LocalAsrModel.ZipformerBilingual,
+                LocalAsrModel.XAsrOffline, LocalAsrModel.XAsrStreaming960),
             ModelCatalogEntry.entries.map { it.model }
         )
     }

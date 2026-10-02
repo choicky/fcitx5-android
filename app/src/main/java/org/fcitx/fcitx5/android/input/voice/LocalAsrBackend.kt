@@ -142,7 +142,11 @@ internal class LocalAsrBackend(
             partials++
             if (firstPartialMillis == null) firstPartialMillis = SystemClock.elapsedRealtime() - firstAudioAt
             // observe only: local partial text never reaches preedit
-            Timber.d("Local ASR partial #$partials: $text")
+            if (model == LocalAsrModel.XAsrStreaming960) {
+                Timber.d("Local ASR partial #$partials (${text.length} chars)")
+            } else {
+                Timber.d("Local ASR partial #$partials: $text")
+            }
         }
 
         fun openSession(): LocalAsrSession? {
