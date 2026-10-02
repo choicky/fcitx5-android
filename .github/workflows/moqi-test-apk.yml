@@ -94,7 +94,8 @@ jobs:
           case "$original" in "$input_prefix"*) ;; *) echo "unexpected Gradle APK prefix: $original"; exit 1 ;; esac
           version=${original#"$input_prefix"}
           case "$version" in *.apk) ;; *) echo "unexpected Gradle APK version suffix: $version"; exit 1 ;; esac
-          renamed="$target_prefix$version"
+          expected_version="$version"
+          renamed="$target_prefix$expected_version"
           digest=$(sha256sum "$apk" | cut -d' ' -f1)
           mv "$apk" "fcitx5-android-fusion-enhanced-apk/$renamed"
           test "$digest" = "$(sha256sum "fcitx5-android-fusion-enhanced-apk/$renamed" | cut -d' ' -f1)"
