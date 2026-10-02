@@ -20,7 +20,7 @@ on:
 # fcitx5-chinese-addons, not whatever the branch points at by then. The commit
 # and the MoQi table hash are recorded in the release notes by this workflow.
 env:
-  ADDON_COMMIT: 022028550c3827f7018df47dab96be7317298c27
+  ADDON_COMMIT: 9b3448e6b3889e4281ea39e334c7e5714f8a8b12
 
 permissions:
   contents: write
