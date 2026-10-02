@@ -107,7 +107,7 @@ class VoiceSettingsLayoutTest {
             val rows = onMain { category.children().filterIsInstance<ModelRowPreference>() }
             assertEquals(LocalAsrModel.userVisibleEntries.size, rows.size)
             assertEquals(app.getString(R.string.voice_model_b), rows[0].title)
-            assertEquals(app.getString(R.string.voice_model_c), rows[1].title)
+            assertEquals(app.getString(R.string.voice_model_x_asr_offline), rows[1].title)
             rows.forEach {
                 assertFalse(it.title.toString().matches(Regex("^[ABC][：:]")))
             }

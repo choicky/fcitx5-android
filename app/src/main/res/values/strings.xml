@@ -389,7 +389,6 @@
     <string name="voice_section_system">Built-in system ASR</string>
     <string name="voice_section_local">On-device ASR (offline)</string>
     <string name="voice_model_b">FunASR Nano INT8</string>
-    <string name="voice_model_c">Streaming Zipformer Chinese–English INT8</string>
     <string name="voice_model_progress">Installing · %1$d%% · tap to cancel</string>
     <string name="voice_model_failed">Failed: %1$s</string>
     <string name="voice_model_cancelled">cancelled</string>

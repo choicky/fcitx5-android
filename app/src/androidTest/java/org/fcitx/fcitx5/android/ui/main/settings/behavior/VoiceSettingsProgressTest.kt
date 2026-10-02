@@ -41,7 +41,7 @@ class VoiceSettingsProgressTest {
     @Test
     fun aPausedDownloadStaysPausedAcrossActivityRecreationAndReopening() {
         val ctx = instrumentation.targetContext
-        val model = LocalAsrModel.ZipformerBilingual
+        val model = LocalAsrModel.XAsrOffline
         // Do not replace a device's existing model or unfinished download.
         assumeTrue(!ModelJobs.isRunning(model) && !LocalModels.isInstalled(ctx, model) &&
             LocalModels.stagedBytes(ctx, model) == 0L)
@@ -206,7 +206,7 @@ class VoiceSettingsProgressTest {
 
     @Test
     fun aReopenedPageFollowsARunningTaskInPlace() {
-        val model = LocalAsrModel.ZipformerBilingual
+        val model = LocalAsrModel.XAsrOffline
         val go = CountDownLatch(1)
         val end = CountDownLatch(1)
         val first = openVoiceSettings()

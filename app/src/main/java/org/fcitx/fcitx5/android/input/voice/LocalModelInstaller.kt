@@ -88,29 +88,6 @@ internal data class ModelCatalogEntry(
             limitation = "Research model; the tested export produced empty final results for about 34–39 second utterances."
         )
 
-        /**
-         * C: Apache-2.0 on the sherpa-onnx mirror and on the upstream
-         * pfluo/k2fsa-zipformer-chinese-english-mixed; training data not published.
-         * Hashes: HF csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20 @ 98590b7e.
-         */
-        val ZipformerBilingual = ModelCatalogEntry(
-            LocalAsrModel.ZipformerBilingual,
-            version = "2023-02-20 (HF 98590b7e)",
-            files = listOf(
-                ModelFile("encoder-epoch-99-avg-1.int8.onnx", 181895032, "8fa764187a261844f859d7143ebaa563af5d10adfece4c18a8f414c88cba2a9b"),
-                ModelFile("decoder-epoch-99-avg-1.onnx", 13876452, "2e3b5ec371f8899ee6acd829fd753ba45772df57a91bdf37cde3136354e7db7d"),
-                ModelFile("joiner-epoch-99-avg-1.int8.onnx", 3228404, "1ed689c5ed19dbaa725d9d191bb4822b5f4855a39e1ffd28cbc1f340d25b2ee0"),
-                ModelFile("tokens.txt", 56317, "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3")
-            ),
-            downloadBase = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/98590b7ed6443e77b714204da2757d75e1a642f4",
-            sourceName = "csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20",
-            sourceUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/tree/98590b7ed6443e77b714204da2757d75e1a642f4",
-            license = "Apache-2.0",
-            licenseUrl = "https://huggingface.co/pfluo/k2fsa-zipformer-chinese-english-mixed",
-            attribution = "csukuangfj sherpa-onnx conversion; pfluo/k2fsa-zipformer-chinese-english-mixed; k2-fsa/icefall",
-            limitation = "Research candidate; training-data provenance is not published in the model materials."
-        )
-
         /** Exact files extracted from the pinned GitHub archive. */
         val XAsrOffline = ModelCatalogEntry(
             LocalAsrModel.XAsrOffline,
@@ -156,7 +133,7 @@ internal data class ModelCatalogEntry(
         )
 
         /** User-facing order; recommendation eligibility is separate. */
-        val entries = listOf(FunAsrNano, ZipformerBilingual, XAsrOffline, XAsrStreaming960)
+        val entries = listOf(FunAsrNano, XAsrOffline, XAsrStreaming960)
 
         private val HF_RESOLVE = Regex("""https://huggingface\.co/([^/]+/[^/]+)/resolve/([0-9a-f]{40})/?""")
 

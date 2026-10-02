@@ -101,9 +101,9 @@ class LocalModelInstallerTest {
         ModelCatalogEntry.entries.forEach { e ->
             assertEquals(e.model.requiredFiles.toSet(), e.files.map { it.path }.toSet())
             e.files.forEach { assertTrue(it.sha256.matches(Regex("[0-9a-f]{64}"))) }
-            assertFalse(e.model.production)
-            // Retained models use per-file downloads; X-ASR uses its fixed archive.
-            if (e.model == LocalAsrModel.FunAsrNano || e.model == LocalAsrModel.ZipformerBilingual) {
+            assertTrue(e.model.production)
+            // Nano uses per-file downloads; X-ASR uses its fixed archive.
+            if (e.model == LocalAsrModel.FunAsrNano) {
                 assertTrue(e.downloadBase!!.matches(Regex("https://huggingface\\.co/[^/]+/[^/]+/resolve/[0-9a-f]{40}")))
                 // Test builds still offer both retained models.
                 assertTrue(e.downloadOffered(testBuild = true))

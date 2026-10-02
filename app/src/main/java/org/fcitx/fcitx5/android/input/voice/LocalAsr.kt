@@ -30,6 +30,7 @@ internal enum class LocalAsrModel(
         "sherpa-onnx-funasr-nano-int8-2025-12-30",
         streaming = false,
         recommendationEligible = true,
+        production = true,
         requiredFiles = listOf(
             "encoder_adaptor.int8.onnx",
             "llm.int8.onnx",
@@ -40,28 +41,11 @@ internal enum class LocalAsrModel(
         )
     ),
 
-    /**
-     * Streaming Zipformer bilingual zh-en INT8 (sherpa-onnx OnlineRecognizer), a candidate
-     * under evaluation with Apache-2.0 declared by the mirror and the upstream author; not a
-     * production model until it passes the device gate.
-     */
-    ZipformerBilingual(
-        "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20",
-        streaming = true,
-        recommendationEligible = true,
-        requiredFiles = listOf(
-            "encoder-epoch-99-avg-1.int8.onnx",
-            "decoder-epoch-99-avg-1.onnx",
-            "joiner-epoch-99-avg-1.int8.onnx",
-            "tokens.txt"
-        )
-    ),
-
     XAsrOffline(
         "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03",
         streaming = false,
         recommendationEligible = false,
-        production = false,
+        production = true,
         requiredFiles = listOf(
             "encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.onnx",
             "joiner-epoch-99-avg-1.int8.onnx", "tokens.txt"
@@ -72,7 +56,7 @@ internal enum class LocalAsrModel(
         "sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05",
         streaming = true,
         recommendationEligible = false,
-        production = false,
+        production = true,
         requiredFiles = listOf("encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "tokens.txt")
     );
 
@@ -82,8 +66,11 @@ internal enum class LocalAsrModel(
     companion object {
         const val ROOT_DIR = "local-asr"
 
-        /** Retained models keep their order; X-ASR entries are manual choices only. */
-        val userVisibleEntries = listOf(FunAsrNano, ZipformerBilingual, XAsrOffline, XAsrStreaming960)
+        /** User-facing order; recommendation and fallback use separate explicit orders. */
+        val userVisibleEntries = listOf(FunAsrNano, XAsrOffline, XAsrStreaming960)
+
+        /** D035 order; never derive fallback priority from the settings row order. */
+        val fallbackEntries = listOf(XAsrOffline, FunAsrNano, XAsrStreaming960)
     }
 }
 

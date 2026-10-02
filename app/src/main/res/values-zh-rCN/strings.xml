@@ -389,7 +389,6 @@
     <string name="voice_section_system">系统自带 ASR</string>
     <string name="voice_section_local">本地 ASR（不联网）</string>
     <string name="voice_model_b">FunASR Nano INT8</string>
-    <string name="voice_model_c">流式 Zipformer 中英双语 INT8</string>
     <string name="voice_model_progress">安装中 · %1$d%% · 点按取消</string>
     <string name="voice_model_failed">失败：%1$s</string>
     <string name="voice_model_cancelled">已取消</string>
