@@ -74,9 +74,10 @@ All entries are under `sherpa-onnx-x-asr-960ms-streaming-zipformer-transducer-zh
 
 Each archive also contains bpe.model, README.md, test_onnx.py and test_wavs/0–3.wav.
 Neither archive contains LICENSE or NOTICE. bpe.model is a SentencePiece model
-used by the standalone scripts and vinput's hotword vocabulary preparation; the
-project's recognizer config uses tokens.txt without hotwords and **does not need
-bpe.model or generated bpe.vocab**. Only the four recognition files are installed.
+used by vinput's optional hotword vocabulary preparation; the actual packaged
+test_onnx.py scripts both decode using tokens.txt without reading bpe.model.
+The project's recognizer config also uses tokens.txt without hotwords and
+**does not need bpe.model or generated bpe.vocab**. Only the four recognition files are installed.
 No model weights, test audio or exporter script is committed or bundled in APK.
 The previously researched offline HF mirror is **not the same binary**: its
 encoder/decoder SHA-256 differ from this verified archive. It is not a substituted
@@ -98,7 +99,8 @@ download source. No matching fixed per-file streaming source was established.
   bundled test script attributes Copyright 2026 Xiaomi Corp., author Fangjun Kuang.
   Scripts use the author's punctuation-finetuned checkpoint and tokens through
   mutable main URLs, then icefall ONNX exporters. Icefall's current root LICENSE
-  was separately checked as Apache-2.0; the historical exporter revision is not pinned.
+  at `3f848bb6d0acc970c9b294a30ca0a04a7c9c78d1` was separately checked as Apache-2.0;
+  the historical exporter revision is not pinned.
 - Actual package README links the author; it supplies no License/Notice text.
   Missing package notices and precise historical export/checkpoint mapping remain
   distribution-audit gaps. Author declaration is evidence for private testing,
