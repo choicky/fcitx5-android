@@ -59,7 +59,6 @@ import org.fcitx.fcitx5.android.input.voice.SystemStatus
 import org.fcitx.fcitx5.android.input.voice.UnavailableReason
 import org.fcitx.fcitx5.android.input.voice.VoiceSelection
 import org.fcitx.fcitx5.android.input.voice.VoiceSelectionStore
-import org.fcitx.fcitx5.android.input.bar.ToolbarAction
 import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.fcitx.fcitx5.android.input.voice.applyRecommendation
 import org.fcitx.fcitx5.android.input.voice.cloudStatus
@@ -87,12 +86,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
     private val prefs = AppPrefs.getInstance()
     private val store = VoiceSelectionStore(prefs) { VoiceSelectionStore.lastErrorFile(requireContext()) }
     private val credentials by lazy { KeystoreSecretCipher.store(requireContext()) }
-    private val toolbarActions = AppPrefs.getInstance().internal.toolbarActions
     private val spaceLongPressBehavior = AppPrefs.getInstance().keyboard.spaceKeyLongPressBehavior
     private var spaceLongPressPreference: ListPreference? = null
-    private val toolbarActionsListener = ManagedPreference.OnChangeListener<String> { _, _ ->
-        view?.post { if (isResumed) render() }
-    }
     private val spaceLongPressListener =
         ManagedPreference.OnChangeListener<SpaceLongPressBehavior> { _, _ ->
             view?.post {
@@ -131,13 +126,11 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     override fun onStart() {
         super.onStart()
-        toolbarActions.registerOnChangeListener(toolbarActionsListener)
         spaceLongPressBehavior.registerOnChangeListener(spaceLongPressListener)
         ModelJobs.addListener(jobListener)
     }
 
     override fun onStop() {
-        toolbarActions.unregisterOnChangeListener(toolbarActionsListener)
         spaceLongPressBehavior.unregisterOnChangeListener(spaceLongPressListener)
         ModelJobs.removeListener(jobListener)
         super.onStop()
@@ -182,7 +175,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
 
     private fun modelLabel(model: LocalAsrModel) = getString(
         when (model) {
-            LocalAsrModel.ZipformerBilingual -> R.string.voice_model_c
+            LocalAsrModel.XAsrOffline -> R.string.voice_model_x_asr_offline
+            LocalAsrModel.XAsrStreaming960 -> R.string.voice_model_x_asr_streaming
             LocalAsrModel.FunAsrNano -> R.string.voice_model_b
         }
     )
@@ -227,15 +221,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         val resolution =
             resolveCurrentService(selection, localStatus(), authorization, ::systemAvailable, external)
         screen.addCategory(R.string.voice_v2_section_triggers) {
-            addSwitch(
-                getString(R.string.show_voice_input_button),
-                getString(R.string.show_voice_input_button_summary),
-                ToolbarAction.Voice in ToolbarAction.decode(toolbarActions.getValue())
-            ) { visible ->
-                val actions = ToolbarAction.decode(toolbarActions.getValue())
-                toolbarActions.setValue(ToolbarAction.encode(ToolbarAction.withVoice(actions, visible)))
-                toolbarActions.fireChange()
-            }
             addPreference(ListPreference(ctx).apply {
                 key = spaceLongPressBehavior.key
                 isPersistent = false
@@ -567,6 +552,10 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             ModelStatus.Running -> (ModelJobs.state(entry.model) as? ModelTasks.State.Running)?.let {
                 getString(R.string.voice_model_progress, (it.done * 100 / it.total.coerceAtLeast(1)).toInt())
             } ?: getString(R.string.voice_model_progress, 0)
+            ModelStatus.Pausing -> getString(R.string.voice_model_cancelling)
+            ModelStatus.Paused -> getString(
+                R.string.voice_model_status_partial, stagedBytes(entry.model) / 1_000_000, size
+            )
             ModelStatus.Stopping -> getString(R.string.voice_model_cancelling)
             ModelStatus.Failed -> getString(
                 R.string.voice_model_status_failed,
@@ -729,6 +718,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             ModelAction.DownloadFrom -> getString(R.string.voice_model_download_other)
             ModelAction.Import -> getString(R.string.voice_model_import)
             ModelAction.Discard -> getString(R.string.voice_model_discard)
+            ModelAction.Pause -> getString(R.string.voice_model_pause)
+            ModelAction.Resume -> getString(R.string.voice_model_resume, megabytes(entry.totalBytes - stagedBytes(model)))
             ModelAction.Cancel -> getString(R.string.voice_model_cancel)
             ModelAction.Use -> getString(
                 if (store.load().isEnabled(AsrServiceId.Local(model))) R.string.voice_model_use
@@ -753,6 +744,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 if (ModelJobs.isRunning(model)) startedOrBusy(false) else LocalModels.remove(ctx, model)
                 render()
             }
+            ModelAction.Pause -> ModelJobs.pause(model)
+            ModelAction.Resume -> ModelJobs.resume(model)
             ModelAction.Cancel -> ModelJobs.cancel(model)
             ModelAction.Use -> useModel(model)
             ModelAction.Remove -> confirmRemove(entry)

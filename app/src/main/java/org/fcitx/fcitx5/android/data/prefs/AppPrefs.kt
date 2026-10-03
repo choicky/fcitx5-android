@@ -436,6 +436,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
     val clipboard = Clipboard().register()
     val symbols = Symbols().register()
     val advanced = Advanced().register()
+    val voice = Voice().register()
 
     @Keep
     private val onSharedPreferenceChangeListener =
