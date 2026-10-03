@@ -82,11 +82,12 @@ governed by the current Change Contract and CI evidence, not by this report.
 
 ### Three-model release evidence (2026-10-02)
 
-Debug CI run `36983652048` passed the debug APK, release Kotlin compilation,
-and instrumented-test compilation steps (instrumented tests were not run
-because CI has no device). Formal Release `v0.1.3-moqi.5` was then built and
-published by run `36984661240`; its arm64-v8a APK SHA-256 is
-`5e51f7895efd876a6f5d565fd7c95346449866af65628772ebd31f0423fb6d38`.
+Debug CI run `37044897307` passed the debug APK and its existing compile/test
+checks. Formal Release `v0.1.3.7` was then built and published by run
+`37045975799`; its arm64-v8a APK SHA-256 is
+`3b951a6dd1bb427fb558b5eef6043e6c94a2e3a68248b787370ec3d880571566`.
+Both builds used Android source `b31ae5f71d34d863a1aa5fcad6490a0f03135eb9`
+and chinese-addons `9b3448e6b3889e4281ea39e334c7e5714f8a8b12`.
 The release was intentionally not gated on new real-device acceptance.
 
 ### Local ASR packaging audit (current product baseline)

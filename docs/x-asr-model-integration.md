@@ -204,14 +204,14 @@ Those are separate future decisions; strict full-session 60s is not claimed.
 
 ## Release evidence (2026-10-02)
 
-The three-model convergence is included in signed release `v0.1.3-moqi.5`,
-source commit `82b7fcf44ec916b54de1d9295d14f93ac9372a7c`. The GitHub Release
+The three-model convergence is included in signed release `v0.1.3.7`,
+source commit `b31ae5f71d34d863a1aa5fcad6490a0f03135eb9`. The GitHub Release
 workflow passed its release build and package/signature checks ([run
-36984661240](https://github.com/choicky/fcitx5-android/actions/runs/36984661240)).
+37045975799](https://github.com/choicky/fcitx5-android/actions/runs/37045975799)).
 The attached arm64-v8a APK is
-`org.fcitx.fcitx5.android-v0.1.3-moqi.5-0-g82b7fcf4-arm64-v8a-release.apk`,
-package `org.fcitx.fcitx5.android.moqi`, versionCode `112`, and SHA-256
-`5e51f7895efd876a6f5d565fd7c95346449866af65628772ebd31f0423fb6d38`.
+`org.fcitx.fcitx5.android.moqi-v0.1.3.7-0-gb31ae5f7-arm64-v8a-release.apk`,
+package `org.fcitx.fcitx5.android.moqi`, and SHA-256
+`3b951a6dd1bb427fb558b5eef6043e6c94a2e3a68248b787370ec3d880571566`.
 The APK contains the shared sherpa-onnx runtime and arm64 JNI libraries;
 models remain user-downloaded through Voice Settings. This release did not
 require new real-device acceptance. The owner-reported basic X-ASR use and
