@@ -110,11 +110,6 @@ class MainFragment : PaddingPreferenceFragment() {
                     SettingsRoute.Symbol
                 )
                 addDestinationPreference(
-                    R.string.voice_input,
-                    R.drawable.ic_baseline_keyboard_voice_24,
-                    SettingsRoute.Voice
-                )
-                addDestinationPreference(
                     R.string.pinyin_dict,
                     R.drawable.ic_baseline_library_books_24,
                     SettingsRoute.PinyinDict()

@@ -38,8 +38,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.reloadPinyinDict
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryConfig
@@ -62,6 +60,8 @@ import org.fcitx.fcitx5.android.utils.lazyRoute
 import org.fcitx.fcitx5.android.utils.notificationManager
 import org.fcitx.fcitx5.android.utils.queryFileName
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
@@ -78,7 +78,6 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
 
     private val busy: AtomicBoolean = AtomicBoolean(false)
 
-    private val httpClient = OkHttpClient()
 
     private var dictionaryDownloadJob: Job? = null
 
@@ -532,26 +531,26 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                 .build().let { nm.notify(id, it) }
             try {
                 val installed = withContext(Dispatchers.IO) {
-                    val request = Request.Builder().url(entry.url).build()
                     val coroutineContext = currentCoroutineContext()
                     PinyinDictManager.installCatalogEntry(
                         entry,
                         source = { offset ->
-                            val rangedRequest = request.newBuilder().apply {
-                                if (offset > 0) header("Range", "bytes=$offset-")
-                            }.build()
-                            val call = httpClient.newCall(rangedRequest)
-                            coroutineContext.job.invokeOnCompletion { call.cancel() }
-                            val response = call.execute()
-                            if (!response.isSuccessful) {
-                                response.close()
-                                throw IOException("HTTP ${response.code}")
+                            val connection = (URL(entry.url).openConnection() as HttpURLConnection).apply {
+                                requestMethod = "GET"
+                                if (offset > 0) setRequestProperty("Range", "bytes=$offset-")
+                                connectTimeout = 30_000
+                                readTimeout = 30_000
                             }
-                            val actualOffset = if (response.code == 206) offset else 0
-                            val body = response.body!!
-                            val contentLength = body.contentLength().takeIf { it >= 0 }
+                            coroutineContext.job.invokeOnCompletion { connection.disconnect() }
+                            val code = connection.responseCode
+                            if (code !in 200..299) {
+                                connection.disconnect()
+                                throw IOException("HTTP $code")
+                            }
+                            val actualOffset = if (code == HttpURLConnection.HTTP_PARTIAL) offset else 0
+                            val contentLength = connection.contentLengthLong.takeIf { it >= 0 }
                             DictionaryStream(
-                                body.byteStream(),
+                                connection.inputStream,
                                 actualOffset,
                                 contentLength?.let { it + actualOffset }
                             )
