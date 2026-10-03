@@ -34,6 +34,15 @@
     <string name="setup_keyboard">Finish setting up the keyboard</string>
     <string name="setup_channel">Setup Wizard</string>
     <string name="pinyin_dict">Pinyin Dictionaries</string>
+    <string name="dictionary_section_builtin">Built-in</string>
+    <string name="dictionary_section_imported">Imported</string>
+    <string name="dictionary_required">Required</string>
+    <string name="dictionary_use_named">Use %1$s</string>
+    <string name="dictionary_detail">Dictionary details</string>
+    <string name="dictionary_file">File: %1$s</string>
+    <string name="dictionary_type">Type: %1$s</string>
+    <string name="dictionary_size">Size: %1$d bytes</string>
+    <string name="dictionary_delete_message">Delete dictionary %1$s?</string>
     <string name="reloading">Reloading</string>
     <string name="importing">Importing</string>
     <string name="import_error">Import Error</string>

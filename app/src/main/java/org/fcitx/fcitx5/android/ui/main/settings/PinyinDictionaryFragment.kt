@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.ui.main.settings
 
+import android.app.AlertDialog
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.net.Uri
@@ -12,6 +13,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.Switch
+import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.NotificationCompat
@@ -25,10 +33,8 @@ import kotlinx.coroutines.withContext
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.reloadPinyinDict
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictManager
-import org.fcitx.fcitx5.android.data.pinyin.dict.BuiltinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.LibIMEDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
-import org.fcitx.fcitx5.android.ui.common.BaseDynamicListUi
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
 import org.fcitx.fcitx5.android.ui.main.EditDeleteMenuProvider
 import org.fcitx.fcitx5.android.ui.main.MainViewModel
@@ -41,215 +47,143 @@ import org.fcitx.fcitx5.android.utils.queryFileName
 import java.util.concurrent.atomic.AtomicBoolean
 
 class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDictionary> {
-
     private val args by lazyRoute<SettingsRoute.PinyinDict>()
-
     private val viewModel: MainViewModel by activityViewModels()
-
     private lateinit var launcher: ActivityResultLauncher<String>
-
     private val dustman = NaiveDustman<Boolean>()
-
-    private val busy: AtomicBoolean = AtomicBoolean(false)
-
+    private val busy = AtomicBoolean(false)
     private var uiInitialized = false
+    private var managerRoot: FrameLayout? = null
+    private var detailName: String? = null
+    private var detailBack: OnBackPressedCallback? = null
 
-    private val ui: BaseDynamicListUi<PinyinDictionary> by lazy {
-        object : BaseDynamicListUi<PinyinDictionary>(
-            requireContext(),
-            Mode.Custom(),
-            PinyinDictManager.listDictionaries(),
-            initCheckBox = { entry ->
-                if (entry is LibIMEDictionary) {
-                    isChecked = entry.isEnabled
-                    setOnCheckedChangeListener { _, isChecked ->
-                        if (isChecked) entry.enable() else entry.disable()
-                        ui.updateItem(ui.indexItem(entry), entry)
-                    }
-                } else {
-                    isChecked = true
-                    isEnabled = false
-                }
-            }
-        ) {
-            init {
-                enableUndo = false
-                addTouchCallback()
-                // since FAB is always shown in this fragment,
-                // set shouldShowFab to true to hide it when entering multi select mode
-                shouldShowFab = true
-                fab.setOnClickListener {
-                    launcher.launch("*/*")
-                }
-                setViewModel(viewModel)
-                removable = { e -> e !is BuiltinDictionary }
-            }
+    private val ui: DictionaryManagerUi by lazy {
+        DictionaryManagerUi(
+            requireContext(), PinyinDictManager.listDictionaries(), viewModel,
+            toggle = ::setDictionaryEnabled,
+            detail = ::showDictionaryDetail,
+            add = { launcher.launch("*/*") }
+        ).also { uiInitialized = true }
+    }
 
-            override fun updateFAB() {
-                // do nothing
-            }
-
-            override fun showEntry(x: PinyinDictionary): String = x.name
-        }.also {
-            uiInitialized = true
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, state: Bundle?): View {
+        createNotificationChannel(); registerLauncher(); ui.addOnItemChangedListener(this); resetDustman()
+        return FrameLayout(requireContext()).also { root ->
+            managerRoot = root; root.addView(ui.root, FrameLayout.LayoutParams(-1, -1))
         }
     }
-
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        createNotificationChannel()
-        registerLauncher()
-        ui.addOnItemChangedListener(this)
-        resetDustman()
-        return ui.root
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(view: View, state: Bundle?) {
         args.uri?.let { importFromUri(Uri.parse(it)) }
-        super.onViewCreated(view, savedInstanceState)
-        viewModel.toolbarButton.value =
-            if (ui.entries.isNotEmpty()) ButtonMode.EDIT else ButtonMode.NONE
-        requireActivity().addMenuProvider(
-            EditDeleteMenuProvider(
-                buttonMode = viewModel.toolbarButton,
-                editButtonAction = { ui.enterMultiSelect(requireActivity().onBackPressedDispatcher) },
-                deleteButtonAction = { ui.deleteSelected(); ui.exitMultiSelect() },
-                menuHost = requireActivity(),
-                lifecycleOwner = viewLifecycleOwner,
-            ),
-            viewLifecycleOwner,
-            Lifecycle.State.STARTED
-        )
+        super.onViewCreated(view, state)
+        viewModel.toolbarButton.value = if (ui.entries.isNotEmpty()) ButtonMode.EDIT else ButtonMode.NONE
+        requireActivity().addMenuProvider(EditDeleteMenuProvider(
+            buttonMode = viewModel.toolbarButton,
+            editButtonAction = { ui.enterMultiSelect(requireActivity().onBackPressedDispatcher) },
+            deleteButtonAction = { ui.deleteSelected(); ui.exitMultiSelect() },
+            menuHost = requireActivity(), lifecycleOwner = viewLifecycleOwner
+        ), viewLifecycleOwner, Lifecycle.State.STARTED)
+        state?.getString(DETAIL_KEY)?.let { name -> ui.entries.firstOrNull { it.name == name }?.let(::showDictionaryDetail) }
     }
-
+    private fun setDictionaryEnabled(dictionary: PinyinDictionary, enabled: Boolean) {
+        val item = dictionary as? LibIMEDictionary ?: return
+        if (enabled) item.enable() else item.disable()
+        ui.updateItem(ui.indexItem(item), item); dustman.addOrUpdate(item.name, item.isEnabled)
+    }
+    private fun showDictionaryDetail(dictionary: PinyinDictionary) {
+        val root = managerRoot ?: return
+        detailName = dictionary.name; ui.root.visibility = View.GONE; detailBack?.remove()
+        val content = LinearLayout(requireContext()).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 32) }
+        content.addView(TextView(requireContext()).apply { text = getString(R.string.dictionary_detail); textSize = 20f })
+        content.addView(TextView(requireContext()).apply { text = dictionary.name; textSize = 18f })
+        content.addView(TextView(requireContext()).apply { text = getString(R.string.dictionary_file, dictionary.file.name) })
+        content.addView(TextView(requireContext()).apply { text = getString(R.string.dictionary_type, dictionary.type.name) })
+        content.addView(TextView(requireContext()).apply { text = getString(R.string.dictionary_size, dictionary.file.length()) })
+        if (dictionary is LibIMEDictionary) {
+            content.addView(Switch(requireContext()).apply {
+                text = getString(R.string.dictionary_use_named, dictionary.name); isChecked = dictionary.isEnabled
+                setOnCheckedChangeListener { _, checked -> setDictionaryEnabled(dictionary, checked) }
+            })
+            content.addView(Button(requireContext()).apply {
+                setText(R.string.delete)
+                setOnClickListener {
+                    AlertDialog.Builder(requireContext()).setMessage(
+                        getString(R.string.dictionary_delete_message, dictionary.name)
+                    ).setNegativeButton(android.R.string.cancel, null).setPositiveButton(R.string.delete) { _, _ ->
+                        ui.removeItem(ui.indexItem(dictionary)); closeDictionaryDetail()
+                    }.show()
+                }
+            })
+        }
+        root.addView(ScrollView(requireContext()).apply { addView(content) }, FrameLayout.LayoutParams(-1, -1))
+        detailBack = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = closeDictionaryDetail()
+        }.also { requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, it) }
+    }
+    private fun closeDictionaryDetail() {
+        val root = managerRoot ?: return
+        if (root.childCount > 1) root.removeViews(1, root.childCount - 1)
+        ui.root.visibility = View.VISIBLE; detailBack?.remove(); detailBack = null; detailName = null
+    }
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getText(R.string.pinyin_dict),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = CHANNEL_ID }
-            requireContext().notificationManager.createNotificationChannel(channel)
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) requireContext().notificationManager
+            .createNotificationChannel(NotificationChannel(CHANNEL_ID, getText(R.string.pinyin_dict), NotificationManager.IMPORTANCE_HIGH)
+                .apply { description = CHANNEL_ID })
     }
-
     private fun registerLauncher() {
-        launcher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null)
-                importFromUri(uri)
-        }
+        launcher = registerForActivityResult(ActivityResultContracts.GetContent()) { it?.let(::importFromUri) }
     }
-
     private fun importFromUri(uri: Uri) {
-        val ctx = requireContext()
-        val cr = ctx.contentResolver
-        val nm = ctx.notificationManager
+        val ctx = requireContext(); val cr = ctx.contentResolver; val nm = ctx.notificationManager
         lifecycleScope.launch {
-            val id = IMPORT_ID++
-            val fileName = cr.queryFileName(uri) ?: return@launch
-            if (PinyinDictionary.Type.fromFileName(fileName) == null) {
-                ctx.importErrorDialog(R.string.invalid_dict)
-                return@launch
-            }
+            val id = IMPORT_ID++; val fileName = cr.queryFileName(uri) ?: return@launch
+            if (PinyinDictionary.Type.fromFileName(fileName) == null) { ctx.importErrorDialog(R.string.invalid_dict); return@launch }
             val entryName = fileName.substringBeforeLast('.')
-            if (ui.entries.any { it.name == entryName }) {
-                ctx.importErrorDialog(R.string.dict_already_exists)
-                return@launch
-            }
-            NotificationCompat.Builder(ctx, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_baseline_library_books_24)
-                .setContentTitle(getString(R.string.pinyin_dict))
-                .setContentText("${getString(R.string.importing)} $entryName")
-                .setOngoing(true)
-                .setProgress(100, 0, true)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build().let { nm.notify(id, it) }
+            if (ui.entries.any { it.name == entryName }) { ctx.importErrorDialog(R.string.dict_already_exists); return@launch }
+            NotificationCompat.Builder(ctx, CHANNEL_ID).setSmallIcon(R.drawable.ic_baseline_library_books_24)
+                .setContentTitle(getString(R.string.pinyin_dict)).setContentText("${getString(R.string.importing)} $entryName")
+                .setOngoing(true).setProgress(100, 0, true).setPriority(NotificationCompat.PRIORITY_HIGH).build()
+                .let { nm.notify(id, it) }
             try {
                 val imported = withContext(Dispatchers.IO) {
-                    val inputStream = cr.openInputStream(uri)!!
-                    PinyinDictManager.importFromInputStream(inputStream, fileName).getOrThrow()
+                    PinyinDictManager.importFromInputStream(cr.openInputStream(uri)!!, fileName).getOrThrow()
                 }
                 ui.addItem(item = imported)
-            } catch (e: Exception) {
-                ctx.importErrorDialog(e)
-            }
+            } catch (e: Exception) { ctx.importErrorDialog(e) }
             nm.cancel(id)
         }
     }
-
     private fun reloadDict() {
-        if (!dustman.dirty) return
-        resetDustman()
-        // Save the reference to NotificationManager, because reloadDict() could be called
-        // right before the Fragment detached from Activity, and at the time reload completes,
-        // Fragment is no longer attached to a Context, thus unable to cancel the notification.
-        val nm = requireContext().notificationManager
+        if (!dustman.dirty) return; resetDustman(); val nm = requireContext().notificationManager
         lifecycleScope.launch {
             if (busy.compareAndSet(false, true)) {
                 val id = RELOAD_ID++
-                NotificationCompat.Builder(requireContext(), CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_baseline_library_books_24)
-                    .setContentTitle(getString(R.string.pinyin_dict))
-                    .setContentText(getString(R.string.reloading))
-                    .setOngoing(true)
-                    .setProgress(100, 0, true)
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .build().let { nm.notify(id, it) }
-                viewModel.fcitx.runOnReady {
-                    reloadPinyinDict()
-                }
-                nm.cancel(id)
-                busy.set(false)
+                NotificationCompat.Builder(requireContext(), CHANNEL_ID).setSmallIcon(R.drawable.ic_baseline_library_books_24)
+                    .setContentTitle(getString(R.string.pinyin_dict)).setContentText(getString(R.string.reloading))
+                    .setOngoing(true).setProgress(100, 0, true).setPriority(NotificationCompat.PRIORITY_HIGH).build()
+                    .let { nm.notify(id, it) }
+                viewModel.fcitx.runOnReady { reloadPinyinDict() }; nm.cancel(id); busy.set(false)
             }
         }
     }
-
     private fun resetDustman() {
-        dustman.reset(ui.entries.mapNotNull { it as? LibIMEDictionary }
-            .associate { it.name to it.isEnabled })
+        dustman.reset(ui.entries.mapNotNull { it as? LibIMEDictionary }.associate { it.name to it.isEnabled })
     }
-
     override fun onItemAdded(idx: Int, item: PinyinDictionary) {
-        item as LibIMEDictionary
-        dustman.addOrUpdate(item.name, item.isEnabled)
+        (item as? LibIMEDictionary)?.let { dustman.addOrUpdate(it.name, it.isEnabled) }
     }
-
     override fun onItemRemoved(idx: Int, item: PinyinDictionary) {
-        item as LibIMEDictionary
-        item.file.delete()
-        dustman.remove(item.name)
+        (item as? LibIMEDictionary)?.let { it.file.delete(); dustman.remove(it.name) }
     }
-
-    override fun onItemRemovedBatch(indexed: List<Pair<Int, PinyinDictionary>>) {
-        batchRemove(indexed)
-    }
-
+    override fun onItemRemovedBatch(indexed: List<Pair<Int, PinyinDictionary>>) { batchRemove(indexed) }
     override fun onItemUpdated(idx: Int, old: PinyinDictionary, new: PinyinDictionary) {
-        new as LibIMEDictionary
-        dustman.addOrUpdate(new.name, new.isEnabled)
+        (new as? LibIMEDictionary)?.let { dustman.addOrUpdate(it.name, it.isEnabled) }
     }
-
-    override fun onStop() {
-        reloadDict()
-        if (uiInitialized) {
-            ui.exitMultiSelect()
-        }
-        super.onStop()
-    }
-
-    override fun onDestroy() {
-        if (uiInitialized) {
-            ui.removeItemChangedListener()
-        }
-        super.onDestroy()
-    }
-
+    override fun onSaveInstanceState(outState: Bundle) { outState.putString(DETAIL_KEY, detailName); super.onSaveInstanceState(outState) }
+    override fun onStop() { reloadDict(); if (uiInitialized) ui.exitMultiSelect(); super.onStop() }
+    override fun onDestroyView() { closeDictionaryDetail(); ui.removeItemChangedListener(); managerRoot = null; super.onDestroyView() }
     companion object {
-        private var RELOAD_ID = 0
-        private var IMPORT_ID = 0
+        private var RELOAD_ID = 0; private var IMPORT_ID = 0
+        private const val DETAIL_KEY = "dictionary_detail"
         const val CHANNEL_ID = "pinyin_dict"
     }
 }
