@@ -127,7 +127,6 @@ class ToolbarEditorUi(
         when (action) {
             ToolbarAction.Emoji -> R.string.emoji_and_symbols
             ToolbarAction.QuickPhrase -> R.string.quickphrase
-            ToolbarAction.Voice -> R.string.voice_input
             ToolbarAction.Clipboard -> R.string.clipboard
             ToolbarAction.TextEditing -> R.string.text_editing
             ToolbarAction.Undo -> R.string.undo

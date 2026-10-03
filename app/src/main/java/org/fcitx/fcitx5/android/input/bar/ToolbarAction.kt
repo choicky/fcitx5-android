@@ -8,7 +8,6 @@ import org.fcitx.fcitx5.android.R
 enum class ToolbarAction(val id: String, @DrawableRes val icon: Int) {
     Emoji("emoji", R.drawable.ic_baseline_tag_faces_24),
     QuickPhrase("quick_phrase", R.drawable.ic_baseline_emoji_objects_24),
-    Voice("voice", R.drawable.ic_baseline_keyboard_voice_24),
     Clipboard("clipboard", R.drawable.ic_clipboard),
     TextEditing("text_editing", R.drawable.ic_cursor_move),
     Undo("undo", R.drawable.ic_baseline_undo_24),
@@ -55,23 +54,10 @@ enum class ToolbarAction(val id: String, @DrawableRes val icon: Int) {
     }
 
     companion object {
-        val Default = listOf(Emoji, QuickPhrase, Voice, Clipboard, TextEditing)
+        val Default = listOf(Emoji, QuickPhrase, Clipboard, TextEditing)
         val All = entries.toList()
 
-        fun initialDefault(hasToolbarActions: Boolean, legacyShowVoice: Boolean?): List<ToolbarAction> =
-            if (!hasToolbarActions && legacyShowVoice == false) Default - Voice else Default
-
-        /** Settings-specific Voice re-enable: restore its default relative position. */
-        fun withVoice(actions: List<ToolbarAction>, visible: Boolean): List<ToolbarAction> {
-            val normalized = normalize(actions)
-            if (!visible) return normalized - Voice
-            if (Voice in normalized) return normalized
-            val voiceIndex = Default.indexOf(Voice)
-            val insertAt = normalized.indexOfFirst { action ->
-                Default.indexOf(action).takeIf { it >= 0 }?.let { it > voiceIndex } == true
-            }.takeIf { it >= 0 } ?: normalized.size
-            return normalized.toMutableList().apply { add(insertAt, Voice) }
-        }
+        fun initialDefault(hasToolbarActions: Boolean): List<ToolbarAction> = Default
 
         /** Toolbar Editor `+` semantics: add an action at the right end. */
         fun append(actions: List<ToolbarAction>, action: ToolbarAction): List<ToolbarAction> =

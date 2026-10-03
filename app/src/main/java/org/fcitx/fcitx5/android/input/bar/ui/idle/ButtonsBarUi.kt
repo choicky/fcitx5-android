@@ -40,10 +40,6 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
         contentDescription = ctx.getString(R.string.redo)
     }
 
-    val voiceInputButton = toolButton(R.drawable.ic_baseline_keyboard_voice_24).apply {
-        contentDescription = ctx.getString(R.string.start_voice_input)
-    }
-
     val cursorMoveButton = toolButton(R.drawable.ic_cursor_move).apply {
         contentDescription = ctx.getString(R.string.text_editing)
     }
@@ -60,7 +56,7 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
     }
     private val buttons = mapOf(
         ToolbarAction.Emoji to emojiButton, ToolbarAction.QuickPhrase to quickPhraseButton,
-        ToolbarAction.Voice to voiceInputButton, ToolbarAction.Clipboard to clipboardButton,
+        ToolbarAction.Clipboard to clipboardButton,
         ToolbarAction.TextEditing to cursorMoveButton, ToolbarAction.Undo to undoButton,
         ToolbarAction.Redo to redoButton,
     )

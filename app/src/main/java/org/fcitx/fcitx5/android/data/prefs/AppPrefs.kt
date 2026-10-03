@@ -37,63 +37,10 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val pid = int("pid", 0)
         val editorInfoInspector = bool("editor_info_inspector", false)
         val needNotifications = bool("need_notifications", true)
-        val voiceCaptureProbe = bool("voice_capture_probe", false)
-        val voiceDoubaoAsr = bool("voice_doubao_asr", false)
-        // Phase 4B.3b-1: "Off", or a LocalAsrModel name; threads "1".."4"
-        val voiceLocalAsr = string("voice_local_asr", "Off")
-        val voiceLocalAsrThreads = string("voice_local_asr_threads", "2")
-        // set once the user answered the System ASR disclosure, so a decline is remembered
-        val voiceSystemAsrAnswered = bool("voice_system_asr_answered", false)
-        // D034 selection: the current concrete service key ("" = none), per-service enablement,
-        // and whether the one-time recommendation ran (see VoiceSelectionStore)
-        val voiceCurrentService = string("voice_current_service", "")
-        val voiceSystemEnabled = bool("voice_system_enabled", false)
-        // the single "enable Local" switch and configured model, before one service per model;
-        // only read by the migration
-        val voiceLocalEnabled = bool("voice_local_enabled", false)
-        // enabled Managed Cloud / Self-hosted services, comma-separated keys
-        val voiceEnabledExternal = string("voice_enabled_external", "")
-        // self-hosted instances (JSON, no secrets; tokens are in the credential store)
-        val voiceSelfHostedInstances = string("voice_selfhosted_instances", "")
-        val voiceRecommendationDone = bool("voice_recommendation_done", false)
-        val voiceLocalModel = string("voice_local_model", "")
-        val voiceSelectionMigrated = bool("voice_selection_migrated", false)
-        // "local:<model>" keys of the enabled on-device models
-        val voiceEnabledLocalModels = string("voice_enabled_local_models", "")
-        val voiceLocalModelsMigrated = bool("voice_local_models_migrated", false)
-        // the earlier Auto/Local/System setting (fb3b0c26), read once for migration
-        val voiceLegacyAsrProvider = string("voice_asr_provider", "")
-        // the service the most recent session actually used
-        val voiceLastUsedService = string("voice_last_used_service", "")
-        // no longer written: the last failure moved to the no-backup directory (LastErrorRecord);
-        // kept so an earlier value can be cleared
-        val voiceLastError = string("voice_last_error", "")
         val toolbarActions = string(
             "toolbar_actions",
-            ToolbarAction.encode(
-                ToolbarAction.initialDefault(
-                    sharedPreferences.contains("toolbar_actions"),
-                    if (sharedPreferences.contains("show_voice_input_button")) {
-                        runCatching { sharedPreferences.getBoolean("show_voice_input_button", true) }
-                            .getOrDefault(true)
-                    } else null
-                )
-            )
+            ToolbarAction.encode(ToolbarAction.initialDefault(sharedPreferences.contains("toolbar_actions")))
         )
-    }
-
-    // storage for the Voice screen; its UI is built by VoiceSettingsFragment
-    inner class Voice : ManagedPreferenceCategory(R.string.voice_input, sharedPreferences) {
-        val systemAsrAllowed = switch(
-            R.string.allow_system_asr,
-            "voice_system_asr_allowed",
-            false,
-            R.string.allow_system_asr_summary
-        )
-
-        // MoQi fork: on by default in debug (voice test) builds only
-        // Kept as a raw preference key for toolbar migration; toolbar visibility is now owned
-        // by Internal.toolbarActions and this legacy switch is no longer exposed as a source of truth.
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {
@@ -194,6 +141,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         }
         val focusChangeResetKeyboard =
             switch(R.string.reset_keyboard_on_focus_change, "reset_keyboard_on_focus_change", true)
+        val expandToolbarByDefault =
+            switch(R.string.expand_toolbar, "expand_toolbar_by_default", false)
         val inlineSuggestions = switch(R.string.inline_suggestions, "inline_suggestions", true)
         val toolbarNumRowOnPassword =
             switch(R.string.toolbar_num_row_on_password, "toolbar_num_row_on_password", true)
@@ -204,9 +153,11 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             false
         )
 
+        val showVoiceInputButton =
+            switch(R.string.show_voice_input_button, "show_voice_input_button", false)
         val preferredVoiceInput = voiceInputPreference(
             R.string.preferred_voice_input, "preferred_voice_input", ""
-        )
+        ) { showVoiceInputButton.getValue() }
 
         val expandKeypressArea =
             switch(R.string.expand_keypress_area, "expand_keypress_area", false)
@@ -227,7 +178,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val spaceKeyLongPressBehavior = enumList(
             R.string.space_long_press_behavior,
             "space_long_press_behavior",
-            SpaceLongPressBehavior.Default
+            SpaceLongPressBehavior.None
         )
         val spaceSwipeMoveCursor =
             switch(R.string.space_swipe_move_cursor, "space_swipe_move_cursor", true)
@@ -445,7 +396,6 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
     val clipboard = Clipboard().register()
     val symbols = Symbols().register()
     val advanced = Advanced().register()
-    val voice = Voice().register()
 
     @Keep
     private val onSharedPreferenceChangeListener =
@@ -473,8 +423,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             listOf(
                 keyboard,
                 candidates,
-                clipboard,
-                voice
+                clipboard
             ).forEach { category ->
                 category.managedPreferences.forEach {
                     it.value.putValueTo(this@edit)
@@ -483,19 +432,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         }
     }
 
-    /**
-     * Removes the pre-redaction voice failure detail (`voice_last_error`, written before
-     * LastErrorRecord existed) with a synchronous commit, so that an export right after an
-     * upgrade cannot archive it. No other preference is touched. False if the removal could
-     * not be written.
-     */
-    fun purgeLegacyVoiceLastError() = removeSynchronously(sharedPreferences, internal.voiceLastError.key)
-
     companion object {
         private var instance: AppPrefs? = null
-
-        internal fun removeSynchronously(prefs: SharedPreferences, key: String) =
-            !prefs.contains(key) || prefs.edit().remove(key).commit()
 
         /**
          * MUST call before use

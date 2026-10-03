@@ -28,7 +28,6 @@ import org.fcitx.fcitx5.android.input.bar.ui.idle.InlineSuggestionsUi
 import org.fcitx.fcitx5.android.input.bar.ui.idle.NumberRow
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
-import org.fcitx.fcitx5.android.input.voice.VoiceInputSession
 import splitties.dimensions.dp
 import splitties.views.dsl.constraintlayout.after
 import splitties.views.dsl.constraintlayout.before
@@ -60,8 +59,6 @@ class IdleUi(
     var currentState = State.Empty
         private set
 
-    private var voiceInputButton = false
-    private var voiceInputState = VoiceInputSession.State.Idle
     private var inPrivate = false
     private var toolbarEditView: View? = null
     private var toolbarEditing = false
@@ -157,16 +154,9 @@ class IdleUi(
         )
     }
 
-    fun setVoiceInputButton(isVoiceInput: Boolean, callback: View.OnClickListener) {
-        voiceInputButton = isVoiceInput
-        if (isVoiceInput) updateVoiceInputButton()
-        buttonsUi.voiceInputButton.setOnClickListener(callback)
-        renderToolbar(ToolbarAction.decode(toolbarActions.getValue()))
-    }
-
     private fun renderToolbar(actions: List<ToolbarAction>) {
         if (toolbarEditing) return
-        buttonsUi.render(actions.filter { it != ToolbarAction.Voice || voiceInputButton })
+        buttonsUi.render(actions)
     }
 
     fun enterToolbarEdit(editor: ToolbarEditorUi) {
@@ -207,29 +197,6 @@ class IdleUi(
             State.InlineSuggestion -> 3
             State.NumberRow -> 0
         }
-    }
-
-    internal fun setVoiceInputState(state: VoiceInputSession.State) {
-        voiceInputState = state
-        if (voiceInputButton) updateVoiceInputButton()
-    }
-
-    private fun updateVoiceInputButton() {
-        val active = voiceInputState != VoiceInputSession.State.Idle
-        // stopped and waiting for the final result: keep the stop icon, dimmed
-        val processing = voiceInputState == VoiceInputSession.State.Stopping
-        buttonsUi.voiceInputButton.setIcon(
-            if (active) R.drawable.ic_baseline_stop_24
-            else R.drawable.ic_baseline_keyboard_voice_24
-        )
-        buttonsUi.voiceInputButton.alpha = if (processing) 0.4f else 1f
-        buttonsUi.voiceInputButton.contentDescription = ctx.getString(
-            when {
-                processing -> R.string.voice_hint_processing
-                active -> R.string.stop_voice_input
-                else -> R.string.start_voice_input
-            }
-        )
     }
 
     private fun clearAnimation() {
