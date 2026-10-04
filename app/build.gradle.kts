@@ -54,10 +54,10 @@ android {
 
     buildTypes {
         release {
-            // MoQi fork: ship under its own application id so it can be
+            // Fusion Enhanced: ship under its own application id so it can be
             // installed next to the official Fcitx5 and updated in place
             // across our own releases.
-            applicationIdSuffix = ".moqi"
+            applicationIdSuffix = ".fusionenhanced"
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round")
             resValue("string", "app_name", "@string/app_name_release")

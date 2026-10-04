@@ -8,8 +8,8 @@ name: Release APK
 # a keystore file and creates the "release" signing config from it, so no
 # signing code lives in this fork.
 #
-# The release variant carries applicationIdSuffix ".moqi", so these builds can
-# be installed next to the official Fcitx5 and updated in place.
+# The release variant carries applicationIdSuffix ".fusionenhanced", so these
+# builds can be installed next to the official Fcitx5 and updated in place.
 
 on:
   push:
@@ -73,7 +73,7 @@ jobs:
           SIGN_KEY_ALIAS: ${{ secrets.SIGN_KEY_ALIAS }}
         run: BUILD_ABI=arm64-v8a ./gradlew :app:assembleRelease
 
-      - name: Verify the release APK is signed, .moqi and packs the MoQi table
+      - name: Verify the release APK is signed, fusionenhanced and packs the MoQi table
         run: |
           set -euo pipefail
           mkdir -p fcitx5-android-fusion-enhanced-release
@@ -82,7 +82,7 @@ jobs:
           apk=${apks[0]}
           original=${apk##*/}
           input_prefix=org.fcitx.fcitx5.android-
-          target_prefix=org.fcitx.fcitx5.android.moqi-
+          target_prefix=org.fcitx.fcitx5.android.fusion-enhanced-
           case "$original" in "$input_prefix"*) ;; *) echo "unexpected Gradle APK prefix: $original"; exit 1 ;; esac
           version=${original#"$input_prefix"}
           case "$version" in *.apk) ;; *) echo "unexpected Gradle APK version suffix: $version"; exit 1 ;; esac
@@ -118,8 +118,8 @@ jobs:
               print("v1 signature entries:", sigs)
               assert sigs, "APK does not look signed"
               manifest = zf.read("AndroidManifest.xml")
-              assert "org.fcitx.fcitx5.android.moqi".encode("utf-16-le") in manifest, (
-                  "release APK does not carry the .moqi package id"
+              assert "org.fcitx.fcitx5.android.fusionenhanced".encode("utf-16-le") in manifest, (
+                  "release APK does not carry the fusionenhanced package id"
               )
           print("release APK checks passed")
           PY

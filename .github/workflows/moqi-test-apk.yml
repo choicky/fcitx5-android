@@ -1,4 +1,4 @@
-name: fcitx5 android fusion enhanced apk
+name: Test APK
 
 # Builds an installable debug APK of fcitx5-android against
 # choicky/fcitx5-chinese-addons@feature/moqi-filter, so that the Auxiliary
@@ -103,6 +103,9 @@ jobs:
           test "${renamed#"$target_prefix"}" = "$expected_version"
           test -f "fcitx5-android-fusion-enhanced-apk/$renamed"
           sha256sum "fcitx5-android-fusion-enhanced-apk/$renamed"
+          artifact_version=${version%-debug.apk}
+          case "$artifact_version" in *-arm64-v8a) ;; *) echo "unexpected debug ABI/version suffix: $artifact_version"; exit 1 ;; esac
+          echo "TEST_ARTIFACT_NAME=fcitx5-android-fusion-enhanced-${artifact_version}-test" >> "$GITHUB_ENV"
 
       - name: Verify the APK packs the MoQi table and the filter code
         # No staging step above on purpose: the table has to reach the APK
@@ -158,6 +161,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          name: fcitx5-android-fusion-enhanced-apk
+          name: ${{ env.TEST_ARTIFACT_NAME }}
           path: fcitx5-android-fusion-enhanced-apk/*.apk
           if-no-files-found: error
