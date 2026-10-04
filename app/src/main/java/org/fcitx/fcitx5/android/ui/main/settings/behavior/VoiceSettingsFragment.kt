@@ -74,6 +74,7 @@ import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.ui.main.modified.MySwitchPreference
 import org.fcitx.fcitx5.android.utils.addCategory
 import org.fcitx.fcitx5.android.utils.addPreference
+import org.fcitx.fcitx5.android.utils.InputMethodUtil
 import org.fcitx.fcitx5.android.utils.setup
 import org.fcitx.fcitx5.android.utils.toast
 
@@ -149,6 +150,7 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         LocalStatus(LocalAsrEngines.AVAILABLE, LocalAsrModel.userVisibleEntries.filterTo(mutableSetOf(), ::modelInstalled))
 
     private fun label(service: AsrServiceId): String = when (service) {
+        AsrServiceId.External -> getString(R.string.voice_external_android)
         AsrServiceId.System -> getString(R.string.asr_provider_system)
         is AsrServiceId.Local -> getString(R.string.asr_service_local_model, modelLabel(service.model))
         AsrServiceId.Doubao -> getString(R.string.asr_service_doubao)
@@ -175,9 +177,11 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 UnavailableReason.InstanceMissing -> R.string.voice_reason_instance_missing
                 UnavailableReason.InvalidEndpoint -> R.string.voice_reason_invalid_endpoint
                 UnavailableReason.CleartextEndpoint -> R.string.voice_reason_cleartext
+                UnavailableReason.NoVoiceIme -> R.string.voice_external_no_ime
             }
         )
-        is AsrResolution.NeedsRecommendation, AsrResolution.NoService -> null
+        is AsrResolution.NeedsRecommendation, AsrResolution.ExternalAndroid,
+        AsrResolution.NoService -> null
     }
 
     private fun modelLabel(model: LocalAsrModel) = getString(
@@ -271,6 +275,18 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 isPersistent = false
                 setup(title, summary) { chooseCurrent() }
             })
+            // Model A: External's concrete external Voice IME/subtype is subordinate configuration,
+            // exposed only while the top-level provider is External (uses preferredVoiceInput).
+            if (current == AsrServiceId.External) {
+                addPreference(Preference(ctx).apply {
+                    key = EXTERNAL_VOICE_ROW_KEY
+                    isPersistent = false
+                    setup(
+                        getString(R.string.preferred_voice_input),
+                        preferredVoiceInputSummary()
+                    ) { choosePreferredVoiceInput() }
+                })
+            }
             val lastUsed = AsrServiceId.parse(store.lastUsedService)
             if (lastUsed != null && lastUsed != current) {
                 addPreference(getString(R.string.voice_last_used, label(lastUsed)))
@@ -506,9 +522,12 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
      */
     private fun chooseCurrent() {
         val selection = store.load()
+        val candidates = listOf(AsrServiceId.External) +
+            AsrServiceId.entries + store.instances.map { it.service }
         val enabled = selectableServices(
-            AsrServiceId.entries + store.instances.map { it.service },
-            selection, localStatus(), store.systemAuthorization, ::systemAvailable, external()
+            candidates,
+            selection, localStatus(), store.systemAuthorization, ::systemAvailable, external(),
+            externalAndroidAvailable = { InputMethodUtil.listVoiceInputMethods().isNotEmpty() }
         )
         if (enabled.isEmpty()) {
             requireContext().toast(R.string.voice_no_enabled_services)
@@ -521,16 +540,46 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
                 val chosen = enabled[which]
                 store.save(store.load().copy(current = chosen, recommendationDone = true))
                 dialog.dismiss()
-                if (chosen == AsrServiceId.System &&
-                    store.systemAuthorization != SystemAsrAuthorization.Allowed
-                ) {
-                    showSystemDisclosure()
-                } else {
-                    render()
+                when {
+                    chosen == AsrServiceId.System &&
+                        store.systemAuthorization != SystemAsrAuthorization.Allowed -> showSystemDisclosure()
+                    else -> render()
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    /**
+     * Model A subordinate picker for the external Voice IME (D055): the upstream "System default"
+     * choice plus every currently enabled Android voice-input IME. Writing empty means the
+     * upstream default (the first enabled voice subtype) is used at invocation time.
+     */
+    private fun choosePreferredVoiceInput() {
+        val ctx = requireContext()
+        val methods = InputMethodUtil.listVoiceInputMethods()
+        val labels = (listOf(getString(R.string.system_default)) +
+                methods.map { it.first.loadLabel(ctx.packageManager) }).toTypedArray()
+        val ids = listOf("") + methods.map { it.first.id }
+        val current = ids.indexOf(store.preferredVoiceInput)
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.preferred_voice_input)
+            .setSingleChoiceItems(labels, current.coerceAtLeast(0)) { dialog, which ->
+                store.preferredVoiceInput = ids[which]
+                dialog.dismiss()
+                render()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun preferredVoiceInputSummary(): String {
+        val id = store.preferredVoiceInput
+        if (id.isEmpty()) return getString(R.string.system_default)
+        val label = InputMethodUtil.listVoiceInputMethods()
+            .firstOrNull { it.first.id == id }
+            ?.first?.loadLabel(requireContext().packageManager)
+        return label?.toString() ?: getString(R.string._not_available_)
     }
 
     private fun modelInstalled(model: LocalAsrModel) =
@@ -1153,5 +1202,6 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
         const val PENDING_IMPORT = "pending_model_import"
         const val SYSTEM_ROW_KEY = "voice_system_row"
         const val CURRENT_ROW_KEY = "voice_current_service_row"
+        const val EXTERNAL_VOICE_ROW_KEY = "voice_preferred_external_row"
     }
 }

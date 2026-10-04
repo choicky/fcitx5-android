@@ -24,6 +24,7 @@ import org.fcitx.fcitx5.android.input.bar.ToolbarAction
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.ui.main.MainActivity
 import org.fcitx.fcitx5.android.utils.AppUtil
+import org.fcitx.fcitx5.android.utils.InputMethodUtil
 import org.fcitx.fcitx5.android.utils.toast
 import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
@@ -42,6 +43,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     private val voiceCaptureProbe by AppPrefs.getInstance().internal.voiceCaptureProbe
     private val voiceDoubaoAsr by AppPrefs.getInstance().internal.voiceDoubaoAsr
     private val voiceLocalAsrThreads by AppPrefs.getInstance().internal.voiceLocalAsrThreads
+    private val preferredVoiceInput by AppPrefs.getInstance().keyboard.preferredVoiceInput
 
     // loaded Local ASR models outlive single sessions; released when this component closes
     private val localAsrCache = LocalAsrRecognizerCache { model, threads ->
@@ -267,6 +269,10 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 PackageManager.PERMISSION_GRANTED
         val backend = when (val step = voiceStartStep(resolved, recordAudioGranted)) {
             is VoiceStartStep.Start -> step.backend
+            VoiceStartStep.StartExternal -> {
+                startExternalVoiceInput()
+                return
+            }
             VoiceStartStep.RequestSystemAuthorization -> {
                 requestSystemAsrAuthorization()
                 return
@@ -309,6 +315,23 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         }
     }
 
+    /**
+     * Model A: hand input to the configured external voice IME. The saved top-level provider is
+     * never changed here (D055); if the concrete IME has disappeared the trigger reports it
+     * explicitly and opens Voice settings, rather than silently switching to another provider.
+     * The "System default" empty id lets Android pick the first enabled voice IME.
+     */
+    private fun startExternalVoiceInput() {
+        val (id, subtype) = InputMethodUtil.findVoiceSubtype(preferredVoiceInput)
+            ?: run {
+                showUnavailable(
+                    AsrResolution.CurrentUnavailable(AsrServiceId.External, UnavailableReason.NoVoiceIme)
+                )
+                return
+            }
+        InputMethodUtil.switchInputMethod(service, id, subtype)
+    }
+
     /** Explain why nothing can start and open the Voice settings to choose a service. */
     private fun showUnavailable(resolution: AsrResolution) {
         val message = when (resolution) {
@@ -321,6 +344,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 UnavailableReason.InstanceMissing -> R.string.voice_instance_missing
                 UnavailableReason.InvalidEndpoint -> R.string.voice_endpoint_invalid
                 UnavailableReason.CleartextEndpoint -> R.string.voice_endpoint_cleartext
+                UnavailableReason.NoVoiceIme -> R.string.voice_external_no_ime
             }
             else -> R.string.voice_no_provider
         }

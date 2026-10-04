@@ -59,6 +59,8 @@ internal fun cloudStatus(enabled: Boolean, configured: Boolean, current: Boolean
  * The services the current-service dialog lists: enabled and usable now, by the same rules
  * that resolve a session. System ASR that still needs the disclosure answer is listed, since
  * choosing it asks. The saved current service is kept elsewhere even when it is not listed.
+ * External Android Voice Input is a top-level provider, not an enabled service: it is listed
+ * only while [externalAndroidAvailable] (at least one external voice IME is enabled).
  */
 internal fun selectableServices(
     candidates: List<AsrServiceId>,
@@ -66,12 +68,14 @@ internal fun selectableServices(
     local: LocalStatus,
     systemAuthorization: SystemAsrAuthorization,
     systemAvailable: () -> Boolean,
-    external: ExternalServices
+    external: ExternalServices,
+    externalAndroidAvailable: () -> Boolean = { false }
 ): List<AsrServiceId> = candidates.filter { service ->
     // Keep legacy services readable in persisted state, but never expose them as choices.
     service !is AsrServiceId.Local || service.model in LocalAsrModel.userVisibleEntries
 }.filter { service ->
-    selection.isEnabled(service) &&
+    if (service == AsrServiceId.External) externalAndroidAvailable()
+    else selection.isEnabled(service) &&
             when (resolveCurrentService(selection.copy(current = service), local, systemAuthorization, systemAvailable, external)) {
                 is AsrResolution.Ready, AsrResolution.NeedsSystemAuthorization -> true
                 else -> false

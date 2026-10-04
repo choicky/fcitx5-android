@@ -79,6 +79,15 @@ internal class VoiceSelectionStore(
         set(value) = prefs.internal.voiceSelfHostedInstances.setValue(SelfHostedInstance.encode(value))
 
     /**
+     * The External Android Voice Input subordinate choice (D053 / D055): the concrete external
+     * voice IME id, or "" for the upstream "System default" behaviour. It is not an internal
+     * AsrServiceId and is consulted only while the top-level provider is [AsrServiceId.External].
+     */
+    var preferredVoiceInput: String
+        get() = prefs.keyboard.preferredVoiceInput.getValue()
+        set(value) = prefs.keyboard.preferredVoiceInput.setValue(value)
+
+    /**
      * Removes an instance and its token. The saved current selection is kept, so a removed
      * current instance reads as unavailable instead of silently switching services.
      */

@@ -22,6 +22,17 @@ internal sealed interface AsrServiceId {
     }
 
     /**
+     * The External Android Voice Input top-level provider (Model A / D055): the trigger switches
+     * to an external voice IME/subtype chosen by `preferredVoiceInput`. It is a configured
+     * provider value, not an in-IME ASR service: it never resolves to a [VoiceBackendKind] and
+     * never runs [VoiceInputFlow]. It is deliberately excluded from [entries].
+     */
+    data object External : AsrServiceId {
+        override val key = EXTERNAL_KEY
+        override val external = true
+    }
+
+    /**
      * One installed on-device model. Each model is enabled and selected on its own, like a
      * cloud provider; a session runs only the selected model.
      */
@@ -58,22 +69,25 @@ internal sealed interface AsrServiceId {
         private const val PREFIX = "selfhosted:"
         private const val LOCAL_PREFIX = "local:"
 
+        /** The persisted key of the External Android Voice Input provider; not an in-IME service. */
+        const val EXTERNAL_KEY = "external"
+
         /**
          * The single Local service before models were enabled one by one; only read by
          * [migrateLocalModels].
          */
         const val LEGACY_LOCAL_KEY = "local"
 
-        /** The fixed services; self-hosted instances are listed by their store. */
+        /** The fixed in-IME services; External and self-hosted instances are handled separately. */
         val entries: List<AsrServiceId> =
             listOf(System) + LocalAsrModel.userVisibleEntries.map(::Local) + listOf(Doubao, Qwen, Tencent)
 
-        fun parse(key: String): AsrServiceId? =
-            if (key.startsWith(PREFIX)) {
+        fun parse(key: String): AsrServiceId? = when {
+            key == EXTERNAL_KEY -> External
+            key.startsWith(PREFIX) ->
                 key.removePrefix(PREFIX).takeIf(SelfHostedInstance::isValidId)?.let(::SelfHosted)
-            } else {
-                entries.firstOrNull { it.key == key }
-            }
+            else -> entries.firstOrNull { it.key == key }
+        }
     }
 }
 
@@ -144,7 +158,7 @@ internal data class LocalStatus(
 
 internal enum class UnavailableReason {
     Disabled, NoSystemRecognizer, NoLocalRuntime, LocalModelFilesMissing,
-    MissingCredentials, InstanceMissing, InvalidEndpoint, CleartextEndpoint
+    MissingCredentials, InstanceMissing, InvalidEndpoint, CleartextEndpoint, NoVoiceIme
 }
 
 /** What the user-initiated recommendation would do (D034). It never picks a network service. */
@@ -200,17 +214,25 @@ internal sealed interface AsrResolution {
     data class CurrentUnavailable(val service: AsrServiceId, val reason: UnavailableReason) :
         AsrResolution
 
+    /**
+     * The configured provider is External Android Voice Input: the trigger switches to the
+     * external voice IME instead of running a session (Model A / D055). No backend or flow.
+     */
+    data object ExternalAndroid : AsrResolution
+
     /** Kept for callers that explicitly model a terminal no-service state. */
     data object NoService : AsrResolution
 }
 
 /**
- * The trigger is offered when a session can start or when tapping it leads to the System ASR
- * disclosure; a selected service that cannot be used hides it (D030).
+ * The trigger is offered when a session can start, when the external voice IME can be switched
+ * to, or when tapping it leads to the System ASR disclosure; a selected in-IME service that
+ * cannot be used hides it (D030).
  */
 internal val AsrResolution.offersTrigger: Boolean
     get() = when (this) {
-        is AsrResolution.Ready, AsrResolution.NeedsSystemAuthorization -> true
+        is AsrResolution.Ready, AsrResolution.NeedsSystemAuthorization,
+        AsrResolution.ExternalAndroid -> true
         is AsrResolution.NeedsRecommendation -> recommendation != Recommendation.Nothing
         is AsrResolution.CurrentUnavailable, AsrResolution.NoService -> false
     }
@@ -231,10 +253,13 @@ internal fun resolveCurrentService(
         ?: return AsrResolution.NeedsRecommendation(
             recommend(local, selection, systemAuthorization, systemAvailable)
         )
-    if (!selection.isEnabled(current)) {
+    // External is a chosen provider, not an enable-gated service; its concrete IME is resolved
+    // at invocation (the trigger stays visible per D055), so the enablement check is skipped.
+    if (current != AsrServiceId.External && !selection.isEnabled(current)) {
         return AsrResolution.CurrentUnavailable(current, UnavailableReason.Disabled)
     }
     return when (current) {
+        AsrServiceId.External -> AsrResolution.ExternalAndroid
         AsrServiceId.System -> when {
             !systemAvailable() ->
                 AsrResolution.CurrentUnavailable(current, UnavailableReason.NoSystemRecognizer)
@@ -287,7 +312,8 @@ internal fun fallbackTarget(
     selection: VoiceSelection,
     local: LocalStatus
 ): VoiceBackendKind? {
-    if (selected == null || !selected.external) return null
+    // External Android Voice Input is not a session and never falls back to another provider.
+    if (selected == null || selected == AsrServiceId.External || !selected.external) return null
     return LocalAsrModel.fallbackEntries
         .firstOrNull { it.production && local.usable(it, selection) }
         ?.let(VoiceBackendKind::LocalAsr)
@@ -393,6 +419,9 @@ internal fun migrateLocalModels(
 /** What tapping a voice trigger does next. */
 internal sealed interface VoiceStartStep {
     data class Start(val backend: VoiceBackendKind) : VoiceStartStep
+
+    /** Switch to the configured external voice IME; no session, no RECORD_AUDIO gate here. */
+    data object StartExternal : VoiceStartStep
     data object RequestSystemAuthorization : VoiceStartStep
     data object RequestRecordAudio : VoiceStartStep
 
@@ -404,12 +433,14 @@ internal sealed interface VoiceStartStep {
 /**
  * The service is resolved before RECORD_AUDIO is requested: the System ASR disclosure comes
  * before any microphone prompt, and nothing asks for the microphone when no service is usable.
+ * External Android Voice Input switches IME and needs no microphone from this app.
  */
 internal fun voiceStartStep(resolution: AsrResolution, recordAudioGranted: Boolean) =
     when (resolution) {
         is AsrResolution.Ready ->
             if (recordAudioGranted) VoiceStartStep.Start(resolution.backend)
             else VoiceStartStep.RequestRecordAudio
+        AsrResolution.ExternalAndroid -> VoiceStartStep.StartExternal
         AsrResolution.NeedsSystemAuthorization -> VoiceStartStep.RequestSystemAuthorization
         is AsrResolution.NeedsRecommendation -> when (resolution.recommendation) {
             Recommendation.AskSystemAuthorization -> VoiceStartStep.RequestSystemAuthorization

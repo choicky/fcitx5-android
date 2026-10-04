@@ -346,6 +346,8 @@
     <string name="voice_panel_finish">Done</string>
     <string name="voice_input">Voice input</string>
     <string name="asr_provider_system">Android system speech recognition</string>
+    <string name="voice_external_android">External Android voice input</string>
+    <string name="voice_external_no_ime">No external voice input app is available. Enable one in system input settings, then choose it in Voice input settings.</string>
     <string name="allow_system_asr">Allow Android system speech recognition</string>
     <string name="allow_system_asr_summary">Provided by Android or device system services. How your audio is processed depends on that service and may involve remote processing.</string>
     <string name="system_asr_disclosure_title">Use Android system speech recognition?</string>
