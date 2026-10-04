@@ -36,7 +36,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val pid = int("pid", 0)
         val editorInfoInspector = bool("editor_info_inspector", false)
         val needNotifications = bool("need_notifications", true)
-        val voiceCaptureProbe = bool("voice_capture_probe", false)
+        val voiceSystemAsrAllowed = bool("voice_system_asr_allowed", false)
+        val voiceSystemAsrAnswered = bool("voice_system_asr_answered", false)
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {

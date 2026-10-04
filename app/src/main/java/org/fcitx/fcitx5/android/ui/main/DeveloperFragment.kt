@@ -14,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.data.DataManager
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
@@ -90,15 +89,6 @@ class DeveloperFragment : PaddingPreferenceFragment() {
                 isIconSpaceReserved = false
                 isSingleLineTitle = false
             })
-            if (BuildConfig.DEBUG) {
-                addPreference(MySwitchPreference(context).apply {
-                    key = AppPrefs.getInstance().internal.voiceCaptureProbe.key
-                    setTitle(R.string.voice_capture_probe)
-                    setDefaultValue(false)
-                    isIconSpaceReserved = false
-                    isSingleLineTitle = false
-                })
-            }
             addPreference(R.string.restart_fcitx_instance) {
                 AlertDialog.Builder(context)
                     .setTitle(R.string.restart_fcitx_instance)

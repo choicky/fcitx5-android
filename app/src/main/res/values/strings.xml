@@ -296,6 +296,10 @@
     <string name="stop_voice_input">Stop voice input</string>
     <string name="voice_input_unavailable">No speech recognition service is available</string>
     <string name="voice_input_error">Voice input failed (error %1$d)</string>
+    <string name="system_asr_disclosure_title">Use Android system speech recognition?</string>
+    <string name="system_asr_disclosure_message">Android system speech recognition is provided by Android or device system services, not by this app. How your audio is processed depends on that service, and it may be processed remotely.</string>
+    <string name="system_asr_allow">Allow</string>
+    <string name="system_asr_decline">Don\'t allow</string>
     <string name="voice_capture_error">Microphone capture failed: %1$s</string>
     <string name="voice_capture_probe">Voice input: microphone capture probe (debug)</string>
     <string name="hide_keyboard">Hide keyboard</string>

@@ -296,6 +296,10 @@
     <string name="stop_voice_input">停止语音输入</string>
     <string name="voice_input_unavailable">没有可用的语音识别服务</string>
     <string name="voice_input_error">语音输入失败（错误 %1$d）</string>
+    <string name="system_asr_disclosure_title">使用 Android 系统语音识别？</string>
+    <string name="system_asr_disclosure_message">Android 系统语音识别由 Android 或设备系统服务提供，而非本应用。音频如何处理取决于该系统服务，可能会在远程处理。</string>
+    <string name="system_asr_allow">允许</string>
+    <string name="system_asr_decline">不允许</string>
     <string name="voice_capture_error">麦克风采集失败：%1$s</string>
     <string name="voice_capture_probe">语音输入：麦克风采集探针（调试）</string>
     <string name="hide_keyboard">隐藏键盘</string>

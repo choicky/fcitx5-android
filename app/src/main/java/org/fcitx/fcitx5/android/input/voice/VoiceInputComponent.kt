@@ -8,12 +8,10 @@ package org.fcitx.fcitx5.android.input.voice
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.speech.SpeechRecognizer
 import android.view.View
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
-import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.CapabilityFlag
 import org.fcitx.fcitx5.android.core.CapabilityFlags
@@ -33,7 +31,8 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     private val service by manager.inputMethodService()
     private val showVoiceInputButton by AppPrefs.getInstance().keyboard.showVoiceInputButton
-    private val voiceCaptureProbe by AppPrefs.getInstance().internal.voiceCaptureProbe
+    private val prefs = AppPrefs.getInstance()
+    private val providerRegistry = systemVoiceProviderRegistry()
 
     private val inputFlow = VoiceInputFlow(object : VoiceInputFlow.Output {
         override fun updateComposing(text: String) = service.updateVoiceComposingText(text)
@@ -64,10 +63,6 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     val toggleCallback = View.OnClickListener { toggle() }
 
-    // Phase 4B capture gate: debug builds can swap System ASR for the capture-only probe
-    private val useCaptureProbe: Boolean
-        get() = BuildConfig.DEBUG && voiceCaptureProbe
-
     internal fun setStateListener(listener: (VoiceInputSession.State) -> Unit) {
         stateListener = listener
         listener(inputFlow.state)
@@ -76,7 +71,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     fun shouldShowVoiceInput(capFlags: CapabilityFlags): Boolean {
         passwordField = capFlags.has(CapabilityFlag.Password)
         return showVoiceInputButton && !passwordField &&
-            (useCaptureProbe || SpeechRecognizer.isRecognitionAvailable(service))
+            providerRegistry.firstAvailable(service) != null
     }
 
     override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: CapabilityFlags) {
@@ -118,14 +113,19 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     private fun start() {
         if (passwordField) return
+        if (!prefs.internal.voiceSystemAsrAnswered.getValue()) {
+            requestSystemAsrAuthorization()
+            return
+        }
+        if (!prefs.internal.voiceSystemAsrAllowed.getValue()) return
         if (service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             requestRecordAudioPermission()
             return
         }
-        val captureProbe = useCaptureProbe
-        if (!captureProbe && !SpeechRecognizer.isRecognitionAvailable(service)) {
+        val provider = providerRegistry.find(SystemVoiceProvider.ID)
+        if (provider == null || !provider.isAvailable(service)) {
             service.toast(R.string.voice_input_unavailable)
             return
         }
@@ -135,11 +135,15 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             // implementation clears its context and updates preedit without committing it.
             service.prepareForVoiceInput().join()
             yield()
-            val backend =
-                if (captureProbe) CaptureProbeBackend(service, service.lifecycleScope)
-                else SystemAsrBackend(service)
-            inputFlow.launch(token, languageCode, backend)
+            inputFlow.launch(token, languageCode, provider.createBackend(service))
         }
+    }
+
+    private fun requestSystemAsrAuthorization() {
+        service.startActivity(Intent(service, MainActivity::class.java).apply {
+            action = MainActivity.ACTION_AUTHORIZE_SYSTEM_ASR
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
     }
 
     private fun requestRecordAudioPermission() {
