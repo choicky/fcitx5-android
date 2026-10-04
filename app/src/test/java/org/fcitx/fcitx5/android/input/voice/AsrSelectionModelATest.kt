@@ -80,19 +80,26 @@ class AsrSelectionModelATest {
     }
 
     @Test
-    fun externalListedInPickerOnlyWhenAnExternalImeExists() {
+    fun externalIsAlwaysListedInThePicker() {
+        val selection = VoiceSelection(AsrServiceId.External, setOf(localService), recommendationDone = true)
+        val candidates = listOf(AsrServiceId.External) + AsrServiceId.entries
+        // External is a configured top-level provider: it stays listed even when no external
+        // voice IME is discovered; that unavailability is reported at invocation instead.
+        val available = selectableServices(
+            candidates, selection, localReady, Allowed, { true }, noExternalConfigured()
+        )
+        assertTrue(available.contains(AsrServiceId.External))
+    }
+
+    @Test
+    fun pickerKeepsInImeServicesUnderTheExistingRules() {
         val selection = VoiceSelection(AsrServiceId.External, setOf(localService), recommendationDone = true)
         val candidates = listOf(AsrServiceId.External) + AsrServiceId.entries
         val available = selectableServices(
-            candidates, selection, localReady, Allowed, { true }, noExternalConfigured(),
-            externalAndroidAvailable = { true }
+            candidates, selection, localReady, Allowed, { true }, noExternalConfigured()
         )
-        assertTrue(available.contains(AsrServiceId.External))
-        val unavailable = selectableServices(
-            candidates, selection, localReady, Allowed, { true }, noExternalConfigured(),
-            externalAndroidAvailable = { false }
-        )
-        assertFalse(unavailable.contains(AsrServiceId.External))
+        // only the enabled and usable in-IME service is listed next to External
+        assertEquals(listOf(AsrServiceId.External, localService), available)
     }
 
     @Test

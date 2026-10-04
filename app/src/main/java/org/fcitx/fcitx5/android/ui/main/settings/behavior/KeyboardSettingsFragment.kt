@@ -5,7 +5,6 @@
 package org.fcitx.fcitx5.android.ui.main.settings.behavior
 
 import androidx.preference.PreferenceScreen
-import androidx.preference.Preference
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceFragment
@@ -23,9 +22,6 @@ class KeyboardSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance(
 
     override fun onPreferenceUiCreated(screen: PreferenceScreen) {
         super.onPreferenceUiCreated(screen)
-        screen.findPreference<Preference>(AppPrefs.getInstance().keyboard.preferredVoiceInput.key)?.let {
-            screen.removePreference(it)
-        }
         val switch = MySwitchPreference(screen.context).apply {
             isPersistent = false
             isIconSpaceReserved = false
