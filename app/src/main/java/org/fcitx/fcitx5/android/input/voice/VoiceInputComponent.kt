@@ -45,6 +45,13 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     private val voiceLocalAsrThreads by AppPrefs.getInstance().internal.voiceLocalAsrThreads
     private val preferredVoiceInput by AppPrefs.getInstance().keyboard.preferredVoiceInput
 
+    // Observe-only record of control / data-flow decisions (F1). Nothing here is read back to
+    // influence a session; a failed write is silently ignored.
+    private val voiceAudit = VoiceAudit(file = { VoiceAudit.auditFile(service) })
+
+    /** Stable per in-IME session id for correlating audit events; distinct from the backend generation. */
+    private var auditSessionId = 0L
+
     // loaded Local ASR models outlive single sessions; released when this component closes
     private val localAsrCache = LocalAsrRecognizerCache { model, threads ->
         LocalAsrEngines.load(model, localAsrModelDir(model), threads)
@@ -55,9 +62,14 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
         override fun clearComposing() = service.clearVoiceComposingText()
 
-        override fun commit(text: String) = service.commitText(text)
+        // audit records only that a non-blank result was committed; the text is never referenced
+        override fun commit(text: String) {
+            voiceAudit.record(CommittedEvent(auditSessionId))
+            service.commitText(text)
+        }
 
         override fun stateChanged(state: VoiceInputSession.State) {
+            voiceAudit.record(StateEvent(auditSessionId, state))
             stateListeners.forEach { it(state) }
         }
 
@@ -67,11 +79,16 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
         override fun fellBack(error: VoiceError) {
             // the change of recipient is shown and recorded as the service actually used
-            fallbackService?.let { selectionStore.lastUsedService = it.key }
+            fallbackService?.let {
+                selectionStore.lastUsedService = it.key
+                voiceAudit.record(FallbackEvent(auditSessionId, (it as? AsrServiceId.Local)?.model?.name ?: it.key))
+            }
             service.toast(R.string.voice_fell_back_to_local)
         }
 
         override fun reportError(error: VoiceError) {
+            val (errorClass, systemCode) = error.auditClass()
+            voiceAudit.record(ErrorEvent(auditSessionId, errorClass, systemCode))
             when (error) {
                 VoiceError.Silent -> Unit
                 VoiceError.PermissionDenied -> requestRecordAudioPermission()
@@ -227,12 +244,13 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         when (inputFlow.state) {
             VoiceInputSession.State.Idle -> start()
             VoiceInputSession.State.Starting,
-            VoiceInputSession.State.Listening -> inputFlow.stop()
+            VoiceInputSession.State.Listening -> requestStop()
             VoiceInputSession.State.Stopping -> Unit
         }
     }
 
     fun cancel() {
+        if (inputFlow.state != VoiceInputSession.State.Idle) voiceAudit.record(CancelEvent(auditSessionId))
         inputFlow.cancel()
     }
 
@@ -243,6 +261,12 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     /** Space released: stop normally, letting the backend deliver its final result. */
     fun stopVoiceInput() {
+        requestStop()
+    }
+
+    /** Records a user stop intent when a session is active, then asks the flow to stop. */
+    private fun requestStop() {
+        if (inputFlow.state != VoiceInputSession.State.Idle) voiceAudit.record(StopEvent(auditSessionId))
         inputFlow.stop()
     }
 
@@ -267,7 +291,9 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         }
         val recordAudioGranted = service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
-        val backend = when (val step = voiceStartStep(resolved, recordAudioGranted)) {
+        val step = voiceStartStep(resolved, recordAudioGranted)
+        voiceAudit.record(step.toAuditStart(token = 0L))
+        val backend = when (step) {
             is VoiceStartStep.Start -> step.backend
             VoiceStartStep.StartExternal -> {
                 startExternalVoiceInput()
@@ -302,7 +328,21 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         // D035: a selected external service may fall back to a production Local model only
         val fallbackKind = fallbackTarget(selected, selectionStore.load(), localStatus())
         fallbackService = (fallbackKind as? VoiceBackendKind.LocalAsr)?.let { AsrServiceId.Local(it.model) }
+        // bump before begin(): begin() emits the Starting state synchronously, attributed to this
+        // session id; if begin() returns null the id is bumped but no event ever used it
+        auditSessionId += 1L
         val token = inputFlow.begin() ?: return
+        val (dest, kind) = backend.auditDescriptor()
+        voiceAudit.record(
+            RoutedEvent(
+                token = auditSessionId,
+                dest = dest,
+                kind = kind,
+                external = dest != VoiceAuditDest.OnDevice,
+                fallbackArmed = fallbackKind != null,
+                language = languageCode
+            )
+        )
         service.lifecycleScope.launch {
             // Fcitx InputContext::reset dispatches the engine ResetEvent. The pinned Pinyin
             // implementation clears its context and updates preedit without committing it.
@@ -324,11 +364,15 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     private fun startExternalVoiceInput() {
         val (id, subtype) = InputMethodUtil.findVoiceSubtype(preferredVoiceInput)
             ?: run {
+                voiceAudit.record(HandoffEvent(token = 0L, outcome = VoiceAuditHandoff.NoIme))
                 showUnavailable(
                     AsrResolution.CurrentUnavailable(AsrServiceId.External, UnavailableReason.NoVoiceIme)
                 )
                 return
             }
+        voiceAudit.record(
+            HandoffEvent(token = 0L, outcome = VoiceAuditHandoff.Switched, to = id.substringBefore('/'))
+        )
         InputMethodUtil.switchInputMethod(service, id, subtype)
     }
 
