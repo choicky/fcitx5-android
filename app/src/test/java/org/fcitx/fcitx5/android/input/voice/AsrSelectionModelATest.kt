@@ -92,6 +92,19 @@ class AsrSelectionModelATest {
     }
 
     @Test
+    fun externalSurvivesAStateWhereNoInImeServiceIsUsable() {
+        val selection = VoiceSelection(AsrServiceId.System, emptySet(), recommendationDone = true)
+        val candidates = listOf(AsrServiceId.External) + AsrServiceId.entries
+        // nothing enabled, no local runtime, system declined: the configuration surface still
+        // shows the one configured top-level provider class instead of erasing External
+        val available = selectableServices(
+            candidates, selection, LocalStatus(runtimeAvailable = false, installed = emptySet()),
+            SystemAsrAuthorization.Declined, { false }, noExternalConfigured()
+        )
+        assertEquals(listOf<AsrServiceId>(AsrServiceId.External), available)
+    }
+
+    @Test
     fun pickerKeepsInImeServicesUnderTheExistingRules() {
         val selection = VoiceSelection(AsrServiceId.External, setOf(localService), recommendationDone = true)
         val candidates = listOf(AsrServiceId.External) + AsrServiceId.entries
