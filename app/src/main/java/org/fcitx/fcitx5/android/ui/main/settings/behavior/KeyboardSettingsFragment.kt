@@ -45,7 +45,8 @@ class KeyboardSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance(
         for (index in 0 until screen.preferenceCount) {
             screen.getPreference(index).order = index * 10
         }
-        switch.order = ((keepLettersIndex + 1).coerceAtLeast(0) * 10) + 1
+        // upstream order: keep-letters, show-voice-input switch, preferred voice input
+        switch.order = (keepLettersIndex.coerceAtLeast(0) * 10) + 1
         screen.addPreference(switch)
         refreshVoiceSwitch()
     }
