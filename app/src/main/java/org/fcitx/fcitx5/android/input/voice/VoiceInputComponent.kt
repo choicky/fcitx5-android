@@ -357,9 +357,10 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     /**
      * Model A: hand input to the configured external voice IME. The saved top-level provider is
-     * never changed here (D055); if the concrete IME has disappeared the trigger reports it
-     * explicitly and opens Voice settings, rather than silently switching to another provider.
-     * The "System default" empty id lets Android pick the first enabled voice IME.
+     * never changed here (D055). Concrete-IME selection keeps upstream semantics
+     * ([InputMethodUtil.findVoiceSubtype]: prefer the saved id, else first enabled voice IME);
+     * only when no voice IME exists at all does the trigger report unavailability and open Voice
+     * settings. The "System default" empty id intentionally means "first enabled voice IME".
      */
     private fun startExternalVoiceInput() {
         val (id, subtype) = InputMethodUtil.findVoiceSubtype(preferredVoiceInput)
