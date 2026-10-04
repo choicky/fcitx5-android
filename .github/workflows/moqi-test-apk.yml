@@ -16,7 +16,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: moqi-test-apk-${{ github.ref }}
+  # Fusion Enhanced debug/test APK build. The group literal matches the
+  # workflow's current identity ("Test APK"); the file path keeps the
+  # historical `moqi-test-apk.yml` name on purpose — renaming it would create
+  # a new GitHub Actions workflow identity, orphan this workflow's historical
+  # runs, and still not refresh the default-branch-resolved display name.
+  group: test-apk-${{ github.ref }}
   cancel-in-progress: true
 
 env:
