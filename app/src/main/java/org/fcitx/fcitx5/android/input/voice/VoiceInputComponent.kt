@@ -20,6 +20,7 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.ui.main.MainActivity
+import org.fcitx.fcitx5.android.utils.AppUtil
 import org.fcitx.fcitx5.android.utils.toast
 import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
@@ -30,7 +31,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
     ManagedHandler by managedHandler(), InputBroadcastReceiver {
 
     private val service by manager.inputMethodService()
-    private val showVoiceInputButton by AppPrefs.getInstance().keyboard.showVoiceInputButton
+    private val showVoiceInputButton by AppPrefs.getInstance().voice.showVoiceInputButton
     private val prefs = AppPrefs.getInstance()
     private val providerRegistry = systemVoiceProviderRegistry()
 
@@ -70,8 +71,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     fun shouldShowVoiceInput(capFlags: CapabilityFlags): Boolean {
         passwordField = capFlags.has(CapabilityFlag.Password)
-        return showVoiceInputButton && !passwordField &&
-            providerRegistry.firstAvailable(service) != null
+        return showVoiceInputButton && !passwordField
     }
 
     override fun onStartInput(info: android.view.inputmethod.EditorInfo, capFlags: CapabilityFlags) {
@@ -124,9 +124,10 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             requestRecordAudioPermission()
             return
         }
-        val provider = providerRegistry.find(SystemVoiceProvider.ID)
+        val provider = providerRegistry.resolve(prefs.voice.provider.getValue())
         if (provider == null || !provider.isAvailable(service)) {
             service.toast(R.string.voice_input_unavailable)
+            AppUtil.launchMainToVoice(service)
             return
         }
         val token = inputFlow.begin() ?: return

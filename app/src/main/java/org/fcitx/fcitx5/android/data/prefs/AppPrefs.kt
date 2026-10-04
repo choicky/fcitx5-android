@@ -15,6 +15,7 @@ import org.fcitx.fcitx5.android.data.InputFeedbacks.InputFeedbackMode
 import org.fcitx.fcitx5.android.input.candidates.expanded.ExpandedCandidateStyle
 import org.fcitx.fcitx5.android.input.candidates.floating.FloatingCandidatesMode
 import org.fcitx.fcitx5.android.input.candidates.floating.FloatingCandidatesOrientation
+import org.fcitx.fcitx5.android.input.voice.VoiceProviderId
 import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateMode
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase
 import org.fcitx.fcitx5.android.input.keyboard.LangSwitchBehavior
@@ -38,6 +39,21 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val needNotifications = bool("need_notifications", true)
         val voiceSystemAsrAllowed = bool("voice_system_asr_allowed", false)
         val voiceSystemAsrAnswered = bool("voice_system_asr_answered", false)
+    }
+
+    inner class Voice : ManagedPreferenceCategory(R.string.voice_input, sharedPreferences) {
+        val showVoiceInputButton =
+            switch(R.string.show_voice_input_button, "show_voice_input_button", false)
+        val spaceKeyLongPressBehavior = enumList(
+            R.string.space_long_press_behavior,
+            "space_long_press_behavior",
+            SpaceLongPressBehavior.None
+        )
+        val provider = enumList(
+            R.string.voice_input_service,
+            "voice_provider",
+            VoiceProviderId.System
+        )
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {
@@ -150,11 +166,9 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             false
         )
 
-        val showVoiceInputButton =
-            switch(R.string.show_voice_input_button, "show_voice_input_button", false)
         val preferredVoiceInput = voiceInputPreference(
             R.string.preferred_voice_input, "preferred_voice_input", ""
-        ) { showVoiceInputButton.getValue() }
+        )
 
         val expandKeypressArea =
             switch(R.string.expand_keypress_area, "expand_keypress_area", false)
@@ -171,11 +185,6 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             700,
             "ms",
             10
-        )
-        val spaceKeyLongPressBehavior = enumList(
-            R.string.space_long_press_behavior,
-            "space_long_press_behavior",
-            SpaceLongPressBehavior.None
         )
         val spaceSwipeMoveCursor =
             switch(R.string.space_swipe_move_cursor, "space_swipe_move_cursor", true)
@@ -388,6 +397,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
     }
 
     val internal = Internal().register()
+    val voice = Voice().register()
     val keyboard = Keyboard().register()
     val candidates = Candidates().register()
     val clipboard = Clipboard().register()
@@ -419,6 +429,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             }
             listOf(
                 keyboard,
+                voice,
                 candidates,
                 clipboard
             ).forEach { category ->

@@ -30,6 +30,7 @@ import org.fcitx.fcitx5.android.ui.main.settings.behavior.CandidatesSettingsFrag
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.ClipboardSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.KeyboardSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.SymbolSettingsFragment
+import org.fcitx.fcitx5.android.ui.main.settings.behavior.VoiceSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.global.GlobalConfigFragment
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodConfigFragment
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodListFragment
@@ -70,6 +71,9 @@ sealed class SettingsRoute : Parcelable {
 
     @Serializable
     data object VirtualKeyboard : SettingsRoute()
+
+    @Serializable
+    data object Voice : SettingsRoute()
 
     @Serializable
     data object CandidatesWindow : SettingsRoute()
@@ -209,6 +213,9 @@ sealed class SettingsRoute : Parcelable {
             }
             fragment<KeyboardSettingsFragment, VirtualKeyboard> {
                 label = ctx.getString(R.string.virtual_keyboard)
+            }
+            fragment<VoiceSettingsFragment, Voice> {
+                label = ctx.getString(R.string.voice_input)
             }
             fragment<CandidatesSettingsFragment, CandidatesWindow> {
                 label = ctx.getString(R.string.candidates_window)

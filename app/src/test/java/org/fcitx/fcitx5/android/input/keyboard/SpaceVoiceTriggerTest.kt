@@ -78,6 +78,15 @@ class SpaceVoiceTriggerTest {
     }
 
     @Test
+    fun preferenceModelIncludesVoiceInputBehavior() {
+        assertTrue(SpaceLongPressBehavior.entries.contains(SpaceLongPressBehavior.VoiceInput))
+        assertEquals(
+            org.fcitx.fcitx5.android.R.string.space_behavior_voice_input,
+            SpaceLongPressBehavior.VoiceInput.stringRes
+        )
+    }
+
+    @Test
     fun oneGestureYieldsExactlyOneEndCommand() {
         val voice = SpaceLongPressBehavior.VoiceInput
         fun gesture(swipedUp: Boolean) = listOf(

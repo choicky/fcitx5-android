@@ -24,4 +24,10 @@ class VoiceProviderRegistryTest {
         assertEquals(provider, registry.find("test"))
         assertNull(registry.find("other"))
     }
+
+    @Test
+    fun systemProviderUsesStableCanonicalId() {
+        assertEquals("system", SystemVoiceProvider.id)
+        assertEquals("system", VoiceProviderId.System.name.lowercase())
+    }
 }
