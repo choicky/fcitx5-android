@@ -146,7 +146,7 @@ jobs:
       - name: Verify the fixed debug APK signature
         env:
           # D064 Fusion Enhanced Debug identity: CN=Fcitx5 Fusion Enhanced Debug, O=choicky, C=CN
-          EXPECTED_DEBUG_CERT_SHA256: 53:EF:BA:6A:2D:B8:31:40:42:2E:D2:06:C0:BA:43:F8:02:98:1A:85:0F:32:4D:FE:A0:77:55:E6:C4:65:73:9C
+          EXPECTED_DEBUG_CERT_SHA256: DC:49:71:82:C5:48:66:34:FD:68:E5:71:B8:78:A3:3E:CE:A6:8B:DA:D2:05:C3:D6:1A:ED:09:B9:83:92:A5:6A
         run: |
           set -euo pipefail
           apk=$(find fcitx5-android-fusion-enhanced-apk -name '*.apk' -print -quit)
