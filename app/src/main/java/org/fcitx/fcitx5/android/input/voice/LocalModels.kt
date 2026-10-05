@@ -87,7 +87,7 @@ internal object ModelJobs {
      * applies either way. Plain HTTP only in debug builds.
      */
     fun download(context: Context, entry: ModelCatalogEntry, base: String? = entry.downloadBase): Boolean {
-        // A's download is a test-build exception (D037); a release build never starts it
+        // an entry marked testBuildDownloadOnly is never started by a release build
         if (!entry.downloadOffered(BuildConfig.DEBUG)) return false
         return if (entry.archiveUrl != null) {
             runArchive(context, entry, base ?: entry.archiveUrl)

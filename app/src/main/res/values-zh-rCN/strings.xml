@@ -405,7 +405,7 @@
     <string name="voice_model_license">许可：%1$s</string>
     <string name="voice_model_attribution">归属：%1$s</string>
     <string name="voice_license_unconfirmed">尚未确认</string>
-    <string name="voice_model_research_status">仅供研究/个人测试；尚未确立公开产品内分发许可。</string>
+    <string name="voice_model_audit_pending">从作者固定的公开上游获取；本应用不内置也不镜像权重。上游许可与来源证据尚未经过独立审计。</string>
     <string name="voice_model_offline_note">模型下载需要网络。安装后，识别在本机运行；识别音频不会发送到模型下载服务。</string>
     <string name="voice_model_remove_confirm">从本机删除此模型？已在使用它的会话会先完成。</string>
     <string name="asr_service_local_model">本地 · %1$s</string>

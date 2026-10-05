@@ -407,7 +407,7 @@
     <string name="voice_model_license">License: %1$s</string>
     <string name="voice_model_attribution">Attribution: %1$s</string>
     <string name="voice_license_unconfirmed">not confirmed</string>
-    <string name="voice_model_research_status">Research/private testing only; public in-product distribution approval is not established.</string>
+    <string name="voice_model_audit_pending">Available from the author\'s pinned public upstream; this app neither embeds nor mirrors the weights. Upstream license and provenance evidence has not undergone an independent audit.</string>
     <string name="voice_model_offline_note">The model needs network access for download. After installation, recognition runs locally on this device; recognition audio is not sent to the model download service.</string>
     <string name="voice_model_remove_confirm">Remove this model from the device? A session that is already using it finishes first.</string>
     <string name="asr_service_local_model">On-device · %1$s</string>

@@ -120,7 +120,7 @@ class LocalModelInstallerTest {
             assertTrue(e.license!!.isNotBlank())
             assertTrue(e.licenseUrl!!.startsWith("https://"))
             assertTrue(e.attribution!!.isNotBlank())
-            assertFalse(e.distributionApproved)
+            assertFalse(e.licenseAuditComplete)
         }
         assertTrue(ModelCatalogEntry.FunAsrNano.downloadOffered(testBuild = false))
         assertTrue(ModelCatalogEntry.FunAsrNano.downloadBase!!.contains("/resolve/6f16bd378457e13f36ccf3910df9017f96c346fb"))

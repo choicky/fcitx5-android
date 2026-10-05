@@ -17,9 +17,10 @@ import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 internal data class ModelFile(val path: String, val size: Long, val sha256: String)
 
 /**
- * The Model Manager catalog (D037). Files are fetched from the pinned upstream revision at
+ * The Model Manager catalog. Files are fetched from the pinned upstream revision at
  * [downloadBase] or [archiveUrl] (never mirrored or bundled) and always checked against the
- * pinned SHA-256.
+ * pinned SHA-256. Offering the in-app fixed-upstream download is a separate decision (D050) from
+ * whether an independent license/provenance audit is complete ([licenseAuditComplete]).
  */
 internal data class ModelCatalogEntry(
     val model: LocalAsrModel,
@@ -36,11 +37,17 @@ internal data class ModelCatalogEntry(
     val license: String? = null,
     val licenseUrl: String? = null,
     val attribution: String? = null,
-    val distributionApproved: Boolean = false,
+    /**
+     * Whether an independent license/provenance audit is complete for this entry. It does not
+     * gate the download: [downloadOffered] does. While false, the details show an accurate
+     * "audit pending" note, not a claim that the model is research-only or that its download is
+     * unapproved (D059A).
+     */
+    val licenseAuditComplete: Boolean = false,
     val limitation: String? = null,
     /**
-     * The download is the owner's personal-testing exception (D037, 2026-09-28): offered only
-     * in test (debug) builds. It says nothing about public-release eligibility.
+     * Reserved for an entry whose pinned download must be offered only in test (debug) builds.
+     * No current entry uses it; the D050 production set is offered in debug and release alike.
      */
     val testBuildDownloadOnly: Boolean = false
 ) {
@@ -66,7 +73,7 @@ internal data class ModelCatalogEntry(
     companion object {
         /**
          * Fun-ASR-Nano ONNX export. ModelScope declares Apache-2.0, but the exporter source
-         * repository has no LICENSE, so public approval remains separately recorded.
+         * repository has no LICENSE, so the audit-pending note remains separately recorded.
          */
         val FunAsrNano = ModelCatalogEntry(
             LocalAsrModel.FunAsrNano,
@@ -85,7 +92,7 @@ internal data class ModelCatalogEntry(
             license = "Apache-2.0 (ModelScope metadata; exporter source has no LICENSE)",
             licenseUrl = "https://www.modelscope.cn/models/zengshuishui/FunASR-nano-onnx",
             attribution = "FunAudioLLM/Fun-ASR-Nano-2512; Wasser1462/FunASR-nano-onnx; zengshuishui ONNX export",
-            limitation = "Research model; the tested export produced empty final results for about 34–39 second utterances."
+            limitation = "The tested export produced empty final results for about 34–39 second utterances."
         )
 
         /** Exact files extracted from the pinned GitHub archive. */

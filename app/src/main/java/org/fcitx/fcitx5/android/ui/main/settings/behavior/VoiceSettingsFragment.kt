@@ -628,8 +628,8 @@ class VoiceSettingsFragment : PaddingPreferenceFragment() {
             append("\n\n").append(getString(R.string.voice_v2_download_source, it))
         }
         entry.limitation?.let { append("\n\n").append(it) }
-        if (!entry.distributionApproved) {
-            append("\n\n").append(getString(R.string.voice_model_research_status))
+        if (!entry.licenseAuditComplete) {
+            append("\n\n").append(getString(R.string.voice_model_audit_pending))
         }
     }
 

@@ -19,7 +19,8 @@ internal data class ModelRow(val status: ModelStatus, val actions: List<ModelAct
 
 /**
  * The row for one catalog model: its status and exactly the actions that apply.
- * [downloadOffered] carries the licence gate (A only in test builds, D037); [enabled] and
+ * [downloadOffered] carries the fixed-upstream download gate (a testBuildDownloadOnly entry is
+ * hidden in release); [enabled] and
  * [current] are the model's own service in the selection. [stagedBytes] is only read when no
  * task runs.
  */

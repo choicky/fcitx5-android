@@ -66,8 +66,10 @@ class XAsrModelTest {
             assertEquals(model.requiredFiles.toSet(), entry.files.map { it.path }.toSet())
             assertEquals(4, entry.files.size)
             assertNull(entry.downloadBase)
-            assertFalse(entry.distributionApproved)
+            assertFalse(entry.licenseAuditComplete)
             assertTrue(entry.downloadOffered(true))
+            // D050: the fixed-upstream download is offered in release builds too, not test-only
+            assertTrue(entry.downloadOffered(false))
             val row = modelRow(false, null, false, { 0 }, entry.downloadOffered(true), false, false)
             assertEquals(listOf(ModelAction.Download, ModelAction.DownloadFrom, ModelAction.Import, ModelAction.Details), row.actions)
             assertEquals(listOf(ModelAction.Use, ModelAction.Remove, ModelAction.Details),
