@@ -65,34 +65,36 @@ val Project.signKeyBase64: String?
 val Project.signKeyFile: String?
     get() = epn("SIGN_KEY_FILE", "signKeyFile")
 
-private var signKeyTempFile: File? = null
+private val signingKeyTempFiles = mutableMapOf<String, File>()
+
+@OptIn(ExperimentalEncodingApi::class)
+private fun Project.signingKey(fileValue: String?, base64Value: String?, tempPrefix: String): File? {
+    fileValue?.let {
+        val file = File(it)
+        if (file.exists()) return file
+    }
+    base64Value?.let { value ->
+        val cached = signingKeyTempFiles[tempPrefix]
+        if (cached?.exists() == true) return cached
+        val buildDir = layout.buildDirectory.asFile.get()
+        buildDir.mkdirs()
+        val file = File.createTempFile(tempPrefix, ".ks", buildDir)
+        return try {
+            file.writeBytes(Base64.decode(value))
+            file.deleteOnExit()
+            signingKeyTempFiles[tempPrefix] = file
+            file
+        } catch (e: Exception) {
+            println(e.localizedMessage ?: e.stackTraceToString())
+            file.delete()
+            null
+        }
+    }
+    return null
+}
 
 val Project.signKey: File?
-    get() {
-        signKeyFile?.let {
-            val file = File(it)
-            if (file.exists()) return file
-        }
-        @OptIn(ExperimentalEncodingApi::class)
-        signKeyBase64?.let {
-            if (signKeyTempFile?.exists() == true) {
-                return signKeyTempFile
-            }
-            val buildDir = layout.buildDirectory.asFile.get()
-            buildDir.mkdirs()
-            val file = File.createTempFile("sign-", ".ks", buildDir)
-            try {
-                file.writeBytes(Base64.decode(it))
-                file.deleteOnExit()
-                signKeyTempFile = file
-                return file
-            } catch (e: Exception) {
-                println(e.localizedMessage ?: e.stackTraceToString())
-                file.delete()
-            }
-        }
-        return null
-    }
+    get() = signingKey(signKeyFile, signKeyBase64, "sign-")
 
 val Project.signKeyPwd: String?
     get() = epn("SIGN_KEY_PWD", "signKeyPwd")
@@ -103,30 +105,29 @@ val Project.signKeyAlias: String?
 val Project.debugSignKeyBase64: String?
     get() = epn("DEBUG_SIGN_KEY_BASE64", "debugSignKeyBase64")
 
+val Project.debugSignKeyFile: String?
+    get() = epn("DEBUG_SIGN_KEY_FILE", "debugSignKeyFile")
+
 val Project.debugSignKeyPwd: String?
     get() = epn("DEBUG_SIGN_KEY_PWD", "debugSignKeyPwd")
+
+// Preferred locally: a path to a file containing the password, so the secret never
+// has to appear in a command line, shell history or checked-in properties.
+val Project.debugSignKeyPwdFile: String?
+    get() = epn("DEBUG_SIGN_KEY_PWD_FILE", "debugSignKeyPwdFile")
 
 val Project.debugSignKeyAlias: String?
     get() = epn("DEBUG_SIGN_KEY_ALIAS", "debugSignKeyAlias")
 
-private var debugSignKeyTempFile: File? = null
+private fun Project.debugSignKey(): File? =
+    signingKey(debugSignKeyFile, debugSignKeyBase64, "debug-sign-")
 
-@OptIn(ExperimentalEncodingApi::class)
-private fun Project.debugSignKey(): File? {
-    debugSignKeyBase64 ?: return null
-    if (debugSignKeyTempFile?.exists() == true) return debugSignKeyTempFile
-    val buildDir = layout.buildDirectory.asFile.get()
-    buildDir.mkdirs()
-    val file = File.createTempFile("debug-sign-", ".ks", buildDir)
-    return try {
-        file.writeBytes(Base64.decode(debugSignKeyBase64!!))
-        file.deleteOnExit()
-        debugSignKeyTempFile = file
-        file
-    } catch (e: Exception) {
-        file.delete()
-        null
+private fun Project.debugSignKeyPassword(): String? {
+    debugSignKeyPwdFile?.let {
+        val file = File(it)
+        if (file.exists()) return file.readText().trim()
     }
+    return debugSignKeyPwd
 }
 
 fun NamedDomainObjectContainer<out ApkSigningConfig>.fromProjectEnv(
@@ -138,7 +139,7 @@ fun NamedDomainObjectContainer<out ApkSigningConfig>.fromProjectEnv(
     val alias: String?
     if (name == "debug") {
         keyFile = project.debugSignKey()
-        password = project.debugSignKeyPwd
+        password = project.debugSignKeyPassword()
         alias = project.debugSignKeyAlias
     } else {
         keyFile = project.signKey
