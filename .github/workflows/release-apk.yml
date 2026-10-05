@@ -10,17 +10,36 @@ name: Release APK
 #
 # The release variant carries applicationIdSuffix ".fusionenhanced", so these
 # builds can be installed next to the official Fcitx5 and updated in place.
+#
+# D063: a workflow_dispatch run against an existing v* tag stages the signed
+# APK as a draft release (draft input, default true) for device acceptance;
+# publishing that draft later promotes the exact bytes without a rebuild.
+# Tag-push behavior is unchanged: it publishes the release directly.
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing v* tag to build one signed release candidate for"
+        required: true
+        type: string
+      draft:
+        description: "Stage as a draft release for device acceptance (publish later without rebuilding)"
+        required: false
+        type: boolean
+        default: true
 
 # Pinned for reproducibility: rebuilding a tag must use exactly this commit of
 # fcitx5-chinese-addons, not whatever the branch points at by then. The commit
 # and the MoQi table hash are recorded in the release notes by this workflow.
 env:
   ADDON_COMMIT: 9b3448e6b3889e4281ea39e334c7e5714f8a8b12
+  # D058 permanent signing identity (public certificate fingerprint). Any run
+  # whose signer differs fails before a release asset exists.
+  D058_CERT_SHA256: A515B74AC4C3845154E17CADD13D0275BE7001DDCF2B972A4F2F061AFD26890C
 
 permissions:
   contents: write
@@ -29,10 +48,20 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
+      - name: Validate the release tag
+        run: |
+          case "$RELEASE_TAG" in
+            v[0-9]*) ;;
+            *) echo "refusing to release a non v* tag: $RELEASE_TAG"; exit 1 ;;
+          esac
+
       - name: Fetch source code
         uses: actions/checkout@v7
         with:
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
           submodules: recursive
 
@@ -137,13 +166,16 @@ jobs:
           test -n "$apksigner"
           cert=$($apksigner verify --print-certs "$apk" | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
           test -n "$cert"
+          cert_norm=$(printf '%s' "$cert" | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          test "$cert_norm" = "$D058_CERT_SHA256" || { echo "signer mismatch: APK cert is not the D058 release key"; exit 1; }
+          echo "D058 release signer fingerprint verified"
           {
             echo ""
             echo "## 可追溯性"
             echo ""
             echo "- fcitx5-chinese-addons：\`$addon\`"
             echo "- MoQi 码表 SHA256：\`$table\`"
-            echo "- fcitx5-android：\`$GITHUB_SHA\`（tag \`$GITHUB_REF_NAME\`）"
+            echo "- fcitx5-android：\`$GITHUB_SHA\`（tag \`$RELEASE_TAG\`）"
             echo "- APK 文件名：\`$apk_name\`"
             echo "- APK SHA256：\`$apk_sha256\`"
             echo "- APK signing certificate SHA-256：\`$cert\`"
@@ -156,9 +188,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="$RELEASE_TAG"
+          draft_args=()
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "${{ inputs.draft }}" = "true" ]; then
+            draft_args+=(--draft)
+            echo "staging draft release for device acceptance; publish it later without rebuilding"
+          fi
           gh release create "$tag" fcitx5-android-fusion-enhanced-release/*.apk \
             --repo "$GITHUB_REPOSITORY" \
             --title "fcitx5-android-fusion-enhanced $tag" \
             --notes-file .github/moqi-release-notes.md \
-            --verify-tag
+            --verify-tag \
+            "${draft_args[@]}"
