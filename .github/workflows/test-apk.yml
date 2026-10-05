@@ -1,0 +1,172 @@
+name: Test APK
+
+# Builds an installable debug APK of fcitx5-android against
+# choicky/fcitx5-chinese-addons@feature/moqi-filter, so that the Auxiliary
+# Filter configuration (Disabled / Stroke / MoQi) can be verified on a real
+# device. The debug build gets its own applicationId suffix, so it can be
+# installed next to the official fcitx5-android build. Only arm64-v8a is
+# built to keep the job short.
+
+on:
+  push:
+    branches:
+      - moqi-test-apk
+      - phase4-voice-poc
+      - phase5c-dictionary-manager
+  workflow_dispatch:
+
+concurrency:
+  # Fusion Enhanced debug/test APK build. The group literal matches the
+  # workflow identity ("Test APK"). The file was renamed from the historical
+  # `moqi-test-apk.yml` path on 2026-10-05; GitHub keys workflow identity to
+  # the path, so pre-existing runs stay grouped under the old record and new
+  # runs register under .github/workflows/test-apk.yml.
+  group: test-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ADDON_COMMIT: 9b3448e6b3889e4281ea39e334c7e5714f8a8b12
+
+jobs:
+  build_debug_apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Fetch source code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Check out the pinned MoQi auxiliary filter commit
+        run: |
+          cd lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
+          git fetch --depth 1 https://github.com/choicky/fcitx5-chinese-addons.git "$ADDON_COMMIT"
+          git checkout --detach "$ADDON_COMMIT"
+          test "$(git rev-parse HEAD)" = "$ADDON_COMMIT"
+          git log --oneline -1
+          grep -q "AuxiliaryFilter" im/pinyin/pinyin.h
+          grep -q "AuxiliaryFilter" test/testpinyin.cpp
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android environment
+        uses: android-actions/setup-android@v4
+
+      - name: Install CMake
+        run: sdkmanager --install "cmake;3.31.6"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y extra-cmake-modules gettext
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build debug APK (arm64-v8a)
+        env:
+          DEBUG_SIGN_KEY_BASE64: ${{ secrets.DEBUG_SIGN_KEY_BASE64 }}
+          DEBUG_SIGN_KEY_PWD: ${{ secrets.DEBUG_SIGN_KEY_PWD }}
+          DEBUG_SIGN_KEY_ALIAS: ${{ secrets.DEBUG_SIGN_KEY_ALIAS }}
+        run: BUILD_ABI=arm64-v8a ./gradlew :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Compile the release variant (Kotlin only, no APK)
+        # checks the release/debug source-set boundary (for example the Local ASR stub)
+        # without signing or packaging a release build
+        run: BUILD_ABI=arm64-v8a ./gradlew :app:compileReleaseKotlin
+
+      - name: Compile the instrumented tests (not run, CI has no device)
+        run: BUILD_ABI=arm64-v8a ./gradlew :app:compileDebugAndroidTestKotlin
+
+      - name: Report APK
+        run: ls -l app/build/outputs/apk/debug/
+
+      - name: Rename debug APK version identifier for the Fusion distribution line
+        run: |
+          set -euo pipefail
+          mkdir -p fcitx5-android-fusion-enhanced-apk
+          mapfile -t apks < <(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print)
+          test "${#apks[@]}" = 1
+          apk=${apks[0]}
+          original=${apk##*/}
+          input_prefix=org.fcitx.fcitx5.android-
+          target_prefix=org.fcitx.fcitx5.android.debug-
+          case "$original" in "$input_prefix"*) ;; *) echo "unexpected Gradle APK prefix: $original"; exit 1 ;; esac
+          version=${original#"$input_prefix"}
+          case "$version" in *.apk) ;; *) echo "unexpected Gradle APK version suffix: $version"; exit 1 ;; esac
+          expected_version="$version"
+          renamed="$target_prefix$expected_version"
+          digest=$(sha256sum "$apk" | cut -d' ' -f1)
+          mv "$apk" "fcitx5-android-fusion-enhanced-apk/$renamed"
+          test "$digest" = "$(sha256sum "fcitx5-android-fusion-enhanced-apk/$renamed" | cut -d' ' -f1)"
+          case "$renamed" in "$target_prefix"*) ;; *) echo "renamed APK prefix changed: $renamed"; exit 1 ;; esac
+          test "${renamed#"$target_prefix"}" = "$expected_version"
+          test -f "fcitx5-android-fusion-enhanced-apk/$renamed"
+          sha256sum "fcitx5-android-fusion-enhanced-apk/$renamed"
+          artifact_version=${version%-debug.apk}
+          case "$artifact_version" in *-arm64-v8a) ;; *) echo "unexpected debug ABI/version suffix: $artifact_version"; exit 1 ;; esac
+          echo "TEST_ARTIFACT_NAME=fcitx5-android-fusion-enhanced-${artifact_version}-test" >> "$GITHUB_ENV"
+
+      - name: Verify the APK packs the MoQi table and the filter code
+        # No staging step above on purpose: the table has to reach the APK
+        # through the addon's own install rule, exactly like a normal build.
+        run: |
+          python3 - <<'PY'
+          import glob
+          import hashlib
+          import zipfile
+
+          PINNED = "66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923"
+          EXPECTED = "assets/usr/share/fcitx5/pinyinhelper/moqima_gb18030.txt"
+          apks = glob.glob("fcitx5-android-fusion-enhanced-apk/*.apk")
+          assert len(apks) == 1, f"expected exactly one APK, found {len(apks)}"
+          with zipfile.ZipFile(apks[0]) as zf:
+              names = zf.namelist()
+              print("MoQi table present:", EXPECTED in names)
+              assert EXPECTED in names, f"MoQi table missing from APK assets: {EXPECTED}"
+              digest = hashlib.sha256(zf.read(EXPECTED)).hexdigest()
+              print("packed table sha256:", digest)
+              assert digest == PINNED, "packed table does not match the pinned hash"
+              pinyin = zf.read("lib/arm64-v8a/libpinyin.so")
+              assert b"AuxiliaryFilter" in pinyin, (
+                  "libpinyin.so does not look like the auxiliary filter build"
+              )
+              manifest = zf.read("AndroidManifest.xml")
+              assert "org.fcitx.fcitx5.android.debug".encode("utf-16-le") in manifest, (
+                  "APK does not carry the .debug package id"
+              )
+          print("APK content checks passed")
+          PY
+
+      - name: Verify the fixed debug APK signature
+        env:
+          # D064 Fusion Enhanced Debug identity: CN=Fcitx5 Fusion Enhanced Debug, O=choicky, C=CN
+          EXPECTED_DEBUG_CERT_SHA256: DC:49:71:82:C5:48:66:34:FD:68:E5:71:B8:78:A3:3E:CE:A6:8B:DA:D2:05:C3:D6:1A:ED:09:B9:83:92:A5:6A
+        run: |
+          set -euo pipefail
+          apk=$(find fcitx5-android-fusion-enhanced-apk -name '*.apk' -print -quit)
+          test -n "$apk"
+          aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f -print -quit)
+          package=$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")
+          test "$package" = org.fcitx.fcitx5.android.debug
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -print -quit)
+          digest=$("$apksigner" verify --print-certs "$apk" |
+            sed -n 's/.*certificate SHA-256 digest: //p' | head -1 |
+            tr -d ':' | tr '[:lower:]' '[:upper:]')
+          test "${#digest}" = 64
+          cert=$(echo "$digest" | sed 's/../&:/g; s/:$//')
+          echo "APK package: $package"
+          echo "APK certificate SHA-256: $cert"
+          test "$cert" = "$EXPECTED_DEBUG_CERT_SHA256"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.TEST_ARTIFACT_NAME }}
+          path: fcitx5-android-fusion-enhanced-apk/*.apk
+          if-no-files-found: error
