@@ -57,7 +57,8 @@ class IdleUi(
         Empty, Toolbar, Clipboard, NumberRow, InlineSuggestion
     }
 
-    var currentState = State.Empty
+    // default is expanded (KawaiiBarComponent.isToolbarCollapsed == false)
+    var currentState = State.Toolbar
         private set
 
     private var voiceInputButton = false
@@ -105,6 +106,9 @@ class IdleUi(
         add(buttonsUi.root, lParams(matchParent, matchParent))
         add(clipboardUi.root, lParams(matchParent, matchParent))
         add(inlineSuggestionsBar.root, lParams(matchParent, matchParent))
+        // constructed page must equal the default logical state (expanded);
+        // a missed first onStartInput dispatch must not strand the bar on emptyBar
+        displayedChild = 1
     }
 
     private val inAnimation by lazy {
