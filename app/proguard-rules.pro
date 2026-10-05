@@ -14,13 +14,16 @@
     public <init>(...);
 }
 
-# sherpa-onnx 1.13.8 reads Kotlin configuration fields by their source names
-# from JNI (for example maxActivePaths). Its AAR does not provide consumer
-# rules, and release shrinking otherwise removes fields that are only read by
-# native code.
--keepclassmembers class com.k2fsa.sherpa.onnx.** {
-    <fields>;
-}
+# sherpa-onnx 1.13.8 exposes its Kotlin wrapper classes to native JNI. Native
+# code finds these classes by their source names (FindClass), constructs result
+# objects through their constructors (NewObject, e.g. OfflineRecognizerResult and
+# OnlineRecognizerResult), and reads configuration fields by source name (e.g.
+# maxActivePaths). The AAR ships no consumer rules (proguard.txt is empty), so
+# release shrinking removes members only referenced from native code. The earlier
+# fields-only keep was insufficient: R8 removed the JNI-constructed
+# OfflineRecognizerResult(...) constructor, causing NoSuchMethodError on device.
+# Keep the complete JNI-facing wrapper surface (classes + all members).
+-keep class com.k2fsa.sherpa.onnx.** { *; }
 
 # Keep dependency magic
 -keep class ** extends org.mechdancer.dependency.Component {
