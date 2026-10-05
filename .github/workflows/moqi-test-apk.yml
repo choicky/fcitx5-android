@@ -1,0 +1,19 @@
+name: Test APK
+
+# Default-branch identity anchor for the "Test APK" workflow
+# (GitHub records workflow display names per file path against the default
+# branch; the sidebar and run titles resolve from that record, not from
+# per-branch copies). The real build definition lives on the product and
+# contribution branches; this placeholder must never execute.
+
+on:
+  push:
+    branches:
+      - "name-anchor/workflow-display-test-apk"
+
+jobs:
+  anchor:
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "intentionally inert workflow-name anchor"
