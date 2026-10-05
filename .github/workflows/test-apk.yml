@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ADDON_COMMIT: 9b3448e6b3889e4281ea39e334c7e5714f8a8b12
+  ADDON_COMMIT: 47401b04681615024e4cf87c4797005b26e202ff
 
 jobs:
   build_debug_apk:
