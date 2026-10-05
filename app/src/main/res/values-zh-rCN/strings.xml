@@ -332,7 +332,7 @@
     <string name="start_voice_input">开始语音输入</string>
     <string name="stop_voice_input">停止语音输入</string>
     <string name="voice_input_unavailable">没有可用的语音识别服务</string>
-    <string name="voice_input_error">语音输入失败（错误 %1$d）</string>
+    <string name="voice_input_error">Android 系统语音识别失败（错误 %1$d）。请检查系统的语音识别设置，或在“语音输入”设置中改用其他语音服务。</string>
     <string name="voice_capture_error">麦克风采集失败：%1$s</string>
     <string name="voice_capture_probe">语音输入：麦克风采集探针（调试）</string>
     <string name="voice_doubao_asr">语音输入：豆包云端识别（调试）</string>

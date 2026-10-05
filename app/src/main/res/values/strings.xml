@@ -332,7 +332,7 @@
     <string name="start_voice_input">Start voice input</string>
     <string name="stop_voice_input">Stop voice input</string>
     <string name="voice_input_unavailable">No speech recognition service is available</string>
-    <string name="voice_input_error">Voice input failed (error %1$d)</string>
+    <string name="voice_input_error">Android speech recognition failed (error %1$d). Check the system speech-recognition settings, or choose another voice service in Voice Input settings.</string>
     <string name="voice_capture_error">Microphone capture failed: %1$s</string>
     <string name="voice_capture_probe">Voice input: microphone capture probe (debug)</string>
     <string name="voice_doubao_asr">Voice input: Doubao cloud ASR (debug)</string>

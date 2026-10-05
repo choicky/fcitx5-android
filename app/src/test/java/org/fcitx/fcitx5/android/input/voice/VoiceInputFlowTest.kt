@@ -5,6 +5,7 @@
 
 package org.fcitx.fcitx5.android.input.voice
 
+import android.speech.SpeechRecognizer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -405,6 +406,17 @@ class VoiceInputFlowTest {
             assertNull(local.startedToken)
             assertEquals(VoiceInputSession.State.Idle, flow.state)
         }
+    }
+
+    @Test
+    fun systemAsrClientErrorIsReportedNotSwallowedAndNeverFallsBack() {
+        val local = FakeBackend()
+        val token = startWithFallback(FakeBackend(), local)
+        flow.onError(token, systemAsrVoiceError(SpeechRecognizer.ERROR_CLIENT))
+        assertEquals(listOf<VoiceError>(VoiceError.System(SpeechRecognizer.ERROR_CLIENT)), output.errors)
+        assertTrue(output.fallbacks.isEmpty())
+        assertNull(local.startedToken)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
     }
 
     @Test

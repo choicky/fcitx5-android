@@ -62,13 +62,7 @@ internal class SystemAsrBackend(private val context: Context) : VoiceBackend {
 
         override fun onError(error: Int) {
             Timber.w("Voice input failed with SpeechRecognizer error $error")
-            val mapped = when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH,
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
-                SpeechRecognizer.ERROR_CLIENT -> VoiceError.Silent
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> VoiceError.PermissionDenied
-                else -> VoiceError.System(error)
-            }
+            val mapped = systemAsrVoiceError(error)
             release()
             events.onError(token, mapped)
         }
@@ -98,4 +92,16 @@ internal class SystemAsrBackend(private val context: Context) : VoiceBackend {
 
     private fun Bundle.transcripts(): List<String>? =
         getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+}
+
+/**
+ * Maps SpeechRecognizer listener codes to [VoiceError]. ERROR_CLIENT is a visible System failure,
+ * not silence: the verified vivo A/B (2026-10-04) showed the active RecognitionService rejecting
+ * sessions with code 5 on a binary that previously worked — no Fcitx regression, only a real fault.
+ */
+internal fun systemAsrVoiceError(error: Int): VoiceError = when (error) {
+    SpeechRecognizer.ERROR_NO_MATCH,
+    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> VoiceError.Silent
+    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> VoiceError.PermissionDenied
+    else -> VoiceError.System(error)
 }
