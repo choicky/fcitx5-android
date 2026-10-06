@@ -14,11 +14,16 @@ name: Arch A Device Acceptance APK
 # D064 Fusion Enhanced debug identity via the repo secrets
 # DEBUG_SIGN_KEY_BASE64 / DEBUG_SIGN_KEY_PWD / DEBUG_SIGN_KEY_ALIAS.
 #
-# Trigger: manual only (workflow_dispatch on feature/mixed-input-arch-a).
-# No push/tag triggers, so it can never fire as part of a release flow.
-
+# Trigger: manual (workflow_dispatch on feature/mixed-input-arch-a) plus a
+# temporary push trigger on this branch only — GitHub registers a workflow
+# record (and therefore makes workflow_dispatch resolvable) solely after the
+# first event runs the file. Same one-time registration path the Release APK
+# workflow took via its tag push. Nothing triggers on tags or releases.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/mixed-input-arch-a
 
 concurrency:
   group: arch-a-device-acceptance-apk-${{ github.ref }}
