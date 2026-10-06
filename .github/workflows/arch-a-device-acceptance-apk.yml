@@ -1,0 +1,166 @@
+name: Arch A Device Acceptance APK
+
+# Development-only device-acceptance build for Architecture A.
+# Produces an installable debug APK from THIS branch's own submodule pins —
+# in particular fcitx5-chinese-addons at the Final Ranking Closure head —
+# and uploads it as a downloadable artifact so phones can install it without
+# a development computer.
+#
+# This workflow exists because the shared `Test APK` workflow cannot build
+# this branch: it hardcodes ADDON_COMMIT 47401b04 (the production/release
+# pin, which is not an ancestor of the Architecture A lineage) and force-
+# checks it out over the branch pin. Nothing here changes the production
+# `Release APK` workflow or the release pin; signing reuses the existing
+# D064 Fusion Enhanced debug identity via the repo secrets
+# DEBUG_SIGN_KEY_BASE64 / DEBUG_SIGN_KEY_PWD / DEBUG_SIGN_KEY_ALIAS.
+#
+# Trigger: manual only (workflow_dispatch on feature/mixed-input-arch-a).
+# No push/tag triggers, so it can never fire as part of a release flow.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: arch-a-device-acceptance-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Exact addons revision this artifact must embed (Architecture A Final
+  # Ranking Closure head: 860ed68 bounded insertion class + 57d72c2 corpus).
+  EXPECTED_ADDONS_COMMIT: 57d72c20f40f7269a65483d493a1bb2c77447b23
+  RANKING_FIX_COMMIT: 860ed68
+  # Production English lexicon that must be packaged in the APK.
+  ENGLISH_LEXICON_SHA256: defcefe35b4ab00a9f262fd3f0e8bfa62a3aee66a2b26cb3711f5e7de9ec6daf
+
+jobs:
+  build_device_acceptance_apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Fetch source code with the branch's submodule pins
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Verify the pinned Architecture A addons revision
+        run: |
+          set -euo pipefail
+          cd lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
+          test "$(git rev-parse HEAD)" = "$EXPECTED_ADDONS_COMMIT"
+          git merge-base --is-ancestor "$RANKING_FIX_COMMIT" HEAD
+          git log --oneline -3
+          grep -q "isBoundedInsertionClass" im/pinyin/mixed/unifiedranker.h
+          grep -q "testMixedRankingCorpus" test/testpinyin.cpp
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android environment
+        uses: android-actions/setup-android@v4
+
+      - name: Install CMake
+        run: sdkmanager --install "cmake;3.31.6"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y extra-cmake-modules gettext
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build debug APK (arm64-v8a)
+        env:
+          DEBUG_SIGN_KEY_BASE64: ${{ secrets.DEBUG_SIGN_KEY_BASE64 }}
+          DEBUG_SIGN_KEY_PWD: ${{ secrets.DEBUG_SIGN_KEY_PWD }}
+          DEBUG_SIGN_KEY_ALIAS: ${{ secrets.DEBUG_SIGN_KEY_ALIAS }}
+        run: BUILD_ABI=arm64-v8a ./gradlew :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Stage the installable APK
+        run: |
+          set -euo pipefail
+          mkdir -p device-acceptance-apk
+          mapfile -t apks < <(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print)
+          test "${#apks[@]}" = 1
+          apk=${apks[0]}
+          cp "$apk" "device-acceptance-apk/${apk##*/}"
+          sha256sum "device-acceptance-apk/${apk##*/}"
+          ls -l device-acceptance-apk/
+
+      - name: Verify the APK packs the production lexicon and the mixed engine
+        run: |
+          python3 - <<'PY'
+          import glob
+          import hashlib
+          import zipfile
+
+          PINNED = "defcefe35b4ab00a9f262fd3f0e8bfa62a3aee66a2b26cb3711f5e7de9ec6daf"
+          EXPECTED = "assets/usr/share/fcitx5/pinyin/english_lexicon.tsv"
+          apks = glob.glob("device-acceptance-apk/*.apk")
+          assert len(apks) == 1, f"expected exactly one APK, found {len(apks)}"
+          with zipfile.ZipFile(apks[0]) as zf:
+              names = zf.namelist()
+              assert EXPECTED in names, f"English lexicon missing from APK assets: {EXPECTED}"
+              digest = hashlib.sha256(zf.read(EXPECTED)).hexdigest()
+              print("packed english_lexicon.tsv sha256:", digest)
+              assert digest == PINNED, "packed lexicon does not match the production hash"
+              pinyin = zf.read("lib/arm64-v8a/libpinyin.so")
+              assert b"MixedCandidateWord" in pinyin, (
+                  "libpinyin.so does not look like the Architecture A mixed build"
+              )
+              manifest = zf.read("AndroidManifest.xml")
+              assert "org.fcitx.fcitx5.android.debug".encode("utf-16-le") in manifest, (
+                  "APK does not carry the .debug package id"
+              )
+          print("APK content checks passed")
+          PY
+
+      - name: Verify the fixed debug APK signature
+        env:
+          # D064 Fusion Enhanced Debug identity: CN=Fcitx5 Fusion Enhanced Debug, O=choicky, C=CN
+          EXPECTED_DEBUG_CERT_SHA256: DC:49:71:82:C5:48:66:34:FD:68:E5:71:B8:78:A3:3E:CE:A6:8B:DA:D2:05:C3:D6:1A:ED:09:B9:83:92:A5:6A
+        run: |
+          set -euo pipefail
+          apk=$(find device-acceptance-apk -name '*.apk' -print -quit)
+          test -n "$apk"
+          aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f -print -quit)
+          package=$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")
+          test "$package" = org.fcitx.fcitx5.android.debug
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -print -quit)
+          digest=$("$apksigner" verify --print-certs "$apk" |
+            sed -n 's/.*certificate SHA-256 digest: //p' | head -1 |
+            tr -d ':' | tr '[:lower:]' '[:upper:]')
+          test "${#digest}" = 64
+          cert=$(echo "$digest" | sed 's/../&:/g; s/:$//')
+          echo "APK package: $package"
+          echo "APK certificate SHA-256: $cert"
+          test "$cert" = "$EXPECTED_DEBUG_CERT_SHA256"
+
+      - name: Record the acceptance fingerprint
+        run: |
+          set -euo pipefail
+          apk=$(find device-acceptance-apk -name '*.apk' -print -quit)
+          {
+            echo "architecture-a-device-acceptance fingerprint"
+            echo "android branch: ${GITHUB_REF_NAME}"
+            echo "android commit: $(git rev-parse HEAD)"
+            echo "android describe: $(git describe --tags --always)"
+            echo "addons commit (pinned submodule): $(git -C lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons rev-parse HEAD)"
+            echo "apk file: ${apk##*/}"
+            echo "apk bytes: $(stat -c %s "$apk")"
+            echo "apk sha256: $(sha256sum "$apk" | cut -d' ' -f1)"
+            echo "package: org.fcitx.fcitx5.android.debug"
+            echo "signing: D064 Fusion Enhanced Debug (DC:49:71:82:...:A5:6A)"
+          } > device-acceptance-apk/FINGERPRINT.txt
+          cat device-acceptance-apk/FINGERPRINT.txt
+
+      - name: Upload the device-acceptance artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: fcitx5-fusion-architecture-a-device-acceptance-apk
+          path: device-acceptance-apk/*
+          if-no-files-found: error
