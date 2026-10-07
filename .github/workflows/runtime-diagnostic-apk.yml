@@ -33,9 +33,9 @@ env:
   # Exact addons revision this artifact must embed (MIXEDDIAG
   # instrumentation on top of the fused Final Ranking Closure head).
   EXPECTED_ADDONS_COMMIT: d75ed439f57d2669fd1b698900aa9cc5a2cb9713
-  FUSED_BASE_COMMIT: dd81e1b
-  RANKING_FIX_COMMIT: 860ed68
-  AUX_FILTER_COMMIT: 0220285
+  FUSED_BASE_COMMIT: "dd81e1b"
+  RANKING_FIX_COMMIT: "860ed68"
+  AUX_FILTER_COMMIT: "0220285"
   # Production English lexicon that must be packaged in the APK.
   ENGLISH_LEXICON_SHA256: defcefe35b4ab00a9f262fd3f0e8bfa62a3aee66a2b26cb3711f5e7de9ec6daf
 
