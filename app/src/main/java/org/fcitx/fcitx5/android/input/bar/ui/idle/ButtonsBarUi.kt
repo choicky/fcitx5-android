@@ -17,6 +17,7 @@ import org.fcitx.fcitx5.android.input.bar.ToolbarAction
 import splitties.dimensions.dp
 import splitties.views.dsl.core.Ui
 import splitties.views.dsl.core.view
+import timber.log.Timber
 
 class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
 
@@ -71,7 +72,18 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
     }
 
     private fun renderMeasured() {
-        if (root.width <= 0) return
+        // TOOLDIAG: dev-only observation records (Phase 3A-1 Part 7).
+        // Log only: no timers, delays, retries or state changes; delete
+        // these lines wholesale when the toolbar observation phase closes.
+        Timber.d(
+            "TOOLDIAG renderMeasured enter width=${root.width}" +
+                " actions=${configuredActions.size}" +
+                " children=${root.childCount}"
+        )
+        if (root.width <= 0) {
+            Timber.d("TOOLDIAG renderMeasured exit earlyWidth")
+            return
+        }
         root.removeAllViews()
         val result = ToolbarAction.presentationActions(configuredActions) { actions ->
             val availableWidth = root.width - root.paddingLeft - root.paddingRight
@@ -84,17 +96,42 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
                 val width = params?.width?.takeIf { it > 0 } ?: button.measuredWidth
                 width + margins
             }
-            requiredWidth <= availableWidth
+            val fits = requiredWidth <= availableWidth
+            Timber.d(
+                "TOOLDIAG renderMeasured fitCheck avail=$availableWidth" +
+                    " required=$requiredWidth candidates=${actions.size}" +
+                    " fits=$fits"
+            )
+            fits
         }
-        val actions = (result as? ToolbarAction.PresentationResult.Fits)?.actions ?: return
+        val actions = (result as? ToolbarAction.PresentationResult.Fits)?.actions
+        if (actions == null) {
+            Timber.d(
+                "TOOLDIAG renderMeasured exit notFits result=$result" +
+                    " children=${root.childCount}"
+            )
+            return
+        }
         actions.forEach { action ->
             buttons[action]?.let(root::addView)
         }
+        Timber.d(
+            "TOOLDIAG renderMeasured done width=${root.width}" +
+                " rendered=${actions.size} children=${root.childCount}"
+        )
     }
 
     init {
         root.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
-            if (right - left != oldRight - oldLeft) renderMeasured()
+            val newWidth = right - left
+            val oldWidth = oldRight - oldLeft
+            if (newWidth != oldWidth) {
+                Timber.d(
+                    "TOOLDIAG layout widthChanged old=$oldWidth new=$newWidth" +
+                        " children=${root.childCount}"
+                )
+                renderMeasured()
+            }
         }
     }
 
