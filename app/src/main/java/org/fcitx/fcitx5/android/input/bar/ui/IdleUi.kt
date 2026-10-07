@@ -109,6 +109,11 @@ class IdleUi(
         // constructed page must equal the default logical state (expanded);
         // a missed first onStartInput dispatch must not strand the bar on emptyBar
         displayedChild = 1
+        // TOOLDIAG: dev-only construction record (removable diagnostics branch).
+        Timber.d(
+            "TOOLDIAG idleui-constructed displayedChild=$displayedChild" +
+                    " children=${childCount} currentState=$currentState"
+        )
     }
 
     private val inAnimation by lazy {
@@ -261,6 +266,11 @@ class IdleUi(
 
     fun updateState(state: State, fromUser: Boolean = false) {
         Timber.d("Switch idle ui to $state")
+        // TOOLDIAG: dev-only transition record (state + page only).
+        Timber.d(
+            "TOOLDIAG updateState ${currentState}->$state fromUser=$fromUser" +
+                    " pageBefore=${animator.displayedChild}"
+        )
         if (
             !fromUser ||
             disableAnimation ||
@@ -297,5 +307,6 @@ class IdleUi(
             popup.dismissAll()
         }
         currentState = state
+        Timber.d("TOOLDIAG updateState-done pageAfter=${animator.displayedChild}")
     }
 }

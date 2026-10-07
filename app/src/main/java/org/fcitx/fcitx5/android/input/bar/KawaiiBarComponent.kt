@@ -87,6 +87,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.min
+import timber.log.Timber
 
 class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(),
     InputBroadcastReceiver {
@@ -187,6 +188,14 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
             isCapabilityFlagsPassword && !isKeyboardLayoutNumber && numberRowState != NumberRowState.ForceHide -> IdleUi.State.NumberRow
             else -> if (isToolbarCollapsed) IdleUi.State.Empty else IdleUi.State.Toolbar
         }
+        // TOOLDIAG: dev-only runtime record (removable diagnostics branch;
+        // logs state inputs only, never editor content; no behaviour change).
+        Timber.d(
+            "TOOLDIAG eval fromUser=$fromUser newState=$newState current=${idleUi.currentState}" +
+                    " numberRow=$numberRowState clipboardFresh=$isClipboardFresh" +
+                    " inline=$isInlineSuggestionPresent password=$isCapabilityFlagsPassword" +
+                    " kbNumber=$isKeyboardLayoutNumber collapsed=$isToolbarCollapsed"
+        )
         if (newState == idleUi.currentState) return
         idleUi.updateState(newState, fromUser)
     }
@@ -501,6 +510,10 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
         idleUi.setVoiceInputButton(
             shouldShowVoiceInput,
             if (shouldShowVoiceInput) voiceInput.toggleCallback else hideKeyboardCallback
+        )
+        // TOOLDIAG: dev-only lifecycle record (state only; no editor content).
+        Timber.d(
+            "TOOLDIAG onStartInput current=${idleUi.currentState} voice=$shouldShowVoiceInput"
         )
         evalIdleUiState()
     }

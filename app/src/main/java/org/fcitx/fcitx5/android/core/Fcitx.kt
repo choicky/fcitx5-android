@@ -543,7 +543,9 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         DataManager.addOnNextSyncedCallback {
             FcitxPluginServices.connectAll()
         }
-        setupLogStream(AppPrefs.getInstance().internal.verboseLog.getValue())
+        // TOOLDIAG: dev-only diagnostics build forces the verbose fcitx log
+        // rule so MIXEDDIAG/TOOLDIAG records reach logcat; removable one-liner.
+        setupLogStream(true)
         dispatcher.start()
     }
 

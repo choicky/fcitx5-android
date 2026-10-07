@@ -1,0 +1,184 @@
+name: Runtime Diagnostic APK
+
+# Dev-only build for the Android runtime reality-gap investigation.
+# Produces exactly one installable debug APK carrying the removable
+# MIXEDDIAG / TOOLDIAG instrumentation branches
+# (addons feature/android-runtime-diagnostics, Android
+# feature/android-runtime-diagnostics). It logs gate booleans, placement
+# decisions and idle-bar lifecycle state with stable labels so logcat can
+# be filtered; it changes no candidate behaviour.
+#
+# This workflow is intentionally separate from `arch-a-device-acceptance-apk.yml`
+# and the production `Release APK` / `Test APK` workflows: it neither reuses
+# nor weakens their gates. It builds from THIS branch's own submodule pin
+# (no ADDON_COMMIT override). Signing reuses the D064 Fusion Enhanced debug
+# identity via the repo secrets DEBUG_SIGN_KEY_BASE64 / DEBUG_SIGN_KEY_PWD /
+# DEBUG_SIGN_KEY_ALIAS.
+#
+# Triggers: the push trigger registers the workflow and performs the single
+# diagnostic build for the current instrumentation commit; workflow_dispatch
+# allows a rebuild of the same commit if the artifact is lost.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/android-runtime-diagnostics
+
+concurrency:
+  group: runtime-diagnostic-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Exact addons revision this artifact must embed (MIXEDDIAG
+  # instrumentation on top of the fused Final Ranking Closure head).
+  EXPECTED_ADDONS_COMMIT: d75ed439f57d2669fd1b698900aa9cc5a2cb9713
+  FUSED_BASE_COMMIT: dd81e1b
+  RANKING_FIX_COMMIT: 860ed68
+  AUX_FILTER_COMMIT: 0220285
+  # Production English lexicon that must be packaged in the APK.
+  ENGLISH_LEXICON_SHA256: defcefe35b4ab00a9f262fd3f0e8bfa62a3aee66a2b26cb3711f5e7de9ec6daf
+
+jobs:
+  build_runtime_diagnostic_apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Fetch source code with the branch's submodule pins
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Verify the pinned diagnostics addons revision
+        run: |
+          set -euo pipefail
+          cd lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
+          test "$(git rev-parse HEAD)" = "$EXPECTED_ADDONS_COMMIT"
+          git merge-base --is-ancestor "$FUSED_BASE_COMMIT" HEAD
+          git merge-base --is-ancestor "$RANKING_FIX_COMMIT" HEAD
+          git merge-base --is-ancestor "$AUX_FILTER_COMMIT" HEAD
+          git log --oneline -3
+          grep -q "MIXEDDIAG" im/pinyin/pinyin.cpp
+          grep -q "isBoundedInsertionClass" im/pinyin/mixed/unifiedranker.h
+
+      - name: Verify the Android-side instrumentation is present
+        run: |
+          set -euo pipefail
+          grep -q "TOOLDIAG" app/src/main/java/org/fcitx/fcitx5/android/input/bar/KawaiiBarComponent.kt
+          grep -q "TOOLDIAG" app/src/main/java/org/fcitx/fcitx5/android/input/bar/ui/IdleUi.kt
+          grep -q "TOOLDIAG" app/src/main/java/org/fcitx/fcitx5/android/input/FcitxInputMethodService.kt
+          grep -q "TOOLDIAG" app/src/main/java/org/fcitx/fcitx5/android/core/Fcitx.kt
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android environment
+        uses: android-actions/setup-android@v4
+
+      - name: Install CMake
+        run: sdkmanager --install "cmake;3.31.6"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y extra-cmake-modules gettext
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build debug APK (arm64-v8a)
+        env:
+          DEBUG_SIGN_KEY_BASE64: ${{ secrets.DEBUG_SIGN_KEY_BASE64 }}
+          DEBUG_SIGN_KEY_PWD: ${{ secrets.DEBUG_SIGN_KEY_PWD }}
+          DEBUG_SIGN_KEY_ALIAS: ${{ secrets.DEBUG_SIGN_KEY_ALIAS }}
+        run: BUILD_ABI=arm64-v8a ./gradlew :app:assembleDebug
+
+      - name: Stage the installable APK
+        run: |
+          set -euo pipefail
+          mkdir -p runtime-diagnostic-apk
+          mapfile -t apks < <(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print)
+          test "${#apks[@]}" = 1
+          apk=${apks[0]}
+          cp "$apk" "runtime-diagnostic-apk/${apk##*/}"
+          sha256sum "runtime-diagnostic-apk/${apk##*/}"
+          ls -l runtime-diagnostic-apk/
+
+      - name: Verify the APK packs the diagnostics engine
+        run: |
+          python3 - <<'PY'
+          import glob
+          import hashlib
+          import zipfile
+
+          PINNED = "defcefe35b4ab00a9f262fd3f0e8bfa62a3aee66a2b26cb3711f5e7de9ec6daf"
+          EXPECTED = "assets/usr/share/fcitx5/pinyin/english_lexicon.tsv"
+          apks = glob.glob("runtime-diagnostic-apk/*.apk")
+          assert len(apks) == 1, f"expected exactly one APK, found {len(apks)}"
+          with zipfile.ZipFile(apks[0]) as zf:
+              names = zf.namelist()
+              assert EXPECTED in names, f"English lexicon missing from APK assets: {EXPECTED}"
+              digest = hashlib.sha256(zf.read(EXPECTED)).hexdigest()
+              print("packed english_lexicon.tsv sha256:", digest)
+              assert digest == PINNED, "packed lexicon does not match the production hash"
+              pinyin = zf.read("lib/arm64-v8a/libpinyin.so")
+              assert b"MIXEDDIAG" in pinyin, "libpinyin.so is not the diagnostics build"
+              assert b"MixedCandidateWord" in pinyin, (
+                  "libpinyin.so does not look like the Architecture A mixed build"
+              )
+              manifest = zf.read("AndroidManifest.xml")
+              assert "org.fcitx.fcitx5.android.debug".encode("utf-16-le") in manifest, (
+                  "APK does not carry the .debug package id"
+              )
+          print("APK content checks passed")
+          PY
+
+      - name: Verify the fixed debug APK signature
+        env:
+          # D064 Fusion Enhanced Debug identity: CN=Fcitx5 Fusion Enhanced Debug, O=choicky, C=CN
+          EXPECTED_DEBUG_CERT_SHA256: DC:49:71:82:C5:48:66:34:FD:68:E5:71:B8:78:A3:3E:CE:A6:8B:DA:D2:05:C3:D6:1A:ED:09:B9:83:92:A5:6A
+        run: |
+          set -euo pipefail
+          apk=$(find runtime-diagnostic-apk -name '*.apk' -print -quit)
+          test -n "$apk"
+          aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f -print -quit)
+          package=$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")
+          test "$package" = org.fcitx.fcitx5.android.debug
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -print -quit)
+          digest=$("$apksigner" verify --print-certs "$apk" |
+            sed -n 's/.*certificate SHA-256 digest: //p' | head -1 |
+            tr -d ':' | tr '[:lower:]' '[:upper:]')
+          test "${#digest}" = 64
+          cert=$(echo "$digest" | sed 's/../&:/g; s/:$//')
+          echo "APK package: $package"
+          echo "APK certificate SHA-256: $cert"
+          test "$cert" = "$EXPECTED_DEBUG_CERT_SHA256"
+
+      - name: Record the diagnostic fingerprint
+        run: |
+          set -euo pipefail
+          apk=$(find runtime-diagnostic-apk -name '*.apk' -print -quit)
+          {
+            echo "fcitx5-fusion runtime-diagnostics fingerprint"
+            echo "android branch: ${GITHUB_REF_NAME}"
+            echo "android commit: $(git rev-parse HEAD)"
+            echo "addons commit (pinned submodule): $(git -C lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons rev-parse HEAD)"
+            echo "apk file: ${apk##*/}"
+            echo "apk bytes: $(stat -c %s "$apk")"
+            echo "apk sha256: $(sha256sum "$apk" | cut -d' ' -f1)"
+            echo "package: org.fcitx.fcitx5.android.debug"
+            echo "signing: D064 Fusion Enhanced Debug (DC:49:71:82:...:A5:6A)"
+            echo "labels: MIXEDDIAG (native gate records, logcat tag fcitx5), TOOLDIAG (Kotlin state records, class-name tags); filter by message keyword"
+          } > runtime-diagnostic-apk/FINGERPRINT.txt
+          cat runtime-diagnostic-apk/FINGERPRINT.txt
+
+      - name: Upload the runtime-diagnostics artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: fcitx5-fusion-runtime-diagnostics-apk
+          path: runtime-diagnostic-apk/*
+          if-no-files-found: error

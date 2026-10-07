@@ -775,6 +775,11 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         Timber.d("onStartInputView: restarting=$restarting")
+        // TOOLDIAG: dev-only lifecycle record (dispatch facts only; no text).
+        Timber.d(
+            "TOOLDIAG onStartInputView restarting=$restarting" +
+                    " inputViewPresent=${inputView != null}"
+        )
         postFcitxJob {
             focus(true)
         }
@@ -782,7 +787,9 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             // because onStartInputView will always be called after onStartInput,
             // editorInfo and capFlags should be up-to-date
             inputView?.startInput(info, capabilityFlags, restarting)
+            Timber.d("TOOLDIAG onStartInputView dispatched-startInput")
         } else {
+            Timber.d("TOOLDIAG onStartInputView evaluated-false no-startInput")
             if (currentInputConnection?.monitorCursorAnchor() != true) {
                 if (!decorLocationUpdated) {
                     updateDecorLocation()
