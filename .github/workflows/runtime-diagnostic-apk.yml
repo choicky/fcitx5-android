@@ -30,9 +30,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Exact addons revision this artifact must embed (MIXEDDIAG
-  # instrumentation on top of the fused Final Ranking Closure head).
-  EXPECTED_ADDONS_COMMIT: d75ed439f57d2669fd1b698900aa9cc5a2cb9713
+  # Exact addons revision this artifact must embed (Phase 3A-2 mixed-search
+  # native/core closure on top of the MIXEDDIAG instrumentation and the
+  # fused Final Ranking Closure head).
+  EXPECTED_ADDONS_COMMIT: 010b1ebca75551f1978cfcb8b5fcf341272c6053
+  MIXEDDIAG_COMMIT: "d75ed43"
   FUSED_BASE_COMMIT: "dd81e1b"
   RANKING_FIX_COMMIT: "860ed68"
   AUX_FILTER_COMMIT: "0220285"
@@ -55,6 +57,7 @@ jobs:
           set -euo pipefail
           cd lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
           test "$(git rev-parse HEAD)" = "$EXPECTED_ADDONS_COMMIT"
+          git merge-base --is-ancestor "$MIXEDDIAG_COMMIT" HEAD
           git merge-base --is-ancestor "$FUSED_BASE_COMMIT" HEAD
           git merge-base --is-ancestor "$RANKING_FIX_COMMIT" HEAD
           git merge-base --is-ancestor "$AUX_FILTER_COMMIT" HEAD
@@ -67,6 +70,7 @@ jobs:
           set -euo pipefail
           grep -q "TOOLDIAG" app/src/main/java/org/fcitx/fcitx5/android/input/bar/KawaiiBarComponent.kt
           grep -q "TOOLDIAG" app/src/main/java/org/fcitx/fcitx5/android/input/bar/ui/IdleUi.kt
+          grep -q "TOOLDIAG" app/src/main/java/org/fcitx/fcitx5/android/input/bar/ui/idle/ButtonsBarUi.kt
           grep -q "TOOLDIAG" app/src/main/java/org/fcitx/fcitx5/android/input/FcitxInputMethodService.kt
           grep -q "TOOLDIAG" app/src/main/java/org/fcitx/fcitx5/android/core/Fcitx.kt
 
@@ -127,6 +131,10 @@ jobs:
               assert digest == PINNED, "packed lexicon does not match the production hash"
               pinyin = zf.read("lib/arm64-v8a/libpinyin.so")
               assert b"MIXEDDIAG" in pinyin, "libpinyin.so is not the diagnostics build"
+              # Fix-C witness record, introduced by Phase 3A-2 efb2890.
+              assert b"MIXEDDIAG witness raw=" in pinyin, (
+                  "libpinyin.so lacks the Phase 3A-2 coversWhole witness record"
+              )
               assert b"MixedCandidateWord" in pinyin, (
                   "libpinyin.so does not look like the Architecture A mixed build"
               )
