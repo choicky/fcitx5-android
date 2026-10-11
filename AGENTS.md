@@ -87,15 +87,21 @@ When the change needs real-device verification — keyboard or input-window
 behavior, IME lifecycle, long-press, drag/drop, persistence in app settings,
 Voice/ASR — compilation and unit tests are not proof. Deliver the built APK to
 the user for device verification: give the APK path, its version identifier
-and sha256, and state exactly which behaviors to check. The debug build
-installs beside the official app under its own `.debug` applicationId, so a
+and sha256, and state exactly which behaviors to check. An APK delivered for
+installation or testing must use the repository's established signing
+identity, and the final APK signature must be verified; an unsigned APK is an
+intermediate build artifact, not a deliverable, unless the Task Contract
+explicitly requests unsigned output. The debug build installs beside the
+official app under its own `.debug` applicationId, so a
 test APK does not replace the user's regular install. Then STOP and wait for
 device results; do not represent an unverified behavior as fixed.
 
 Do not trigger CI merely to obtain a test APK or to repeat a build that
-already succeeded locally. The repository's test and release APK workflows are
-for CI runs that the Task Contract, a release gate, or an explicit user
-request actually requires.
+already succeeded locally. When a deliverable APK is built locally and GitHub
+delivery is required, upload that exact final signed local artifact; do not
+rebuild the same APK in GitHub CI merely to obtain an artifact. The
+repository's test and release APK workflows are for CI runs that the Task
+Contract, a release gate, or an explicit user request actually requires.
 
 ## CI autonomy boundary (mechanical repair, when CI is required)
 
