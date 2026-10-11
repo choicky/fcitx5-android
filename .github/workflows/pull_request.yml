@@ -1,12 +1,12 @@
 name: Pull Request
 
+# CI-trigger policy (Fusion): ordinary Fusion PR open/update must not
+# auto-launch this 4-platform matrix on every PR. The workflow and all its
+# jobs are unchanged and remain runnable explicitly via workflow_dispatch
+# from the Actions page (or `gh workflow run pull_request.yml`) when the
+# full Ubuntu/Windows/macOS validation is actually wanted.
 on:
-  pull_request:
-    types:
-      - opened
-      - reopened
-      # pull request's head branch was updated
-      - synchronize
+  workflow_dispatch:
 
 jobs:
   build_pull_request:

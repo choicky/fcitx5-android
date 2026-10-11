@@ -1,9 +1,12 @@
 name: Nix
 
+# CI-trigger policy (Fusion): no automatic Nix Release build on ordinary PR
+# open/update. The master push trigger is kept as-is, and the build remains
+# runnable explicitly via workflow_dispatch.
 on:
-  pull_request:
   push:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
   develop:
