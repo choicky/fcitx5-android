@@ -9,8 +9,9 @@ Change Contract
 → negative-diff review
 → compile-risk pass where relevant
 → local validation where available
-→ CI
-→ mechanical CI repair may iterate autonomously
+→ commit/push/PR
+→ CI only when required by the Task Contract, release gate, repository rule,
+  or explicit user request
 → behavioral ambiguity/change = STOP
 
 ## Actual diff review
@@ -64,16 +65,56 @@ immediate type/API context, including as applicable:
 - API-level and version assumptions.
 
 Do not inspect only the compiler-highlighted token during a compile repair.
-This pass reduces avoidable CI round trips but does not replace compilation.
+This pass reduces avoidable CI round trips on tasks that do require CI, but does
+not replace compilation.
 Run the authoritative local checks whenever they are available.
 
-## CI autonomy boundary
+## Local validation and APK delivery
 
-Mechanical CI fixes may be handled autonomously. Behavioral fixes require
-confirmation.
+Where the Android toolchain is available locally, the authoritative validation
+is the real local Gradle build, not CI. Typical local checks:
 
-An implementation agent may diagnose, minimally repair, commit/push, and retry
-CI only when all of the following are true:
+- `BUILD_ABI=arm64-v8a ./gradlew :app:assembleDebug` for an installable debug
+  APK;
+- `BUILD_ABI=arm64-v8a ./gradlew :app:testDebugUnitTest` for JVM unit tests;
+- targeted compile tasks (for example `:app:compileReleaseKotlin`) when a
+  source-set boundary is involved.
+
+Keep local builds scoped and fast; the arm64-v8a single-ABI debug build is the
+default for validation and test delivery.
+
+When the change needs real-device verification — keyboard or input-window
+behavior, IME lifecycle, long-press, drag/drop, persistence in app settings,
+Voice/ASR — compilation and unit tests are not proof. Deliver the built APK to
+the user for device verification: give the APK path, its version identifier
+and sha256, and state exactly which behaviors to check. An APK delivered for
+installation or testing must use the repository's established signing
+identity, and the final APK signature must be verified; an unsigned APK is an
+intermediate build artifact, not a deliverable, unless the Task Contract
+explicitly requests unsigned output. The debug build installs beside the
+official app under its own `.debug` applicationId, so a
+test APK does not replace the user's regular install. Then STOP and wait for
+device results; do not represent an unverified behavior as fixed.
+
+Do not trigger CI merely to obtain a test APK or to repeat a build that
+already succeeded locally. When a deliverable APK is built locally and GitHub
+delivery is required, upload that exact final signed local artifact; do not
+rebuild the same APK in GitHub CI merely to obtain an artifact. The
+repository's test and release APK workflows are for CI runs that the Task
+Contract, a release gate, or an explicit user request actually requires.
+
+## CI autonomy boundary (mechanical repair, when CI is required)
+
+This boundary applies only to tasks where CI actually runs — that is, when the
+Task Contract, a release gate, a repository rule, or an explicit user request
+requires CI. It does not mean that ordinary PRs should trigger CI, and CI must
+not be used to repeat build/test work that already succeeded locally. Within
+that scope, mechanical CI fixes may be handled autonomously. Behavioral fixes
+require confirmation.
+
+An implementation agent may diagnose, minimally repair, commit/push, and—only
+for a CI run that is actually required—retry CI when all of the following are
+true:
 
 - the root cause is concrete from compiler, formatter, linter, or
   test-compilation output;
