@@ -1,11 +1,13 @@
 name: Test APK
 
 # Builds an installable debug APK of fcitx5-android against
-# choicky/fcitx5-chinese-addons@feature/moqi-filter, so that the Auxiliary
-# Filter configuration (Disabled / Stroke / MoQi) can be verified on a real
-# device. The debug build gets its own applicationId suffix, so it can be
-# installed next to the official fcitx5-android build. Only arm64-v8a is
-# built to keep the job short.
+# choicky/fcitx5-chinese-addons@feature/mixed-input-r4-productization
+# (644205f, the accepted M2+/r4 productized mixed-input implementation,
+# descendant of the MoQi/Auxiliary Filter fusion head dd81e1b), so that the
+# Auxiliary Filter configuration (Disabled / Stroke / MoQi) and the r4 Mixed
+# Input product path can be verified on a real device. The debug build gets
+# its own applicationId suffix, so it can be installed next to the official
+# fcitx5-android build. Only arm64-v8a is built to keep the job short.
 
 on:
   push:
@@ -25,7 +27,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ADDON_COMMIT: 47401b04681615024e4cf87c4797005b26e202ff
+  # M2+/r4 productized addons (feature/mixed-input-r4-productization). Keeps
+  # the same intentional pattern as the release pin: an explicit detached
+  # commit, not whatever the branch gitlink points at by then. The D068
+  # release pin (47401b04 in release-apk.yml) is unchanged.
+  ADDON_COMMIT: 644205f6626011b37a0e1cc7fa789e00020e453d
 
 jobs:
   build_debug_apk:
@@ -38,7 +44,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Check out the pinned MoQi auxiliary filter commit
+      - name: Check out the pinned M2+/r4 productized addons commit
         run: |
           cd lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
           git fetch --depth 1 https://github.com/choicky/fcitx5-chinese-addons.git "$ADDON_COMMIT"
