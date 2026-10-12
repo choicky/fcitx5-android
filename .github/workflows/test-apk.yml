@@ -29,8 +29,8 @@ concurrency:
 env:
   # M2+/r4 productized addons (feature/mixed-input-r4-productization). Keeps
   # the same intentional pattern as the release pin: an explicit detached
-  # commit, not whatever the branch gitlink points at by then. The D068
-  # release pin (47401b04 in release-apk.yml) is unchanged.
+  # commit, not whatever the branch gitlink points at by then. The release
+  # pin in release-apk.yml advances independently.
   ADDON_COMMIT: 644205f6626011b37a0e1cc7fa789e00020e453d
 
 jobs:
