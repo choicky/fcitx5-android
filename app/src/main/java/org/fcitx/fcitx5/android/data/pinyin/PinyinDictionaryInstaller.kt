@@ -32,8 +32,11 @@ internal class PinyinDictionaryInstaller(private val root: File) {
 
     fun target(entry: PinyinDictionaryCatalogEntry) = root.resolve(entry.fileName)
 
+    // Identity spans both spellings of the live file: a disabled catalog dictionary
+    // is still the installed bytes under `<id>.dict.disable`.
     fun isInstalled(entry: PinyinDictionaryCatalogEntry): Boolean =
-        target(entry).let { it.isFile && it.length() == entry.size && sha256(it) == entry.sha256 }
+        PinyinDictionaryInstallState.activeFile(root, entry)
+            ?.let { it.length() == entry.size && sha256(it) == entry.sha256 } ?: false
 
     fun stagedBytes(entry: PinyinDictionaryCatalogEntry): Long =
         staged(entry).takeIf { it.isFile }?.length()?.coerceAtMost(entry.size) ?: 0
@@ -97,9 +100,8 @@ internal class PinyinDictionaryInstaller(private val root: File) {
     }
 
     fun remove(entry: PinyinDictionaryCatalogEntry) {
-        val destination = target(entry)
-        if (!destination.exists()) return
-        val trash = destination.resolveSibling(".${entry.fileName}.trash")
+        val destination = PinyinDictionaryInstallState.activeFile(root, entry) ?: return
+        val trash = destination.resolveSibling(".${destination.name}.trash")
         trash.delete()
         if (destination.renameTo(trash)) trash.delete() else destination.delete()
     }
@@ -149,16 +151,28 @@ internal class PinyinDictionaryInstaller(private val root: File) {
     private fun swapIn(entry: PinyinDictionaryCatalogEntry, staged: File): File {
         val old = root.resolve(".${entry.fileName}.old")
         old.delete()
-        val destination = target(entry)
+        // Phase 5D: an update or re-install onto a disabled dictionary must keep the
+        // disabled state; the live file (plain or .disable) is the swap subject.
+        val destination = PinyinDictionaryInstallState.activeFile(root, entry)
+            ?: root.resolve(entry.fileName)
+        val wasDisabled = destination.name != entry.fileName
         if (destination.exists() && !destination.renameTo(old)) {
             throw IOException("cannot preserve ${destination.name}")
         }
-        if (!staged.renameTo(destination)) {
+        val installed = root.resolve(entry.fileName)
+        if (!staged.renameTo(installed)) {
             old.renameTo(destination)
-            throw IOException("cannot install ${destination.name}")
+            throw IOException("cannot install ${installed.name}")
+        }
+        // Re-apply the disable suffix; if that rename fails the verified bytes simply
+        // stay enabled, which is recoverable and loses no data.
+        val finalFile = if (wasDisabled && !installed.renameTo(destination)) {
+            installed
+        } else {
+            destination
         }
         old.delete()
-        return destination
+        return finalFile
     }
 
     private fun staged(entry: PinyinDictionaryCatalogEntry) =

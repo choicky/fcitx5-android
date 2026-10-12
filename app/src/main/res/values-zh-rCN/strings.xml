@@ -71,6 +71,11 @@
     <string name="dictionary_enabled">已启用</string>
     <string name="dictionary_disabled">未启用</string>
     <string name="dictionary_not_installed">可用 · 尚未安装</string>
+    <string name="dictionary_update_available">有可用更新</string>
+    <string name="dictionary_update_action">更新</string>
+    <string name="dictionary_installed_version">已安装版本</string>
+    <string name="dictionary_installed_unknown">此词库早于版本追踪，或为手动放置；不会被改动。</string>
+    <string name="dictionary_base_incompatible">这些词库工件需要更新的应用基线版本，请先升级应用。</string>
     <string name="synced">已同步！</string>
     <string name="loading">加载中</string>
     <string name="clipboard_listening">记录剪贴板历史</string>

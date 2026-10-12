@@ -88,6 +88,9 @@ object PinyinDictManager {
         val file = PinyinDictionaryInstaller(pinyinDicDir).install(
             entry, source, cancelled, progress, verifying
         )
+        // Phase 5D: successful install/update takes the installed-version identity of
+        // the catalog that shipped these bytes.
+        recordCatalogInstall(entry)
         PinyinDictionary.new(file) as? LibIMEDictionary
             ?: errorArg(R.string.exception_dict_filename, file.path)
     }
@@ -97,6 +100,41 @@ object PinyinDictManager {
 
     internal fun discardCatalogDownload(entry: PinyinDictionaryCatalogEntry) {
         PinyinDictionaryInstaller(pinyinDicDir).discardDownload(entry)
+    }
+
+    private val catalogInstallState = PinyinDictionaryInstallState(pinyinDicDir)
+
+    @Volatile
+    private var catalogRecords: Map<String, DictionaryInstallRecord> = emptyMap()
+
+    internal fun catalogRecords(): Map<String, DictionaryInstallRecord> = catalogRecords
+
+    /**
+     * Re-read the install identity store without touching dictionary bytes. Cheap;
+     * safe from any thread.
+     */
+    internal fun refreshCatalogRecords(): Map<String, DictionaryInstallRecord> =
+        catalogInstallState.load().also { catalogRecords = it }
+
+    /** Record the current catalog identity for a verified catalog artifact on disk. */
+    internal fun recordCatalogInstall(entry: PinyinDictionaryCatalogEntry) {
+        catalogInstallState.record(entry)
+        refreshCatalogRecords()
+    }
+
+    /**
+     * Phase 5D recovery + migration entry point. Hashes installed catalog files, so
+     * callers must run it off the main thread (dictionary directory IO only).
+     */
+    internal fun recoverCatalogIdentity(): Map<String, DictionaryInstallRecord> {
+        catalogInstallState.recover(PinyinDictionaryCatalog.entries)
+        catalogInstallState.migrate(PinyinDictionaryCatalog.entries)
+        return refreshCatalogRecords()
+    }
+
+    internal fun forgetCatalogRecord(id: String) {
+        catalogInstallState.forget(id)
+        refreshCatalogRecords()
     }
 
     fun sougouDictConv(src: String, dest: String) {

@@ -39,6 +39,29 @@ internal data class PinyinDictionaryCatalogEntry(
 internal object PinyinDictionaryCatalog {
     const val RELEASE_TAG = "dictionary-v1.1.1"
 
+    /**
+     * Phase 5D minimal base-revision compatibility: the oldest app base these
+     * artifacts were built and audited against. Downloads and updates are gated on
+     * the running build being at least this base; raising it requires re-auditing
+     * every artifact in this catalog.
+     */
+    const val MIN_BASE_VERSION = "0.1.3"
+
+    /** Dot-separated numeric comparison of the leading version components. */
+    fun baseCompatible(versionName: String): Boolean {
+        fun numbers(v: String) = v.split('.', '-').mapNotNull {
+            it.toIntOrNull()
+        }
+        val current = numbers(versionName)
+        val minimum = numbers(MIN_BASE_VERSION)
+        for (i in 0 until maxOf(current.size, minimum.size)) {
+            val a = current.getOrElse(i) { 0 }
+            val b = minimum.getOrElse(i) { 0 }
+            if (a != b) return a > b
+        }
+        return true
+    }
+
     private const val RELEASE_BASE =
         "https://github.com/choicky/fcitx5-fusion/releases/download/$RELEASE_TAG"
 

@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.reloadPinyinDict
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryConfig
@@ -105,11 +106,18 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     private val ui: DictionaryManagerUi by lazy {
         DictionaryManagerUi(requireContext(), initialEntries(), viewModel,
             extBEnabled = { extBEnabled },
+            installRecords = { PinyinDictManager.catalogRecords() },
             metadata = { row ->
-                row.size?.let { size ->
+                val facts = row.size?.let { size ->
                     row.entryCount?.let { count ->
                         getString(R.string.dictionary_metadata, formatBytes(size), formatCount(count))
                     } ?: formatBytes(size)
+                }
+                if (row.updateAvailable) {
+                    listOfNotNull(facts, getString(R.string.dictionary_update_available))
+                        .joinToString(" · ")
+                } else {
+                    facts
                 }
             },
             toggle = ::setDictionaryEnabled,
@@ -171,6 +179,12 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         registerLauncher()
         ui.addOnItemChangedListener(this)
         resetDustman()
+        // Phase 5D: interrupted-swap recovery + migration identity runs off the main
+        // thread (it hashes catalog-named files); rows refresh when it lands.
+        viewLifecycleOwner.lifecycleScope.launch {
+            withContext(Dispatchers.IO) { PinyinDictManager.recoverCatalogIdentity() }
+            if (uiInitialized) ui.refreshState()
+        }
         detailName = savedInstanceState?.getString("dictionary_detail")
         (ui.root.parent as? ViewGroup)?.removeView(ui.root)
         ui.root.visibility = View.VISIBLE
@@ -223,7 +237,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
 
     private fun showDictionaryDetail(dictionary: PinyinDictionary) {
         val root = managerRoot ?: return
-        val row = DictionaryPresentation.row(dictionary, extBEnabled)
+        val row = DictionaryPresentation.row(dictionary, extBEnabled, PinyinDictManager.catalogRecords())
         if (!row.manageable) return
         detailName = dictionary.name
         ui.exitMultiSelect()
@@ -287,6 +301,17 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             if (!row.installed) {
                 action(if (catalog.privateImportOnly) R.string.import_research_dictionary
                     else R.string.download_dictionary) { showCatalogEntry(catalog) }
+            } else {
+                // Phase 5D installed-version identity and the user-visible update action.
+                row.installedVersion?.let {
+                    field(R.string.dictionary_installed_version, it)
+                } ?: text(getString(R.string.dictionary_installed_unknown))
+                if (row.updateAvailable) {
+                    text(getString(R.string.dictionary_update_available))
+                    if (!catalog.privateImportOnly) {
+                        action(R.string.dictionary_update_action) { downloadCatalogEntry(catalog) }
+                    }
+                }
             }
         }
         if (row.installed) {
@@ -440,6 +465,14 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             privateImportEntry = entry
             launcher.launch("*/*")
         } else {
+            // Phase 5D minimal base-revision compatibility gate.
+            if (!PinyinDictionaryCatalog.baseCompatible(BuildConfig.VERSION_NAME)) {
+                AlertDialog.Builder(requireContext())
+                    .setMessage(R.string.dictionary_base_incompatible)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+                return
+            }
             showDownloadDialog(entry, startImmediately = true)
         }
     }
@@ -569,6 +602,7 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                     if (index >= 0) ui.updateItem(index, installed)
                     else ui.addItem(item = installed)
                 }
+                ui.refreshState()
                 downloadState = DownloadState.Installed
             } catch (e: Exception) {
                 if (pauseRequested) {
@@ -730,6 +764,9 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
                     val inputStream = cr.openInputStream(uri)!!
                     PinyinDictManager.importFromInputStream(inputStream, fileName).getOrThrow()
                 }
+                // Phase 5D: a research import already passed the catalog size and
+                // SHA-256 gate, so it carries the current catalog version identity.
+                expected?.let { PinyinDictManager.recordCatalogInstall(it) }
                 ui.addItem(item = imported)
             } catch (e: Exception) {
                 ctx.importErrorDialog(e)
@@ -781,6 +818,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
         libime.file.delete()
         dustman.remove(libime.name)
         PinyinDictionaryCatalog.find(libime.name)?.let {
+            // Phase 5D: an uninstalled catalog dictionary loses its version identity.
+            PinyinDictManager.forgetCatalogRecord(it.id)
             ui.addItem(item = CatalogPlaceholderDictionary(it.id, it.displayName))
         }
     }
