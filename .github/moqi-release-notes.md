@@ -3,7 +3,7 @@
 这是 `fcitx5-android-fusion-enhanced` 的自构建发布线，包含 fcitx5-chinese-addons 的 **MoQi Auxiliary Filter**（墨奇辅助筛选）。与上游官方构建无隶属关系，请勿当作官方版本。
 
 - fcitx5-android：当前产品开发分支
-- fcitx5-chinese-addons：固定提交 `b7f1db540bb1127b586539c8144060fdc12c145b`
+- fcitx5-chinese-addons：固定提交 `f18dbb9907891a4a5f69348666f2b1439e2b1b85`
 - 墨奇码表：[`gaboolic/moqima-tables`](https://github.com/gaboolic/moqima-tables) @ `6d8ba8f1c57466f358e682baefe11bbd0fe389ab`（MIT），SHA256 `66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923`
 
 ## 安装与升级
@@ -28,9 +28,9 @@
 - 旧 bilingual Zipformer 已移除，且本轮不做旧模型兼容迁移。
 - D035 本地回落顺序固定为：X-ASR 离线 → FunASR Nano → X-ASR 流式；每一步只
   选择已启用、完整安装且当前 runtime 可用的模型。
-- 本发布由 GitHub Actions 在 debug 检查成功后构建；本轮未以真机验收为发布前置，
-  所有者已报告两款 X-ASR 的基础使用及主观效果比较。长语音等未完成验收仍不代表
-  已通过。
+- 本发布在 debug 构建与检查通过后产出，使用既定的 Fusion 发布签名身份；不以真机
+  验收为发布前置条件，最终针对设备行为（含中英混输、Auxiliary Filter、Local ASR
+  等）的验收由所有者在安装本 APK 后完成。未完成验收不代表已通过。
 
 ## 许可
 

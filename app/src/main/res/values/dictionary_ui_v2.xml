@@ -18,4 +18,14 @@
     <string name="dictionary_source_revision">Source revision</string>
     <string name="dictionary_filename">Filename</string>
     <string name="dictionary_delete_confirmation">Delete the local dictionary “%1$s”?</string>
+    <string name="dictionary_section_mixed_english">Chinese-English Mixed Input</string>
+    <string name="dictionary_english_name">English vocabulary</string>
+    <string name="dictionary_english_canonical">Fusion English Base</string>
+    <string name="dictionary_english_status">Built-in · always enabled</string>
+    <string name="dictionary_english_row_summary">%1$s · %2$s entries</string>
+    <string name="dictionary_english_status_label">Status</string>
+    <string name="dictionary_english_purpose_label">Purpose</string>
+    <string name="dictionary_english_provenance_label">Provenance</string>
+    <string name="dictionary_english_purpose">English vocabulary used by Chinese-English mixed input.</string>
+    <string name="dictionary_english_provenance">Derived from Rime Ice (primary), with Rime Frost supplementing keys absent from Ice.</string>
 </resources>

@@ -29,6 +29,12 @@ object PinyinDictManager {
         DataManager.dataDir, "usr/share/fcitx5/pinyin/dictionaries"
     )
 
+    /** The built-in English vocabulary the mixed-input engine reads, installed
+     *  beside the Pinyin dictionary directory. Read-only metadata source for the
+     *  Dictionary Manager; never a runtime-selectable dictionary. */
+    internal val englishVocabularyFile: File
+        get() = EnglishLexiconResource.file(builtinPinyinDictDir)
+
     private val nativeDir = File(appContext.applicationInfo.nativeLibraryDir)
 
     private val scel2org5 by lazy { File(nativeDir, scel2org5Name) }

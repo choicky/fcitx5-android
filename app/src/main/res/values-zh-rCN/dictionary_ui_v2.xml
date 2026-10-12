@@ -18,4 +18,14 @@
     <string name="dictionary_source_revision">来源修订</string>
     <string name="dictionary_filename">文件名</string>
     <string name="dictionary_delete_confirmation">删除本地词库“%1$s”？</string>
+    <string name="dictionary_section_mixed_english">中英混合输入</string>
+    <string name="dictionary_english_name">英文词汇</string>
+    <string name="dictionary_english_canonical">Fusion 英文基础词库</string>
+    <string name="dictionary_english_status">内置 · 始终启用</string>
+    <string name="dictionary_english_row_summary">%1$s · %2$s 条</string>
+    <string name="dictionary_english_status_label">状态</string>
+    <string name="dictionary_english_purpose_label">用途</string>
+    <string name="dictionary_english_provenance_label">来源</string>
+    <string name="dictionary_english_purpose">供中英混合输入使用的英文词汇。</string>
+    <string name="dictionary_english_provenance">主要源自 Rime Ice，并以 Rime Frost 补充 Ice 中缺失的词。</string>
 </resources>

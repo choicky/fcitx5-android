@@ -123,4 +123,42 @@ class DictionaryPresentationTest {
             DictionaryPresentation.Section.Catalog, DictionaryPresentation.Section.Imported), rows.map { it.section })
         assertEquals(listOf("rime-ice", "rime-frost"), rows.mapNotNull { it.catalog?.id })
     }
+
+    @Test fun englishVocabularySurfacesTruthfulReadOnlyMetadata() {
+        val info = DictionaryPresentation.EnglishVocabulary(
+            name = "English vocabulary",
+            canonicalName = "Fusion English Base",
+            status = "Built-in · always enabled",
+            rowSummary = "Built-in · always enabled · 22,477 entries",
+            entryCount = 22_477L,
+            purpose = "English vocabulary used by Chinese-English mixed input.",
+            provenance = "Derived from Rime Ice, with Rime Frost supplementing.",
+        )
+        assertEquals("English vocabulary", info.name)
+        assertEquals("Fusion English Base", info.canonicalName)
+        assertEquals(22_477L, info.entryCount)
+        assertTrue(info.rowSummary.startsWith(info.status))
+        assertTrue(info.rowSummary.contains("22,477"))
+        assertTrue(info.purpose.isNotBlank())
+        assertTrue(info.provenance.isNotBlank())
+    }
+
+    @Test fun englishVocabularyCarriesNoManagementCapabilities() {
+        // The built-in vocabulary is owned by the native English Core: it is a
+        // read-only descriptor (status/entryCount only), never an enabled/
+        // installable/removable PinyinDictionary Row. The row summary is
+        // derived from the truthful status and the count read from the shipped
+        // resource, and a null count still renders the always-enabled status.
+        val info = DictionaryPresentation.EnglishVocabulary(
+            name = "English vocabulary",
+            canonicalName = "Fusion English Base",
+            status = "Built-in · always enabled",
+            rowSummary = "Built-in · always enabled",
+            entryCount = null,
+            purpose = "English vocabulary used by Chinese-English mixed input.",
+            provenance = "Derived from Rime Ice, with Rime Frost supplementing.",
+        )
+        assertNull(info.entryCount)
+        assertEquals(info.status, info.rowSummary)
+    }
 }
