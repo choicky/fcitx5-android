@@ -41,6 +41,8 @@ internal class DictionaryManagerUi(
     private val metadata: (DictionaryPresentation.Row) -> String?,
     private val toggle: (PinyinDictionary, Boolean) -> Unit,
     private val detail: (PinyinDictionary) -> Unit,
+    private val english: () -> DictionaryPresentation.EnglishVocabulary?,
+    private val englishDetail: (DictionaryPresentation.EnglishVocabulary) -> Unit,
     add: () -> Unit,
 ) : RecyclerView.Adapter<DictionaryManagerUi.Holder>() {
     private val source = initialEntries.toMutableList()
@@ -51,6 +53,10 @@ internal class DictionaryManagerUi(
     private var multiselect = false
     private var rows = emptyList<DictionaryPresentation.Row?>()
     private var sections = emptyList<DictionaryPresentation.Section>()
+    // The read-only English vocabulary renders as a trailing header + content
+    // pair, kept entirely out of [source] so it never enters the persisted
+    // dictionary list, the multiselect set, or the item-changed listeners.
+    private var englishItem: DictionaryPresentation.EnglishVocabulary? = null
     val root = FrameLayout(ctx)
     private val list = RecyclerView(ctx).apply {
         layoutManager = LinearLayoutManager(ctx)
@@ -123,12 +129,18 @@ internal class DictionaryManagerUi(
         }
         rows = flattened
         sections = groups
+        englishItem = english()
         notifyDataSetChanged()
     }
 
     fun refreshState() = refresh()
-    override fun getItemCount() = rows.size
-    override fun getItemViewType(position: Int) = if (rows[position] == null) 0 else 1
+    override fun getItemCount() =
+        rows.size + if (englishItem != null) 2 else 0
+    override fun getItemViewType(position: Int) = when {
+        position >= rows.size -> if (position == rows.size) 0 else 2
+        rows[position] == null -> 0
+        else -> 1
+    }
     class Holder(val layout: LinearLayout) : RecyclerView.ViewHolder(layout)
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(LinearLayout(ctx).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -144,6 +156,12 @@ internal class DictionaryManagerUi(
         layout.background = null
         layout.minimumHeight = 0
         layout.setPadding(dp(16), dp(12), dp(12), dp(12))
+        if (position >= rows.size) {
+            val info = englishItem
+            if (info == null || position > rows.size + 1) return
+            if (position == rows.size) bindEnglishHeader(layout) else bindEnglishRow(layout, info)
+            return
+        }
         val row = rows[position]
         if (row == null) {
             layout.addView(TextView(ctx).apply {
@@ -223,6 +241,41 @@ internal class DictionaryManagerUi(
                 }
             }
         }
+    }
+
+    private fun bindEnglishHeader(layout: LinearLayout) {
+        layout.addView(TextView(ctx).apply {
+            setText(R.string.dictionary_section_mixed_english)
+            setTextAppearance(android.R.style.TextAppearance_Material_Body2)
+            ViewCompat.setAccessibilityHeading(this, true)
+        })
+    }
+
+    private fun bindEnglishRow(layout: LinearLayout, info: DictionaryPresentation.EnglishVocabulary) {
+        layout.minimumHeight = dp(72)
+        layout.addView(ImageView(ctx).apply {
+            setImageResource(R.drawable.ic_baseline_library_books_24)
+            imageTintList = android.content.res.ColorStateList.valueOf(ctx.styledColor(android.R.attr.colorControlNormal))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginEnd = dp(16) })
+        val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(TextView(ctx).apply {
+            text = "${info.name} / ${info.canonicalName}"
+            setTextAppearance(android.R.style.TextAppearance_Material_Body1)
+        })
+        texts.addView(TextView(ctx).apply {
+            text = info.rowSummary
+            setTextAppearance(android.R.style.TextAppearance_Material_Caption)
+        })
+        layout.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
+        layout.addView(TextView(ctx).apply {
+            text = "›"
+            textSize = 24f
+            setPadding(dp(12), 0, dp(4), 0)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        })
+        layout.setBackgroundResource(android.R.drawable.list_selector_background)
+        layout.setOnClickListener { englishDetail(info) }
     }
 
     fun addOnItemChangedListener(value: OnItemChangedListener<PinyinDictionary>) { listener = value }

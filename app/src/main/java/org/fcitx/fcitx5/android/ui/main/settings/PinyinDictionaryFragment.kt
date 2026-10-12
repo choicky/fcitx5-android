@@ -48,6 +48,7 @@ import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalog
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalogEntry
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictManager
 import org.fcitx.fcitx5.android.data.pinyin.DictionaryStream
+import org.fcitx.fcitx5.android.data.pinyin.EnglishLexiconResource
 import org.fcitx.fcitx5.android.data.pinyin.dict.BuiltinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.LibIMEDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
@@ -97,6 +98,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     private var cancelRequested = false
     private var extBEnabled = false
 
+    private var englishInfo: DictionaryPresentation.EnglishVocabulary? = null
+
     private var uiInitialized = false
 
     private var managerRoot: FrameLayout? = null
@@ -122,6 +125,8 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             },
             toggle = ::setDictionaryEnabled,
             detail = ::showDictionaryDetail,
+            english = { englishInfo },
+            englishDetail = ::showEnglishDetail,
             add = ::showAddOptions,
         ).also { uiInitialized = true }
     }
@@ -206,6 +211,15 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             ui.refreshState()
         }
         viewModel.toolbarButton.value = ButtonMode.EDIT
+        // The built-in English vocabulary count reads the shipped resource, so
+        // it runs off the main thread; the row appears once the count lands.
+        lifecycleScope.launch {
+            val count = withContext(Dispatchers.IO) {
+                EnglishLexiconResource.entryCount(PinyinDictManager.englishVocabularyFile)
+            }
+            englishInfo = buildEnglishInfo(count)
+            if (uiInitialized) ui.refreshState()
+        }
         requireActivity().addMenuProvider(
             EditDeleteMenuProvider(
                 buttonMode = viewModel.toolbarButton,
@@ -356,6 +370,78 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
             androidx.core.view.ViewCompat.requestApplyInsets(root)
         }
         viewModel.toolbarButton.value = ButtonMode.EDIT
+    }
+
+    private fun buildEnglishInfo(entryCount: Long?): DictionaryPresentation.EnglishVocabulary {
+        val status = getString(R.string.dictionary_english_status)
+        val rowSummary = entryCount?.let {
+            getString(R.string.dictionary_english_row_summary, status, formatCount(it))
+        } ?: status
+        return DictionaryPresentation.EnglishVocabulary(
+            name = getString(R.string.dictionary_english_name),
+            canonicalName = getString(R.string.dictionary_english_canonical),
+            status = status,
+            rowSummary = rowSummary,
+            entryCount = entryCount,
+            purpose = getString(R.string.dictionary_english_purpose),
+            provenance = getString(R.string.dictionary_english_provenance),
+        )
+    }
+
+    /** Read-only information page for the built-in English vocabulary. It mirrors
+     *  the dictionary detail layout but exposes no switch, download, update or
+     *  delete action: the vocabulary is owned by the native English Core and is
+     *  always enabled. */
+    private fun showEnglishDetail(info: DictionaryPresentation.EnglishVocabulary) {
+        val root = managerRoot ?: return
+        ui.exitMultiSelect()
+        viewModel.toolbarButton.value = ButtonMode.NONE
+        detailBack?.remove()
+        detailBack = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = closeDictionaryDetail()
+        }.also { requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, it) }
+        val ctx = requireContext()
+        val padding = (20 * resources.displayMetrics.density).toInt()
+        val body = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding, padding, padding)
+        }
+        fun text(value: String, heading: Boolean = false) {
+            body.addView(TextView(ctx).apply {
+                text = value
+                setTextAppearance(if (heading) android.R.style.TextAppearance_Material_Title
+                    else android.R.style.TextAppearance_Material_Body1)
+                setPadding(0, padding / 2, 0, padding / 2)
+                setTextIsSelectable(!heading)
+                if (heading) androidx.core.view.ViewCompat.setAccessibilityHeading(this, true)
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        fun field(label: Int, value: String?) {
+            if (!value.isNullOrBlank()) text("${getString(label)}\n$value")
+        }
+        text(info.name, heading = true)
+        text(info.canonicalName)
+        text(getString(R.string.dictionary_section_information), heading = true)
+        field(R.string.dictionary_english_status_label, info.status)
+        field(R.string.dictionary_entries, info.entryCount?.let(::formatCount))
+        text(getString(R.string.dictionary_section_source_license), heading = true)
+        field(R.string.dictionary_english_purpose_label, info.purpose)
+        field(R.string.dictionary_english_provenance_label, info.provenance)
+        // Keep the list mounted so the shared Snackbar anchor stays attached,
+        // exactly as the dictionary detail page does.
+        while (root.childCount > 1) root.removeViewAt(root.childCount - 1)
+        ui.root.visibility = View.GONE
+        root.addView(ScrollView(ctx).apply {
+            isFillViewport = true
+            clipToPadding = false
+            addView(body)
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
+                val bottom = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars()).bottom
+                view.setPadding(0, 0, 0, bottom)
+                insets
+            }
+        }, FrameLayout.LayoutParams(-1, -1))
+        androidx.core.view.ViewCompat.requestApplyInsets(root)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

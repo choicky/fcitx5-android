@@ -42,6 +42,22 @@ internal object DictionaryPresentation {
         }
     }
 
+    /** Read-only descriptor for the built-in English vocabulary used by
+     *  Chinese-English mixed input. It is deliberately NOT a [Row]: the
+     *  vocabulary is not a PinyinDictionary, is always enabled, and exposes no
+     *  enable/disable, download, update or delete action. All display strings
+     *  are localized by the caller; only [entryCount] is derived from the
+     *  shipped resource. */
+    data class EnglishVocabulary(
+        val name: String,
+        val canonicalName: String,
+        val status: String,
+        val rowSummary: String,
+        val entryCount: Long?,
+        val purpose: String,
+        val provenance: String,
+    )
+
     fun rows(
         entries: List<PinyinDictionary>,
         extBEnabled: Boolean,
