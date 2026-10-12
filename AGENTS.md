@@ -1,5 +1,21 @@
 # Engineering and review guidance
 
+## Workspace artifact lifecycle
+
+Choose storage by artifact lifecycle, not historical habit:
+
+- `~/worktmp/fcitx5-android/<task>/` is durable recovery storage for
+  CHECKLIST/recovery state and important raw evidence, diffs, reports, results,
+  or release evidence that must survive interruption. It is not a permanent
+  evidence repository or a replacement for Git, PRs, or project documents.
+- `/tmp/fcitx5-android/<task>/` is disposable/regenerable scratch for builds,
+  extraction, inspection copies, intermediate files, and diagnostics.
+- `/dev/shm/fcitx5-android/<task>/` is only explicit, small, short-lived,
+  fully-disposable RAM-backed scratch; it is not the default workspace.
+- Git, commits, PRs, and accepted project documents remain the durable
+  authority and normal review handoff. Preserve the existing product, release,
+  signing, build, CI, and repository rules.
+
 Keep development lightweight for small, clearly non-behavioral changes. For a
 meaningful implementation batch, use the following Change Contract flow:
 
