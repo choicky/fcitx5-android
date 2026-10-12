@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.snackbar.Snackbar
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.data.pinyin.DictionaryInstallRecord
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
 import org.fcitx.fcitx5.android.ui.main.MainViewModel
@@ -36,6 +37,7 @@ internal class DictionaryManagerUi(
     initialEntries: List<PinyinDictionary>,
     private val model: MainViewModel,
     private val extBEnabled: () -> Boolean,
+    private val installRecords: () -> Map<String, DictionaryInstallRecord>,
     private val metadata: (DictionaryPresentation.Row) -> String?,
     private val toggle: (PinyinDictionary, Boolean) -> Unit,
     private val detail: (PinyinDictionary) -> Unit,
@@ -108,7 +110,7 @@ internal class DictionaryManagerUi(
 
     private fun dp(value: Int) = (value * ctx.resources.displayMetrics.density).toInt()
     private fun refresh() {
-        val mapped = DictionaryPresentation.rows(entries, extBEnabled())
+        val mapped = DictionaryPresentation.rows(entries, extBEnabled(), installRecords())
         val flattened = mutableListOf<DictionaryPresentation.Row?>()
         val groups = mutableListOf<DictionaryPresentation.Section>()
         DictionaryPresentation.Section.entries.forEach { section ->

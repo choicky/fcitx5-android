@@ -71,6 +71,11 @@
     <string name="dictionary_enabled">Enabled</string>
     <string name="dictionary_disabled">Disabled</string>
     <string name="dictionary_not_installed">Available · not installed</string>
+    <string name="dictionary_update_available">Update available</string>
+    <string name="dictionary_update_action">Update</string>
+    <string name="dictionary_installed_version">Installed version</string>
+    <string name="dictionary_installed_unknown">This copy predates version tracking or was placed manually; it is left untouched.</string>
+    <string name="dictionary_base_incompatible">These dictionary artifacts require a newer app base version. Update the app first.</string>
     <string name="synced">Synced!</string>
     <string name="loading">Loading</string>
     <string name="clipboard_listening">Clipboard listening</string>

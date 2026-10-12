@@ -159,6 +159,45 @@ class PinyinDictionaryInstallerTest {
         assertEquals(0, installer.stagedBytes(entry))
     }
 
+    @Test
+    fun updateOntoDisabledDictionaryPreservesDisabledState() {
+        val v1 = "dictionary".toByteArray()
+        val old = entry(v1)
+        val installer = PinyinDictionaryInstaller(temporaryFolder.root)
+        installer.install(old, ByteArrayInputStream(v1))
+        val disabled = temporaryFolder.root.resolve("${old.fileName}.disable")
+        assertTrue(installer.target(old).renameTo(disabled))
+
+        val v2 = "replacement".toByteArray()
+        val new = old.copy(
+            size = v2.size.toLong(),
+            sha256 = PinyinDictionaryInstaller.sha256(
+                temporaryFolder.newFile("update-input").also { it.writeBytes(v2) }
+            )
+        )
+        val installed = installer.install(new, ByteArrayInputStream(v2))
+
+        assertEquals(disabled.path, installed.path)
+        assertEquals(v2.toList(), disabled.readBytes().toList())
+        assertFalse(temporaryFolder.root.resolve(new.fileName).exists())
+        assertTrue(installer.isInstalled(new))
+    }
+
+    @Test
+    fun isInstalledAcceptsTheDisabledSpellingOfTheLiveFile() {
+        val content = "dictionary".toByteArray()
+        val entry = entry(content)
+        val installer = PinyinDictionaryInstaller(temporaryFolder.root)
+        installer.install(entry, ByteArrayInputStream(content))
+
+        assertTrue(
+            installer.target(entry)
+                .renameTo(temporaryFolder.root.resolve("${entry.fileName}.disable"))
+        )
+
+        assertTrue(installer.isInstalled(entry))
+    }
+
     private fun entry(content: ByteArray) = PinyinDictionaryCatalogEntry(
         id = "test-dictionary",
         displayName = "Test dictionary",

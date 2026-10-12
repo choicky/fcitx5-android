@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 package org.fcitx.fcitx5.android.ui.main.settings
 
+import org.fcitx.fcitx5.android.data.pinyin.DictionaryInstallRecord
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalog
 import org.fcitx.fcitx5.android.data.pinyin.dict.BuiltinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.CatalogPlaceholderDictionary
@@ -86,6 +87,30 @@ class DictionaryPresentationTest {
         val uninstalled = DictionaryPresentation.row(CatalogPlaceholderDictionary("rime-frost", "Frost"), false)
         assertEquals(DictionaryPresentation.Tap.Detail, uninstalled.tap(false))
         assertEquals(DictionaryPresentation.Tap.None, uninstalled.tap(true))
+    }
+
+    @Test fun installedVersionRecordsDriveUpdateFacts() {
+        val frost = requireNotNull(PinyinDictionaryCatalog.find("rime-frost"))
+        val dictionary = installed("rime-frost", true)
+        val current = DictionaryInstallRecord(
+            PinyinDictionaryCatalog.RELEASE_TAG, frost.version, frost.sha256
+        )
+        val upToDate = DictionaryPresentation.row(
+            dictionary, false, mapOf("rime-frost" to current)
+        )
+        assertFalse(upToDate.updateAvailable)
+        assertEquals(frost.version, upToDate.installedVersion)
+
+        val stale = DictionaryInstallRecord("dictionary-v1.0.0", "old", "0".repeat(64))
+        val outdated = DictionaryPresentation.row(
+            dictionary, false, mapOf("rime-frost" to stale)
+        )
+        assertTrue(outdated.updateAvailable)
+        assertEquals("old", outdated.installedVersion)
+
+        val untracked = DictionaryPresentation.row(dictionary, false)
+        assertFalse(untracked.updateAvailable)
+        assertNull(untracked.installedVersion)
     }
 
     @Test fun groupingAndCatalogOrderAreStableAcrossInstallationStates() {

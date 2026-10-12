@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 package org.fcitx.fcitx5.android.ui.main.settings
 
+import org.fcitx.fcitx5.android.data.pinyin.DictionaryInstallRecord
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalog
 import org.fcitx.fcitx5.android.data.pinyin.PinyinDictionaryCatalogEntry
 import org.fcitx.fcitx5.android.data.pinyin.dict.BuiltinDictionary
@@ -29,6 +30,10 @@ internal object DictionaryPresentation {
         val manageable: Boolean = false,
         val removable: Boolean = false,
         val acquisition: Acquisition = Acquisition.None,
+        /** Phase 5D: the catalog carries different bytes than the recorded install. */
+        val updateAvailable: Boolean = false,
+        /** Catalog version recorded at install time, when identity exists. */
+        val installedVersion: String? = null,
     ) {
         fun tap(multiselect: Boolean): Tap = when {
             multiselect -> if (removable) Tap.Select else Tap.None
@@ -37,14 +42,22 @@ internal object DictionaryPresentation {
         }
     }
 
-    fun rows(entries: List<PinyinDictionary>, extBEnabled: Boolean): List<Row> =
-        entries.map { row(it, extBEnabled) }.sortedWith(
+    fun rows(
+        entries: List<PinyinDictionary>,
+        extBEnabled: Boolean,
+        records: Map<String, DictionaryInstallRecord> = emptyMap()
+    ): List<Row> =
+        entries.map { row(it, extBEnabled, records) }.sortedWith(
             compareBy<Row> { it.section.ordinal }.thenBy {
                 it.catalog?.let { catalog -> PinyinDictionaryCatalog.entries.indexOf(catalog) } ?: 0
             }
         )
 
-    fun row(dictionary: PinyinDictionary, extBEnabled: Boolean): Row {
+    fun row(
+        dictionary: PinyinDictionary,
+        extBEnabled: Boolean,
+        records: Map<String, DictionaryInstallRecord> = emptyMap()
+    ): Row {
         if (dictionary is StaticPinyinDictionary) {
             val base = dictionary.kind == StaticPinyinDictionary.Kind.Base
             return Row(dictionary, Section.Core, dictionary.label,
@@ -61,6 +74,7 @@ internal object DictionaryPresentation {
         }
         val installed = dictionary !is CatalogPlaceholderDictionary
         val libime = dictionary as? LibIMEDictionary
+        val record = catalog?.let { records[it.id] }
         return Row(
             dictionary, if (catalog != null) Section.Catalog else Section.Imported,
             catalog?.displayName ?: dictionary.name, catalog?.canonicalName,
@@ -73,7 +87,9 @@ internal object DictionaryPresentation {
                 installed || catalog == null -> Acquisition.None
                 catalog.privateImportOnly -> Acquisition.ResearchImport
                 else -> Acquisition.Download
-            }
+            },
+            updateAvailable = installed && record != null && record.sha256 != catalog?.sha256,
+            installedVersion = record?.version,
         )
     }
 }
