@@ -36,7 +36,8 @@ internal interface VoiceBackend {
 
         /**
          * The provider detected the beginning of speech, without waiting for a partial
-         * result. Provider-neutral evidence for the microphone endpointing policy.
+         * result. Discrete speech proof for the microphone endpointing policy; unlike
+         * [onAudioLevel] it carries no continuous activity information.
          */
         fun onSpeechStarted(token: Long) {}
         fun onEndOfSpeech(token: Long)

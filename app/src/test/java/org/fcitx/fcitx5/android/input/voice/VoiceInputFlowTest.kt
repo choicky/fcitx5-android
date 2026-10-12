@@ -545,29 +545,36 @@ class VoiceInputFlowTest {
     }
 
     @Test
-    fun aFallbackSessionReArmsAFreshEstablishWindow() {
-        // the fallback toast tells the user to repeat speech: prior mic evidence must not
-        // carry into the new backend as trailing-silence state
+    fun preEstablishmentEvidenceKeepsFallbackOnAFreshEstablishWindow() {
+        // the fallback toast tells the user to repeat speech: pre-establishment speech proof
+        // neither replaces the Establish bound nor carries into the fallback backend
         val primary = FakeBackend { token, events ->
-            events.onAudioLevel(token, 0.9f) // speech seen before the early failure
+            events.onSpeechStarted(token)
+            events.onPartial(token, "喂")
         }
         val local = FakeBackend()
         val token = startWithFallback(primary, local)
-        flow.onError(token, early)
+        assertEquals(VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS, scheduler.pendingDelay)
+        scheduler.expire() // establish timeout -> the one D035 fallback
+        assertEquals(1, output.fallbacks.size)
+        val localToken = local.startedToken!!
         assertEquals(
             listOf(
-                VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS,
-                VoiceEndpointPolicy.TRAILING_SILENCE_MS, // stage reached on the primary
-                VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS // re-armed for the fallback
+                VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS, // primary
+                VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS  // re-armed fresh for the fallback
             ),
             scheduler.delays
         )
-        // expiring the fresh establish window without fallback left is a terminal service error
+        // the fallback session behaves from scratch: establish -> NoSpeech -> level-armed silence
+        flow.onSessionEstablished(localToken)
+        assertEquals(VoiceEndpointPolicy.NO_SPEECH_TIMEOUT_MS, scheduler.pendingDelay)
+        flow.onAudioLevel(localToken, 0.9f)
+        assertEquals(VoiceEndpointPolicy.TRAILING_SILENCE_MS, scheduler.pendingDelay)
         scheduler.expire()
-        assertTrue(output.errors.single() is VoiceError.Service)
-        assertTrue(output.autoTerminations.isEmpty())
-        assertTrue(output.commits.isEmpty())
-        assertEquals(VoiceInputSession.State.Idle, flow.state)
+        assertEquals(1, local.stops)
+        flow.onFinal(localToken, "本地")
+        assertEquals(listOf("本地"), output.commits)
+        assertEquals(1, output.fallbacks.size) // still exactly one fallback for the gesture
     }
 
     @Test
@@ -578,6 +585,78 @@ class VoiceInputFlowTest {
         assertTrue(output.errors.single() is VoiceError.Service)
         assertEquals(1, backend.cancels)
         assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    // ---- Stage.Establish is left only by establishment, a terminal path or its own timeout ----
+
+    @Test
+    fun preEstablishmentAudioLevelKeepsTheBound() {
+        val (token, backend) = startListening()
+        flow.onAudioLevel(token, 0.9f)
+        assertEquals(VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS, scheduler.pendingDelay)
+        scheduler.expire() // still the Establish bound, not a silence window
+        assertTrue(output.errors.single() is VoiceError.Service)
+        assertEquals(1, backend.cancels)
+        assertTrue(output.autoTerminations.isEmpty())
+    }
+
+    @Test
+    fun preEstablishmentSpeechStartedKeepsTheBound() {
+        val (token, _) = startListening()
+        flow.onSpeechStarted(token)
+        assertEquals(VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS, scheduler.pendingDelay)
+        scheduler.expire()
+        assertTrue(output.errors.single() is VoiceError.Service)
+    }
+
+    @Test
+    fun preEstablishmentPartialKeepsTheBound() {
+        val (token, _) = startListening()
+        flow.onPartial(token, "提前")
+        assertEquals(VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS, scheduler.pendingDelay)
+        scheduler.expire()
+        assertTrue(output.errors.single() is VoiceError.Service)
+    }
+
+    @Test
+    fun stalePrimaryEventsCannotTouchTheFallbackSession() {
+        val primary = FakeBackend()
+        val local = FakeBackend()
+        val token = startWithFallback(primary, local)
+        scheduler.expire() // establish timeout -> the one D035 fallback
+        val localToken = local.startedToken!!
+        // late events of the released primary backend must not re-arm or terminate anything
+        flow.onAudioLevel(token, 0.9f)
+        flow.onSpeechStarted(token)
+        flow.onPartial(token, "迟到")
+        assertEquals(VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS, scheduler.pendingDelay)
+        flow.onSessionEstablished(localToken)
+        assertEquals(VoiceEndpointPolicy.NO_SPEECH_TIMEOUT_MS, scheduler.pendingDelay)
+        flow.onAudioLevel(localToken, 0.9f)
+        assertEquals(VoiceEndpointPolicy.TRAILING_SILENCE_MS, scheduler.pendingDelay)
+        scheduler.expire()
+        assertEquals(1, local.stops)
+        flow.onFinal(localToken, "本地")
+        assertEquals(listOf("本地"), output.commits)
+        assertEquals(1, output.fallbacks.size)
+    }
+
+    @Test
+    fun silenceEstimationComesOnlyFromTheContinuousLevelStream() {
+        // discrete proofs alone leave NoSpeech -> Active untimed; one loud chunk arms the
+        // trailing-silence window and its expiry finalizes like a second click
+        val (token, backend) = startListening()
+        flow.onSessionEstablished(token)
+        flow.onSpeechStarted(token)
+        flow.onPartial(token, "嗯")
+        assertFalse(scheduler.hasPending)
+        flow.onAudioLevel(token, 0.8f)
+        assertEquals(VoiceEndpointPolicy.TRAILING_SILENCE_MS, scheduler.pendingDelay)
+        scheduler.expire()
+        assertEquals(1, backend.stops)
+        flow.onFinal(token, "正常")
+        assertEquals(listOf("正常"), output.commits)
+        assertEquals(listOf(VoiceAutoTermination.TrailingSilence), output.autoTerminations)
     }
 
     // ---- Microphone endpointing: idle no-speech drop and trailing-silence finalize ----
@@ -628,27 +707,40 @@ class VoiceInputFlowTest {
     }
 
     @Test
-    fun providerSpeechSignalsCountAsSpeechEvidence() {
-        // System ASR delivers no audio levels: onSpeechStarted/onPartial drive the policy
+    fun providerSpeechSignalsPreventNoSpeechButNeverForceFinalization() {
+        // System-style backend: discrete onSpeechStarted, no continuous AudioLevel stream —
+        // the watchdog must never stop it on a silence guess
         val (token, backend) = startListening()
         flow.onSessionEstablished(token)
         flow.onSpeechStarted(token)
-        assertEquals(VoiceEndpointPolicy.TRAILING_SILENCE_MS, scheduler.pendingDelay)
-        scheduler.expire()
-        assertEquals(1, backend.stops)
+        assertFalse(scheduler.hasPending)
+        flow.onSpeechStarted(token) // repeated one-shot events keep it untimed too
+        assertFalse(scheduler.hasPending)
+        assertEquals(VoiceInputSession.State.Listening, flow.state)
+        assertEquals(0, backend.stops + backend.cancels)
+        assertTrue(output.autoTerminations.isEmpty())
+        // a long utterance beyond any silence window stays alive until the service ends it
+        flow.onEndOfSpeech(token)
+        assertFalse(scheduler.hasPending)
         flow.onFinal(token, "系统")
         assertEquals(listOf("系统"), output.commits)
-
-        val (second, secondBackend) = startListening()
-        flow.onSessionEstablished(second)
-        flow.onPartial(second, "话")
-        assertEquals(VoiceEndpointPolicy.TRAILING_SILENCE_MS, scheduler.pendingDelay)
-        scheduler.expire()
-        assertEquals(1, secondBackend.stops)
+        assertTrue(output.autoTerminations.isEmpty())
     }
 
     @Test
-    fun blankPartialIsNotSpeechEvidence() {
+    fun nonBlankPartialEndsNoSpeechWithoutArmingSilence() {
+        val (token, backend) = startListening()
+        flow.onSessionEstablished(token)
+        flow.onPartial(token, "话")
+        assertFalse(scheduler.hasPending)
+        assertEquals(VoiceInputSession.State.Listening, flow.state)
+        assertEquals(0, backend.stops + backend.cancels)
+        flow.onFinal(token, "说话")
+        assertEquals(listOf("说话"), output.commits)
+    }
+
+    @Test
+    fun blankPartialKeepsTheNoSpeechWindow() {
         val (token, _) = startListening()
         flow.onSessionEstablished(token)
         flow.onPartial(token, " ")

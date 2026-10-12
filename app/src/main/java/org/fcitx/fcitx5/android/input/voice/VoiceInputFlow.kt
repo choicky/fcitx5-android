@@ -10,8 +10,10 @@ package org.fcitx.fcitx5.android.input.voice
  * backend events to the editor. Every trigger goes through the same instance.
  *
  * The watchdog bounds each session: no backend may keep the microphone open forever without
- * a usable session, and a microphone trigger may end itself on speech state. Space sessions
- * keep their gesture-driven termination: silence never finalizes them.
+ * a usable session, and a microphone trigger may end itself when its continuous activity
+ * stream goes silent. Providers without a level stream (System ASR) are never stopped on a
+ * silence guess; Space sessions keep their gesture-driven termination: silence never
+ * finalizes them.
  */
 internal class VoiceInputFlow(
     private val output: Output,
@@ -42,7 +44,15 @@ internal class VoiceInputFlow(
         /** Established microphone session in which nothing has been said yet. */
         NoSpeech,
 
-        /** Microphone session that has heard speech and is waiting out the trailing silence. */
+        /**
+         * Microphone session where discrete speech proof arrived (a provider speech-start or a
+         * non-blank partial) but no continuous activity has been seen since. Untimed: providers
+         * without a level stream (System ASR) are ended by their own endpoint events, never by
+         * a silence guess.
+         */
+        Active,
+
+        /** Microphone session with recent continuous activity, waiting out the trailing silence. */
         Silence
     }
 
@@ -151,7 +161,7 @@ internal class VoiceInputFlow(
     }
 
     override fun onSpeechStarted(token: Long) {
-        if (session.accepts(token)) speechEvidence(token)
+        if (session.accepts(token)) speechOccurred()
     }
 
     override fun onEndOfSpeech(token: Long) {
@@ -164,7 +174,7 @@ internal class VoiceInputFlow(
 
     override fun onPartial(token: Long, text: String) {
         if (!session.accepts(token)) return
-        if (text.isNotBlank()) speechEvidence(token)
+        if (text.isNotBlank()) speechOccurred()
         output.updateComposing(text)
     }
 
@@ -192,7 +202,7 @@ internal class VoiceInputFlow(
 
     override fun onAudioLevel(token: Long, level: Float) {
         if (!session.accepts(token)) return
-        if (level >= VoiceEndpointPolicy.SPEECH_LEVEL) speechEvidence(token)
+        if (level >= VoiceEndpointPolicy.SPEECH_LEVEL) speechActivity(token)
         output.audioLevel(level)
     }
 
@@ -211,20 +221,37 @@ internal class VoiceInputFlow(
         return true
     }
 
-    /** Any trigger gets the D035 early bound; only the microphone endpoints on speech state. */
-    private fun speechEvidence(token: Long) {
+    /** Discrete proof that speaking began; it ends NoSpeech but says nothing about silence. */
+    private fun speechOccurred() {
         if (trigger != VoiceTrigger.Microphone) return
+        // Stage.Establish is left only by onSessionEstablished or a terminal path (D035);
+        // an untimed Active stage lets endpoint-less providers keep their own semantics
+        if (stage == Stage.NoSpeech) disarmToActive()
+    }
+
+    /**
+     * Continuous activity (a loud chunk from the Fcitx-owned capture). Only this may arm or
+     * refresh the trailing-silence timer, and only after the session was established.
+     */
+    private fun speechActivity(token: Long) {
+        if (trigger != VoiceTrigger.Microphone || !established) return
         when (stage) {
-            Stage.None -> Unit
-            Stage.Establish, Stage.NoSpeech, Stage.Silence -> armStage(Stage.Silence, token)
+            Stage.None, Stage.Establish -> Unit
+            Stage.NoSpeech, Stage.Active, Stage.Silence -> armStage(Stage.Silence, token)
         }
+    }
+
+    private fun disarmToActive() {
+        stage = Stage.Active
+        cancelTimer?.invoke()
+        cancelTimer = null
     }
 
     private fun armStage(stage: Stage, token: Long) {
         this.stage = stage
         cancelTimer?.invoke()
         val delay = when (stage) {
-            Stage.None -> return
+            Stage.None, Stage.Active -> return // Active is deliberately untimed
             Stage.Establish -> VoiceEndpointPolicy.ESTABLISH_TIMEOUT_MS
             Stage.NoSpeech -> VoiceEndpointPolicy.NO_SPEECH_TIMEOUT_MS
             Stage.Silence -> VoiceEndpointPolicy.TRAILING_SILENCE_MS
@@ -235,7 +262,7 @@ internal class VoiceInputFlow(
     private fun onStageExpired(token: Long, expired: Stage) {
         if (expired != stage || !session.accepts(token)) return
         when (expired) {
-            Stage.None -> Unit
+            Stage.None, Stage.Active -> Unit // untimed: nothing can expire here
             Stage.Establish -> {
                 disarm()
                 // an early timeout is a startup service failure, so it may fall back (D035)
@@ -248,7 +275,9 @@ internal class VoiceInputFlow(
                 )
             }
             Stage.NoSpeech -> {
-                // nothing was said: drop the idle session instead of finalizing or uploading it
+                // nothing was said: cancel the idle session — no transcript is produced and
+                // future capture/transmission stops per backend cancellation; audio already
+                // streamed to a remote provider cannot be retracted
                 disarm()
                 if (cancel()) output.autoTerminated(VoiceAutoTermination.NoSpeech)
             }

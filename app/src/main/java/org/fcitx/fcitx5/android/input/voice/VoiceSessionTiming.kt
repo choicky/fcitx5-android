@@ -13,7 +13,7 @@ import android.os.Looper
  * The trigger is session policy only: it never selects or changes a provider.
  */
 internal enum class VoiceTrigger {
-    /** Toolbar microphone: a second click finishes, cancel cancels, silence may end it. */
+    /** Toolbar microphone: a second click finishes, cancel cancels, observed silence may end it. */
     Microphone,
 
     /** Long-press Space: only the gesture ends the session; silence never finalizes it. */
@@ -34,10 +34,18 @@ internal object VoiceEndpointPolicy {
      */
     const val ESTABLISH_TIMEOUT_MS = 30_000L
 
-    /** A microphone session in which nothing was ever said is dropped, not finalized. */
+    /**
+     * A microphone session in which nothing was ever said is cancelled, not finalized: no
+     * transcript is produced and future capture/transmission stops, while audio already
+     * streamed to a remote provider cannot be retracted.
+     */
     const val NO_SPEECH_TIMEOUT_MS = 10_000L
 
-    /** Speech followed by silence for this long finalizes the microphone session. */
+    /**
+     * Continuous capture activity followed by silence for this long finalizes the microphone
+     * session. Only the [AudioLevel] stream may arm or refresh this window, so providers
+     * without one (System ASR) keep endpointing themselves.
+     */
     const val TRAILING_SILENCE_MS = 1_500L
 
     /**
