@@ -33,6 +33,12 @@ internal interface VoiceBackend {
          * it can come before a connection or model load.
          */
         fun onSessionEstablished(token: Long) {}
+
+        /**
+         * The provider detected the beginning of speech, without waiting for a partial
+         * result. Provider-neutral evidence for the microphone endpointing policy.
+         */
+        fun onSpeechStarted(token: Long) {}
         fun onEndOfSpeech(token: Long)
         fun onPartial(token: Long, text: String)
 
