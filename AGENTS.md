@@ -119,6 +119,22 @@ rebuild the same APK in GitHub CI merely to obtain an artifact. The
 repository's test and release APK workflows are for CI runs that the Task
 Contract, a release gate, or an explicit user request actually requires.
 
+When a test or device-acceptance artifact is handed off through a Git tag,
+inspect the current workflow tag-trigger patterns first and choose a tag that
+does not match a production release-workflow trigger. Test artifact
+publication must not trigger release CI unless the Task Contract explicitly
+requires it.
+
+When an already-built local artifact only needs handoff, complete it as one
+closed-loop task: existing artifact → verify provenance and identity → if
+necessary and already authorized, use the repository's established signing
+identity → verify the resulting artifact and signature → upload → verify the
+hosted artifact is the exact intended artifact. Do not rebuild or trigger CI
+merely to publish an existing artifact. Ordinary correctable signing or upload
+mechanics within the already authorized scope are not architecture-level Hard
+Stops; fix them and continue rather than opening an extra review round,
+unless the fix would change behavior or authorization.
+
 ## CI autonomy boundary (mechanical repair, when CI is required)
 
 This boundary applies only to tasks where CI actually runs — that is, when the
