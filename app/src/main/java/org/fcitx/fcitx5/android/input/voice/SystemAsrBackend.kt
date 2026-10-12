@@ -50,7 +50,7 @@ internal class SystemAsrBackend(private val context: Context) : VoiceBackend {
         // the recognition service accepted the session (startListening alone does not mean that)
         override fun onReadyForSpeech(params: Bundle?) = events.onSessionEstablished(token)
 
-        override fun onBeginningOfSpeech() = Unit
+        override fun onBeginningOfSpeech() = events.onSpeechStarted(token)
 
         override fun onRmsChanged(rmsdB: Float) = Unit
 

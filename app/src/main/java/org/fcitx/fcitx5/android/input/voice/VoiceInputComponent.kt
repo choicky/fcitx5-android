@@ -30,6 +30,7 @@ import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
 import org.mechdancer.dependency.manager.ManagedHandler
 import org.mechdancer.dependency.manager.managedHandler
+import timber.log.Timber
 import kotlin.concurrent.thread
 
 class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
@@ -86,6 +87,11 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             service.toast(R.string.voice_fell_back_to_local)
         }
 
+        // observability only: labels a closed set, no user content, nothing read back
+        override fun autoTerminated(reason: VoiceAutoTermination) {
+            Timber.d("Voice session auto-terminated: %s (session %d)", reason, auditSessionId)
+        }
+
         override fun reportError(error: VoiceError) {
             val (errorClass, systemCode) = error.auditClass()
             voiceAudit.record(ErrorEvent(auditSessionId, errorClass, systemCode))
@@ -104,7 +110,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 }
             }
         }
-    })
+    }, HandlerVoiceSessionScheduler())
 
     private var languageCode = ""
     private var passwordField = false
@@ -242,7 +248,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     fun toggle() {
         when (inputFlow.state) {
-            VoiceInputSession.State.Idle -> start()
+            VoiceInputSession.State.Idle -> start(VoiceTrigger.Microphone)
             VoiceInputSession.State.Starting,
             VoiceInputSession.State.Listening -> requestStop()
             VoiceInputSession.State.Stopping -> Unit
@@ -256,7 +262,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
 
     /** Long-press Space: start a session unless one is already running. */
     fun startVoiceInput() {
-        if (inputFlow.state == VoiceInputSession.State.Idle) start()
+        if (inputFlow.state == VoiceInputSession.State.Idle) start(VoiceTrigger.SpaceHold)
     }
 
     /** Space released: stop normally, letting the backend deliver its final result. */
@@ -282,7 +288,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
         thread(name = "local-asr-release") { localAsrCache.clear() }
     }
 
-    private fun start() {
+    private fun start(trigger: VoiceTrigger) {
         if (passwordField) return
         val resolved = resolution
         // a cached Local ASR model (about 1 GB for FunASR Nano) is not kept once Local is off
@@ -313,7 +319,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 if (step.recommendation == Recommendation.Nothing) {
                     showUnavailable(AsrResolution.NoService)
                 } else {
-                    start()
+                    start(trigger)
                 }
                 return
             }
@@ -349,7 +355,7 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             service.prepareForVoiceInput().join()
             yield()
             inputFlow.launch(
-                token, languageCode, backend.create(),
+                token, languageCode, backend.create(), trigger,
                 fallbackKind?.let { kind -> { kind.create() } }
             )
         }
