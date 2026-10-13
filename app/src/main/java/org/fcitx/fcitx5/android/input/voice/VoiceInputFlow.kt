@@ -5,9 +5,16 @@
 
 package org.fcitx.fcitx5.android.input.voice
 
+import timber.log.Timber
+
 /**
  * Backend-independent voice input orchestration: session state, token checks and routing of
  * backend events to the editor. Every trigger goes through the same instance.
+ *
+ * When a [TextPostProcessor] is configured, an accepted final transcript is held for one
+ * processing window before it reaches the editor, and this flow alone owns that pending result:
+ * a cancellation, an input-target change, a close or a newer session drops it without committing
+ * anything, while a failed attempt still delivers the user's own transcript (D017).
  *
  * The watchdog bounds each session: no backend may keep the microphone open forever without
  * a usable session, and a microphone trigger may end itself when its continuous activity
@@ -17,7 +24,8 @@ package org.fcitx.fcitx5.android.input.voice
  */
 internal class VoiceInputFlow(
     private val output: Output,
-    private val scheduler: VoiceSessionScheduler
+    private val scheduler: VoiceSessionScheduler,
+    private val postProcessor: TextPostProcessor? = null
 ) : VoiceBackend.Events {
 
     interface Output {
@@ -70,11 +78,22 @@ internal class VoiceInputFlow(
     private var stage = Stage.None
     private var cancelTimer: (() -> Unit)? = null
 
+    /**
+     * The accepted final whose post-processing answer has not arrived yet. [VoiceInputSession]
+     * cannot witness this window: [VoiceInputSession.complete] has already moved the session to
+     * Idle, so a later cancel, close or input-target change leaves its generation untouched.
+     * Ownership of the pending result therefore lives here, armed for exactly one token.
+     */
+    private var processingToken: Long? = null
+    private var cancelProcessing: (() -> Unit)? = null
+
     val state: VoiceInputSession.State
-        get() = session.state
+        get() = if (processingToken != null) VoiceInputSession.State.Stopping else session.state
 
     /** Reserve a new session; the backend is attached later by [launch]. */
     fun begin(): Long? {
+        // a newer session supersedes any answer still on its way for the previous final
+        discardProcessing()
         val token = session.start() ?: return null
         notifyState()
         return token
@@ -128,7 +147,8 @@ internal class VoiceInputFlow(
     }
 
     fun cancel(): Boolean {
-        if (!session.cancel()) return false
+        val wasProcessing = discardProcessing()
+        if (!session.cancel() && !wasProcessing) return false
         disarm()
         releaseBackend()
         output.clearComposing()
@@ -138,9 +158,10 @@ internal class VoiceInputFlow(
 
     fun close() {
         disarm()
+        val wasProcessing = discardProcessing()
         val wasActive = session.cancel()
         releaseBackend()
-        if (wasActive) output.clearComposing()
+        if (wasActive || wasProcessing) output.clearComposing()
         notifyState()
     }
 
@@ -184,10 +205,54 @@ internal class VoiceInputFlow(
         releaseBackend()
         if (text.isNullOrBlank()) {
             output.clearComposing()
-        } else {
-            output.commit(text)
+            notifyState()
+            return
         }
+        val processor = postProcessor
+        if (processor == null) {
+            output.commit(text)
+            notifyState()
+            return
+        }
+        // Only a FINAL transcript reaches the processor, and only after the backend is released:
+        // the commit and the Idle notification now wait for the processing window.
+        processingToken = token
+        cancelProcessing = scheduler.schedule(TextPostPolicy.TIMEOUT_MS) {
+            deliverProcessed(token, text, null)
+        }
+        try {
+            processor.process(text, languageTag) { deliverProcessed(token, text, it) }
+        } catch (error: Exception) {
+            // a processor that cannot even start must not hang the window or lose the transcript
+            Timber.d(error, "Text post-processing failed for the accepted final")
+            deliverProcessed(token, text, null)
+        }
+    }
+
+    /**
+     * A processor answer for [token], or null when the attempt failed or timed out.
+     *
+     * Two outcomes must never be merged: a failed attempt while the result is still ours keeps the
+     * user's own [raw] transcript (nothing is lost because optional processing did not work), while
+     * a result we no longer own commits nothing at all — its editor target may be gone, and a late
+     * commit would be worse than no commit.
+     */
+    private fun deliverProcessed(token: Long, raw: String, processed: String?) {
+        if (processingToken != token) return
+        processingToken = null
+        cancelProcessing?.invoke()
+        cancelProcessing = null
+        output.commit(processed?.takeIf { it.isNotBlank() } ?: raw)
         notifyState()
+    }
+
+    /** Forgets a pending result: neither its processed text nor its raw transcript may be committed. */
+    private fun discardProcessing(): Boolean {
+        val had = processingToken != null
+        processingToken = null
+        cancelProcessing?.invoke()
+        cancelProcessing = null
+        return had
     }
 
     override fun onError(token: Long, error: VoiceError) {

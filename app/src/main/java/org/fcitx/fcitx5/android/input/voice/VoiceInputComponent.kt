@@ -110,7 +110,9 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
                 }
             }
         }
-    }, HandlerVoiceSessionScheduler())
+        // Gate-B PoC wiring: null in release builds and wherever the llama.cpp runtime or the
+        // sideloaded model is absent, so the flow's behaviour is then exactly as before
+    }, HandlerVoiceSessionScheduler(), LlamaPostProcessor.poc { service })
 
     private var languageCode = ""
     private var passwordField = false

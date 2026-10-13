@@ -825,4 +825,253 @@ class VoiceInputFlowTest {
         flow.onFinal(second, "第二次")
         assertEquals(listOf("第二次"), output.commits)
     }
+
+    // ---- optional text post-processing (D017): who owns the pending final ----
+
+    /** An answer is delivered only when the test chooses, as off-main-thread work would be. */
+    private class FakeProcessor : TextPostProcessor {
+        var calls = 0
+            private set
+        var rawSeen: String? = null
+            private set
+        var languageSeen: String? = null
+            private set
+
+        /** Every callback handed to the processor, oldest first: a test may answer a stale one. */
+        private val replies = mutableListOf<(String?) -> Unit>()
+
+        override fun process(raw: String, languageTag: String, callback: (String?) -> Unit) {
+            calls++
+            rawSeen = raw
+            languageSeen = languageTag
+            replies += callback
+        }
+
+        fun answer(processed: String?, index: Int = replies.lastIndex) {
+            replies.getOrNull(index)?.invoke(processed) ?: error("the flow never asked")
+        }
+    }
+
+    /** A processing window needs its own output and timer state, so [flow] is not the shared one. */
+    private class PostHarness(val processor: FakeProcessor = FakeProcessor()) {
+        val output = FakeOutput()
+        val scheduler = FakeScheduler()
+        val flow = VoiceInputFlow(output, scheduler, processor)
+
+        fun startListening(): Long {
+            val token = flow.begin() ?: error("no token")
+            assertTrue(flow.launch(token, "zh-CN", FakeBackend(), VoiceTrigger.Microphone))
+            flow.onStarted(token)
+            return token
+        }
+
+        /** The gesture ended and the final was accepted, but nothing is committed yet. */
+        fun finalAccepted(text: String): Long {
+            val token = startListening()
+            flow.stop()
+            flow.onFinal(token, text)
+            return token
+        }
+    }
+
+    @Test
+    fun onlyTheFinalReachesTheProcessorAndItsAnswerIsCommittedOnce() {
+        val h = PostHarness()
+        val token = h.startListening()
+        h.flow.onPartial(token, "你")
+        assertEquals(0, h.processor.calls) // partials are never post-processed
+        h.flow.stop()
+        h.flow.onFinal(token, "你好世界")
+        assertTrue(h.output.commits.isEmpty())
+        assertEquals(VoiceInputSession.State.Stopping, h.flow.state)
+        assertTrue(h.scheduler.hasPending) // the deferred commit is a bounded window
+        assertEquals("你好世界", h.processor.rawSeen)
+        assertEquals("zh-CN", h.processor.languageSeen)
+        h.processor.answer("你好，世界。")
+        assertEquals(listOf("你好，世界。"), h.output.commits)
+        assertEquals(VoiceInputSession.State.Idle, h.flow.state)
+        assertFalse(h.scheduler.hasPending)
+    }
+
+    @Test
+    fun processorFailureKeepsTheRawTranscript() {
+        val h = PostHarness()
+        h.finalAccepted("明天开会")
+        h.processor.answer(null) // the attempt failed on its own side
+        assertEquals(listOf("明天开会"), h.output.commits)
+        assertEquals(VoiceInputSession.State.Idle, h.flow.state)
+    }
+
+    @Test
+    fun throwingProcessorKeepsTheRawTranscript() {
+        val output = FakeOutput()
+        val flow = VoiceInputFlow(output, FakeScheduler(), TextPostProcessor { _, _, _ ->
+            error("runtime unavailable")
+        })
+        val token = flow.begin() ?: error("no token")
+        assertTrue(flow.launch(token, "zh-CN", FakeBackend(), VoiceTrigger.Microphone))
+        flow.onStarted(token)
+        flow.stop()
+        flow.onFinal(token, "一句话")
+        assertEquals(listOf("一句话"), output.commits)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+    }
+
+    @Test
+    fun timeoutCommitsTheRawTranscriptAndDropsTheLateAnswer() {
+        val h = PostHarness()
+        h.finalAccepted("较长的一段话")
+        assertEquals(TextPostPolicy.TIMEOUT_MS, h.scheduler.pendingDelay)
+        h.scheduler.expire()
+        assertEquals(listOf("较长的一段话"), h.output.commits)
+        assertEquals(VoiceInputSession.State.Idle, h.flow.state)
+        h.processor.answer("迟到") // the runtime finally answered
+        assertEquals(listOf("较长的一段话"), h.output.commits) // still exactly one commit
+    }
+
+    @Test
+    fun blankProcessedOutputKeepsTheRawTranscript() {
+        val h = PostHarness()
+        h.finalAccepted("空格")
+        h.processor.answer("   ")
+        assertEquals(listOf("空格"), h.output.commits)
+    }
+
+    @Test
+    fun cancelWhileProcessingCommitsNothingAndLeavesTheNextGestureUsable() {
+        val h = PostHarness()
+        val first = h.finalAccepted("别提交")
+        assertTrue(h.flow.cancel()) // panel cancel -> VoiceInputComponent.cancel()
+        assertEquals(VoiceInputSession.State.Idle, h.flow.state)
+        h.processor.answer("处理完了")
+        assertTrue(h.output.commits.isEmpty()) // neither the processed text nor the raw transcript
+        assertFalse(h.scheduler.hasPending)
+        assertTrue(h.output.clears > 0) // the shown partial is gone, as a cancel always cleared it
+
+        val second = h.startListening()
+        assertTrue(second != first)
+        h.flow.stop()
+        h.flow.onFinal(second, "第二次")
+        h.processor.answer("第二次。")
+        assertEquals(listOf("第二次。"), h.output.commits)
+    }
+
+    @Test
+    fun inputTargetChangeWhileProcessingCommitsNothing() {
+        // VoiceInputComponent.onStartInput -> cancel(): the session is already Idle here, so its
+        // generation cannot be what invalidates this result
+        val h = PostHarness()
+        h.finalAccepted("目标变了")
+        h.flow.cancel()
+        h.processor.answer("处理完了")
+        assertTrue(h.output.commits.isEmpty())
+    }
+
+    @Test
+    fun closeWhileProcessingCommitsNothing() {
+        val h = PostHarness()
+        h.finalAccepted("组件关闭")
+        h.flow.close()
+        h.processor.answer("处理完了")
+        assertTrue(h.output.commits.isEmpty())
+        assertEquals(VoiceInputSession.State.Idle, h.flow.state)
+        assertFalse(h.scheduler.hasPending)
+    }
+
+    @Test
+    fun newerSessionSupersedesThePendingResultAndStaysValid() {
+        val h = PostHarness()
+        h.finalAccepted("第一次")
+        val second = h.startListening() // begin() invalidates the answer still on its way
+        h.processor.answer("迟到的第一次", index = 0)
+        assertTrue(h.output.commits.isEmpty())
+        assertEquals(VoiceInputSession.State.Listening, h.flow.state) // the new session is untouched
+        h.flow.stop()
+        h.flow.onFinal(second, "第二次")
+        assertEquals("第二次", h.processor.rawSeen)
+        h.processor.answer("第二次，好。")
+        assertEquals(listOf("第二次，好。"), h.output.commits)
+    }
+
+    @Test
+    fun aViolatedExactlyOnceContractCannotCommitTwice() {
+        val h = PostHarness()
+        h.finalAccepted("一句话")
+        h.processor.answer("一句话。")
+        h.processor.answer("又一句")
+        assertEquals(listOf("一句话。"), h.output.commits)
+    }
+
+    @Test
+    fun strayStopDuringProcessingNeitherDropsNorDuplicates() {
+        val h = PostHarness()
+        h.finalAccepted("已经收尾")
+        h.flow.stop() // a second click after the final was already accepted
+        assertTrue(h.output.commits.isEmpty())
+        h.processor.answer("已经收尾。")
+        assertEquals(listOf("已经收尾。"), h.output.commits)
+    }
+
+    @Test
+    fun lateErrorForAnAcceptedFinalCommitsNothingAndReportsNothing() {
+        val h = PostHarness()
+        val token = h.finalAccepted("最终")
+        h.flow.onError(token, VoiceError.System(2)) // complete() already consumed this token
+        assertTrue(h.output.errors.isEmpty())
+        assertTrue(h.output.commits.isEmpty())
+        h.processor.answer("最终。")
+        assertEquals(listOf("最终。"), h.output.commits)
+    }
+
+    @Test
+    fun blankFinalNeverReachesTheProcessor() {
+        val h = PostHarness()
+        val first = h.startListening()
+        h.flow.stop()
+        h.flow.onFinal(first, null)
+        val second = h.startListening()
+        h.flow.stop()
+        h.flow.onFinal(second, "  ")
+        assertEquals(0, h.processor.calls)
+        assertTrue(h.output.commits.isEmpty())
+        assertEquals(VoiceInputSession.State.Idle, h.flow.state)
+        assertFalse(h.scheduler.hasPending)
+    }
+
+    @Test
+    fun processorlessFlowKeepsTheExistingCommitPath() {
+        val (token, backend) = startListening()
+        flow.stop()
+        flow.onFinal(token, "直接提交")
+        assertEquals(listOf("直接提交"), output.commits)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+        assertFalse(scheduler.hasPending) // no processing window was armed at all
+        assertEquals(1, backend.cancels)
+    }
+
+    @Test
+    fun d035FallbackIsUntouchedAndItsFinalIsProcessedOnce() {
+        val processor = FakeProcessor()
+        val output = FakeOutput()
+        val scheduler = FakeScheduler()
+        val flow = VoiceInputFlow(output, scheduler, processor)
+        val primary = FakeBackend()
+        val local = FakeBackend()
+        val token = flow.begin() ?: error("no token")
+        assertTrue(flow.launch(token, "zh-CN", primary, VoiceTrigger.Microphone) { local })
+        flow.onStarted(token)
+        flow.onError(token, VoiceError.Service("connect failed"))
+        assertEquals(listOf<VoiceError>(VoiceError.Service("connect failed")), output.fallbacks)
+        assertNull(processor.rawSeen) // nothing was recognized yet, so nothing is processed
+        val localToken = local.startedToken!!
+        assertTrue(localToken != token)
+        flow.stop()
+        flow.onFinal(localToken, "本地识别")
+        assertEquals("本地识别", processor.rawSeen)
+        processor.answer("本地识别。")
+        assertEquals(listOf("本地识别。"), output.commits)
+        assertEquals(1, primary.cancels)
+        assertEquals(VoiceInputSession.State.Idle, flow.state)
+        assertEquals(1, output.fallbacks.size) // still exactly one fallback for the gesture
+    }
 }
