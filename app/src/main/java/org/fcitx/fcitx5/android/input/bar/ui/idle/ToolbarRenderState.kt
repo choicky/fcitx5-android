@@ -26,8 +26,9 @@ internal class ToolbarRenderState {
         pending = true
     }
 
-    /** Whether a container laid out at [width] (previously [previousWidth]) has to render. */
-    fun needsRender(width: Int, previousWidth: Int): Boolean = pending || width != previousWidth
+    /** Whether a layout at [width] (previously [previousWidth]) has to render: unattached content, or a new width. */
+    fun needsRender(width: Int, previousWidth: Int): Boolean =
+        pending || width != previousWidth
 
     /**
      * Take the pending request for a container of [width].
