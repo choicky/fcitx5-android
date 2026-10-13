@@ -44,13 +44,6 @@ add_library(pinyin-customphrase STATIC "${CHINESE_ADDONS_PINYIN_DIR}/customphras
 target_include_directories(pinyin-customphrase INTERFACE "${CHINESE_ADDONS_PINYIN_DIR}")
 target_link_libraries(pinyin-customphrase PRIVATE Fcitx5::Utils LibIME::Core)
 
-# PoC (local text post-processor): llama.cpp CPU runtime + JNI facade, arm64 only.
-# The Gradle target list adds poc-postprocessor only for BUILD_ABI=arm64-v8a, so every
-# other build produces exactly the previous native output.
-if (ANDROID_ABI STREQUAL "arm64-v8a")
-    add_subdirectory(poc-postprocessor)
-endif()
-
 add_library(native-lib SHARED native-lib.cpp androidaddonloader/androidaddonloader.cpp)
 target_link_libraries(native-lib
         log

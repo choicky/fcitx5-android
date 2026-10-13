@@ -23,11 +23,6 @@ val doubaoAsrCredentials = listOf(
 fun buildConfigString(value: String) =
     "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
-// PoC (local text post-processor): matches the convention plugin's BUILD_ABI/buildABI override,
-// used only to decide whether the arm64-only llama.cpp facade target is requested
-val buildAbi = providers.environmentVariable("BUILD_ABI").orNull
-    ?: providers.gradleProperty("buildABI").orNull
-
 android {
     namespace = "org.fcitx.fcitx5.android"
 
@@ -46,11 +41,7 @@ android {
                     // android specific modules
                     "androidfrontend",
                     "androidkeyboard",
-                    "androidnotification",
-                    // PoC (local text post-processor): the arm64-only CMake guard in
-                    // src/main/cpp/CMakeLists.txt creates this target, so it is requested
-                    // only when the build is arm64-only; every other build is unchanged
-                    *if (buildAbi == "arm64-v8a") arrayOf("poc-postprocessor") else emptyArray()
+                    "androidnotification"
                 )
             }
         }
