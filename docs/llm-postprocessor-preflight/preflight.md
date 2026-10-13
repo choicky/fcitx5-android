@@ -82,7 +82,7 @@ transcript not yet produced).
 ASR providers ──(VoiceBackend.Events.onFinal = common Raw Transcript event)──►
 VoiceInputFlow.onFinal:
     session.complete(token) ; disarm() ; releaseBackend()
-    ──► Optional TextPostProcessor (async, claimed by this session)
+    ──► Optional TextPostProcessor (async; ownership per item 5)
     output.commit(processed ?: raw)
     notifyState()
 ──► existing final delivery → FcitxInputMethodService.commitText → editor
@@ -90,9 +90,10 @@ VoiceInputFlow.onFinal:
 
 Why this is the smallest correct point:
 
-- It is the only place where token ownership is already resolved (`session.complete`) before text
-  is delivered, so the processor inherits a decision that has already been made instead of
-  making a second one.
+- It is the only place where the ASR-side token decision is already resolved (`session.complete`)
+  before text is delivered, so exactly one owner takes responsibility for the pending result
+  instead of each provider making its own decision. It does **not** by itself settle ownership of
+  an *asynchronous* processor result delivered after that call; that window is item 5.
 - It is provider-independent by construction: all six production provider families already pass
   through it (`VoiceInputFlow` is backend-agnostic; see `VoiceInputFlow.kt:8-17` doc and the
   table above). No per-provider `ASR A → LLM`, `ASR B → LLM`, `ASR C → LLM` wiring is needed,
@@ -101,7 +102,9 @@ Why this is the smallest correct point:
   is fully closed before the processor starts: D017's "post-processing operates on text after
   ASR" holds structurally, not just by convention.
 - `VoiceInputFlow` receives no vendor or framework type; it only needs one collaborator, so no
-  `VoiceBackend`/`AsrServiceId`/`VoiceBackendKind` type changes and no new state machine.
+  `VoiceBackend`/`AsrServiceId`/`VoiceBackendKind` type changes are implied. The processor also does
+  not need a parallel session machine; the one lifecycle question it opens — ownership of a result
+  that arrives after `session.complete()` — is scoped in item 5.
 - `text.isNullOrBlank()` keeps the existing behaviour for a blank transcript: nothing is
   processed and nothing is committed.
 
@@ -111,39 +114,71 @@ limit, not an architectural conflict.
 
 ## 5. Async / session / cancellation rule
 
-Reuse the existing single monotonic `generation` counter (`VoiceInputSession.kt`); do **not** add
-a parallel session machine (authority 最小修改边界). At `session.complete(token)` the invariant is
-`generation == token + 1` and `state == Idle`. Claim rule:
+The item-4 seam resolves the ASR-side token before text is delivered, but an asynchronous processor
+result is delivered *later*, and the existing token machine alone does not prove that such a result
+is still owned. Source facts (`VoiceInputSession.kt`):
 
-> **Claim rule.** At the moment the processor result is delivered on the main thread, it may
-> replace/commit its Raw Transcript only if `generation == token + 1` still holds and the flow has
-> not started or begun preparing another session. Otherwise the result is dropped and only logged.
+- `complete(token)` (`:72-76`) → `invalidate()` (`:78-81`) → `generation += 1; state = Idle`.
+- `cancel()` (`:54-58`) short-circuits: `if (state == State.Idle) return false`. Once `complete()`
+  has run, the session is Idle, so a later cancel does **not** advance `generation`.
+- `VoiceInputFlow` inherits that short-circuit: `cancel()` returns at `!session.cancel()`
+  (`VoiceInputFlow.kt:130-131`) and `close()` reads the same `false` `wasActive` (`:139-141`).
+- `start()` (`:23-28`) and `rebind()` (`:66-70`) do bump `generation` while not Idle;
+  `VoiceInputFlow.begin()` goes through `session.start()` (`VoiceInputFlow.kt:77-78`).
 
-Every competing event already advances `generation` — `begin()`/`session.start()`, `cancel()`,
-`close()`, `invalidate()` — so the check is a pure comparison, and `VoiceInputComponent.onStartInput`
-(→ `cancel()`) already covers input-target changes. The invariant "only a processor result still
-owned by the current valid Voice session may replace/commit its Raw Transcript" is therefore
-satisfied without new state.
+So after `onFinal` has called `session.complete(token)`, a user cancellation, an
+`onStartInput`/input-target change, or a component `close()` inside the processing window leaves
+`generation` unchanged. `generation == token + 1` therefore detects **only** newer-session
+supersession. It is not a sufficient ownership proof for a pending processor result, and this
+preflight does not record it as confirmed architecture.
 
-The eight required scenarios:
+**PoC correctness requirement (the seam conclusion of item 4 is unchanged).** An asynchronous
+processor result may replace/commit its Raw Transcript only while it still owns the Voice result
+**and** the relevant input/editor target remains valid. The PoC must establish the smallest
+mechanism consistent with the existing Voice lifecycle for this post-`complete()` window. It may
+reuse the existing generation/session mechanisms where they are actually sufficient — newer-session
+supersession already is — but must not assume that `generation == token + 1` alone handles
+cancellation, component close, or editor/input-target invalidation. The mechanism itself is
+deliberately not invented in this evidence pass; it is the first question the PoC has to settle.
 
-1. Raw Transcript arrives, processor starts → keep `State.Stopping`, do not `notifyState()` to
-   Idle until the processor resolves (this is the one observable change: the Idle transition is
-   delayed by the processing window).
-2. User cancels while processing → `generation` moves → claim fails → result dropped, nothing
-   committed. Identical to today's cancel semantics.
-3. Input target disappears/changes → `onStartInput` → `cancel()` → same as (2).
-4. Newer Voice session starts → `begin()` moves `generation` → old result stale; the new session
-   is unaffected because the processor holds no backend reference.
-5. Old result arrives late → claim fails → log only (observe-only, consistent with partials).
-6. Processor fails → `output.commit(raw)`.
-7. Processor times out → `output.commit(raw)`, using the already injectable
+Two outcome classes must stay separate because their semantics are opposite:
+
+- **A. Processor execution failure** — exception, timeout, blank/invalid output. If ownership is
+  still valid → commit the Raw Transcript. A valid transcript must not be lost because optional
+  processing failed.
+- **B. Ownership invalidation** — a user cancellation that invalidates this pending result, the
+  input/editor target changed or disappeared, a newer Voice result/session superseded it, the
+  component closed, or the result is otherwise stale → drop the processed result and do **not**
+  commit the old Raw Transcript as a fallback either.
+
+> **Invariant.** Processor failure may fall back to Raw Transcript only while the pending Voice
+> result still has valid ownership. Lost ownership means no commit at all.
+
+The eight required scenarios, restated against the real lifecycle:
+
+1. Raw Transcript arrives, processor starts → keep the UI in `State.Stopping`, do not
+   `notifyState()` to Idle until the processor resolves (the one observable change: the Idle
+   notification is delayed by the processing window).
+2. User cancels while processing → nothing may be committed. `generation` does **not** move for
+   this case after `complete()`; the PoC mechanism must cover it.
+3. Input target disappears/changes → `onStartInput` → `VoiceInputComponent.cancel()` →
+   `flow.cancel()` short-circuits once the session is Idle, so the same as (2): must be covered by
+   the PoC mechanism, not assumed.
+4. Newer Voice session starts → `begin()`/`start()` moves `generation` → the existing comparison
+   already makes the old result stale; the new session is unaffected because the processor holds no
+   backend reference. This is the one case the current token machine does cover.
+5. Old result arrives late → dropped by the same ownership check, log only (observe-only,
+   consistent with partial handling).
+6. Processor fails → class A: `output.commit(raw)` **only while ownership is still valid**;
+   otherwise no commit.
+7. Processor times out → same rule as (6), using the already injectable
    `VoiceSessionScheduler.schedule(delayMs)` (`VoiceSessionTiming.kt:63-77`) — the same mechanism
    the watchdog uses, no new timer type.
-8. Processor returns empty/blank/invalid → `output.commit(raw)`.
+8. Processor returns empty/blank/invalid → same rule as (6): raw fallback while owned, nothing once
+   ownership is lost.
 
 Additional owner-side rule derived from source: the processor must never touch `backend`, `stage`,
-`cancelTimer` or `fallback`; it is a text→text collaborator plus a claim check only.
+`cancelTimer` or `fallback`; it is a text→text collaborator plus an ownership check only.
 
 ## 6. Partial vs final policy
 
@@ -159,17 +194,22 @@ composing path, which the accepted architecture does not ask for.
 ## 7. Failure / fallback semantics
 
 ```
-disabled                       : raw ─────────────────────────────► commit(raw)      (current behaviour)
-success                        : raw ──► processor ──► processed ─► commit(processed)
-failure | timeout | empty/invalid | claim lost : raw ─────────────► commit(raw)      (never lost)
+disabled                    : raw ─────────────────────────────► commit(raw)        (current behaviour)
+success (still owned)       : raw ──► processor ──► processed ─► commit(processed)
+A. execution failure,
+   ownership still valid    : raw ─────────────────────────────► commit(raw)        (never lost)
+B. ownership lost           : processed *and* raw are dropped ─► no commit at all
 ```
 
-- A valid Raw Transcript is never lost because optional processing failed: every non-success
-  branch commits `raw`.
+- A valid Raw Transcript is never lost because *processing failed* (class A). A transcript whose
+  ownership was invalidated (class B) is not committed either: item 5 splits these two outcomes,
+  and the PoC must keep them split, because in class B the target that would receive the text may
+  no longer exist.
 - Processing is not on the ASR-error path at all (`onError` produces no transcript), so no new
   error class is needed and D035 remains untouched: `tryFallback` fires only for a
   `VoiceError.Service` before `established`, and the processor runs strictly after that window.
-- **Recommendation for the first PoC**: silent raw fallback + one small non-blocking hint.
+- **Recommendation for the first PoC**: silent raw fallback (class A only) + one small
+  non-blocking hint.
   Current UI infrastructure supports this cheaply (`service.toast` is already used for
   `voice_fell_back_to_local`, `voice_asr_error`, etc., and `VoiceAudit` is an observe-only record
   that can gain one event class). A blocking dialog, a new `VoiceInputSession.State`, or a
@@ -201,9 +241,9 @@ internal data class TextPostConfig(mode, processorKind, model?, endpoint?, crede
 internal class TextModelCache(loader: (TextModel, Int) -> TextEngine)  // mirrors LocalAsrRecognizerCache
 ```
 
-Ownership split required by §15: `VoiceInputFlow` = orchestration + claim check; the processor =
-provider implementation; `VoiceInputComponent` = configuration + lifetime; the cache = model
-lifecycle. `VoiceInputFlow` learns nothing about llama.cpp, LiteRT, ONNX, HTTP or any vendor.
+Ownership split required by §15: `VoiceInputFlow` = orchestration + the item-5 ownership check; the
+processor = provider implementation; `VoiceInputComponent` = configuration + lifetime; the cache =
+model lifecycle. `VoiceInputFlow` learns nothing about llama.cpp, LiteRT, ONNX, HTTP or any vendor.
 
 Deliberately **not** proposed: a generic "pipeline stage" framework, a reactive flow rewrite, a
 second session state machine, or reusing `VoiceBackend` for text (a `VoiceBackend` is
@@ -310,7 +350,7 @@ as performance evidence.
 
 | # | Model / version | Params | Candidate quant | Approx. storage | License | Redistribution | Chinese suitability | Backend | Distinct experiment question |
 |---|---|---|---|---|---|---|---|---|---|
-| L1 | **Qwen3-0.6B-Instruct** (2025-04) | 0.6 B | GGUF Q4_K_M (community quant, e.g. unsloth/bartowski) | ≈0.4 GB download, ≈0.6–0.8 GB resident (estimate, LIKELY) | Apache-2.0 (CONFIRMED) | permissive; app-download + attribution notice | strongest known sub-1B Chinese (LIKELY) | llama.cpp CPU | *is 0.6 B enough for conservative punctuation + zh/en spacing + restrained correction at minimal footprint?* |
+| L1 | **Qwen3-0.6B** (base model, 2025-04) | 0.6 B | GGUF Q4_K_M (community quant, e.g. unsloth/bartowski; not an official Qwen artifact) | ≈0.4 GB download, ≈0.6–0.8 GB resident (estimate, LIKELY) | Apache-2.0 (CONFIRMED) | permissive; app-download + attribution notice | strongest known sub-1B Chinese (LIKELY) | llama.cpp CPU | *is 0.6 B enough for conservative punctuation + zh/en spacing + restrained correction at minimal footprint?* |
 | L2 | **MiniCPM5-1B** (OpenBMB, ~2026-08; 1.08 B total / 0.68 B non-embedding, CONFIRMED from card) | ~1 B | Q4 from **official `openbmb/MiniCPM5-1B-GGUF`** | ≈0.7 GB | Apache-2.0 (CONFIRMED) | **official GGUF supply chain** — cleanest provenance; OpenBMB also ships MobileCPM | zh+en, on-device-oriented line (LIKELY) | llama.cpp CPU | *does a purpose-built 2026 on-device model beat Qwen3-0.6B on meaning-preservation at similar cost?* |
 | L3 (optional upper bound) | **MiniCPM5-2B** (2026-09-07, LIKELY) *or* **Qwen3.5-0.8B** (2026-02, CONFIRMED Apache-2.0, 262K ctx, natively multimodal) | 1–2 B | Q4 (official/`UD-Q4_K_XL`) | ≈1.3–1.5 GB | Apache-2.0 | community GGUF inherits Apache-2.0 (LIKELY); Qwen3.5 carries vision weights unless a text-only conversion is used | strong (LIKELY) | llama.cpp CPU | *is the 1.5–2 B class reachable at all with Local ASR resident — i.e. is there a quality step worth its memory?* |
 | S (specialized non-LLM control) | **FunASR CT-Transformer punctuation** `iic/punc_ct-transformer_cn-en-common-vocab471067-large`, official quantised ONNX (`model_quant.onnx`) + optional **MacBERT-4CSC** (`shibing624/macbert4csc-base-chinese`) | — / ~0.1 B | as published | ≈0.9–1.1 GB + ≈0.4 GB (LIKELY) | Apache-2.0 both (CONFIRMED) | ONNX; already coexists with sherpa-onnx deployments | zh+en, punc-only | ONNX Runtime (already inside the sherpa AAR) | *is an LLM needed at all, given deterministic, no-hallucination edits?* |
@@ -444,7 +484,8 @@ stop and decide):
 conservative improvement of a short Chinese ASR transcript within an IME-tolerable delay, without
 losing a valid transcript?* — which is exactly what gates every later decision.
 
-- Local candidates: **L1 Qwen3-0.6B-Instruct Q4_K_M** and **L2 MiniCPM5-1B Q4 (official GGUF)**;
+- Local candidates: **L1 Qwen3-0.6B Q4_K_M (community quant)** and **L2 MiniCPM5-1B Q4 (official
+  GGUF)**;
   L3 (MiniCPM5-2B / Qwen3.5-0.8B) only if both L1/L2 pass quality and fail latency, to locate the
   memory ceiling. Maximum 3, one at a time per run.
 - Inference backend: **llama.cpp, CPU only, GGUF mmap from app-private storage**, behind a thin
@@ -452,8 +493,8 @@ losing a valid transcript?* — which is exactly what gates every later decision
 - Cloud control: one OpenAI-compatible BYOK endpoint, **same prompt, same corpus**, used only to
   separate "model capacity" from "prompt/task design"; never mixed into ASR configuration.
 - Architecture under test: the item-4 seam in `VoiceInputFlow.onFinal` with the item-8 interface
-  and the item-5 claim rule — PoC-scoped, debug-gated pref switch, no settings UI beyond an
-  internal toggle.
+  and the item-5 ownership requirement — PoC-scoped, debug-gated pref switch, no settings UI beyond
+  an internal toggle.
 - Device matrix (small on purpose): **vivo X100 Pro** (Dimensity 9300, 12/16 GB, OriginOS) and
   **Redmi K90 Pro Max** (SD 8 Elite Gen 5, 12/16 GB, HyperOS); each with **XAsrOffline** as the
   co-resident ASR (the ≈175 MB model), and **FunAsrNano only on one device/one run** to measure
@@ -472,6 +513,12 @@ losing a valid transcript?* — which is exactly what gates every later decision
   bigger model. If 2 fails at any size: local LLM post-processing is not the right capability and
   the specialized non-LLM control (item 12) becomes the product question. If 3 fails for
   everything: the seam is right but the workload is wrong → stop the LLM line.
+- Prerequisite implementation inside the same PoC (before the model numbers are interpreted): the
+  smallest mechanism that satisfies the item-5 ownership rule for the post-`complete()` window.
+  Newer-session supersession can reuse `generation`; cancellation, component close and
+  editor/input-target invalidation need whatever the existing lifecycle actually requires. This is
+  PoC plumbing scoped to the experiment, not a product state machine, and its final form is not
+  decided by this preflight.
 - Prerequisite measurement inside the same PoC (half a day, not a separate campaign): characterise
   whether the current production Local ASR finals already carry punctuation on-device, because
   that single observation decides whether class B/CT-Transformer remains in scope.
@@ -481,8 +528,8 @@ losing a valid transcript?* — which is exactly what gates every later decision
 ## 16. Expected implementation boundary (for eventual integration)
 
 Likely to change:
-- `input/voice/VoiceInputFlow.kt` — the processing branch in `onFinal`, the claim check, a
-  processor collaborator, one new `Output` no-op? (no: keep `Output` unchanged; the branch calls
+- `input/voice/VoiceInputFlow.kt` — the processing branch in `onFinal`, the item-5 ownership check,
+  a processor collaborator, one new `Output` no-op? (no: keep `Output` unchanged; the branch calls
   `output.commit` on resolution).
 - `input/voice/VoiceInputComponent.kt` — construct/hold the processor + model cache, read prefs,
   release policy alongside `releaseLocalAsr()`.
@@ -503,10 +550,18 @@ New files/classes (all inside `input/voice/` + a runtime package): `TextPostProc
 over the runtime, plus catalog/pinning for text models.
 
 Tests: extend `VoiceInputFlowTest` (its `FakeBackend`/`FakeOutput` harness already supports
-synchronous terminal events, `VoiceInputFlowTest.kt:19-40`) with the eight scenarios of item 5;
-new JVM tests for config/claim/timeout, prompt building and response parsing, edit-classification
+synchronous terminal events, `VoiceInputFlowTest.kt:19-40`) with the eight scenarios of item 5,
+which must include the class A (execution failure, still owned → raw) versus class B (ownership
+lost → no commit) split;
+new JVM tests for config/ownership/timeout, prompt building and response parsing, edit-classification
 scoring; `CredentialStore`-style tests for the new provider string. No instrumentation farm and no
 CI expansion are implied.
+
+Conditionally in scope: `input/voice/VoiceInputSession.kt`. Its token machine covers newer-session
+supersession, but per item 5 it does not cover the post-`complete()` ownership window. If the
+smallest mechanism the PoC settles needs a marker there, `VoiceInputSession` and/or
+`VoiceInputFlow` change accordingly. This preflight neither claims that no session change is
+required nor prescribes one.
 
 Components expected **NOT** to change — stated explicitly as required:
 - **individual ASR providers**: none (`SystemAsrBackend`, `NetworkAsrBackend`, `DoubaoAsrBackend`,
@@ -518,7 +573,6 @@ Components expected **NOT** to change — stated explicitly as required:
 - **D035 fallback**: unchanged (`tryFallback`, `rebind`, `fallbackTarget`, `VoiceEndpointPolicy`
   constants) — the processor runs strictly after the fallback window;
 - **Local ASR engines**: unchanged (`LocalAsrEngines`, `LocalAsr.kt`, `LocalAsrBackend`);
-- `VoiceInputSession` (token machine reused, not extended);
 - **LibIME**, **fcitx5-chinese-addons**, native Chinese input code, the fcitx5 core CMake build,
   `FcitxInputMethodService.commitText`/`updateVoiceComposingText`: unchanged — the processor hands
   text to the existing commit path only.
@@ -579,7 +633,7 @@ required, that is a Hard Stop review trigger, not an implementation detail.
    (`LocalAsrMetrics.processPssMb`) but no value is reported in authority evidence (**UNVERIFIED**).
 4. Whether conservative behaviour (no rewording) is achievable at 0.6 B with a strict prompt, or
    only at ≥1.5 B at unacceptable memory (**UNVERIFIED**).
-5. Whether llama.cpp's CPU-only abort path is sufficient for the claim rule (header comment says
+5. Whether llama.cpp's CPU-only abort path is sufficient for the item-5 ownership rule (header comment says
    the abort callback is CPU-only — CONFIRMED as a limitation; measured responsiveness UNVERIFIED).
 6. NPU accessibility from a sideloaded Fusion APK on these two国行 devices via LiteRT vendor
    delegates (MediaTek NeuroPilot named for D9300; Qualcomm QNN/Hexagon) — **UNVERIFIED**;
@@ -591,29 +645,39 @@ required, that is a Hard Stop review trigger, not an implementation detail.
    (**LIKELY** that sustained load degrades; **UNVERIFIED** for this workload).
 9. Whether `Qwen3.5-0.8B`'s multimodal weights can be stripped for a text-only GGUF without
    quality loss (**UNVERIFIED**).
+10. The smallest mechanism that owns a pending processor result after `session.complete(token)` for
+    cancellation, component close and editor/input-target invalidation — `generation` alone does not
+    cover these (item 5). **UNPROVEN by desk research; to be established by the PoC**, which must
+    also show the class B rule (no commit once ownership is lost) against the real IME lifecycle.
 
 ## 20. Hard Stop status
 
 **No Hard Stop.** All three Hard-Stop examples from §21 are disproved by source:
 - a common Raw Transcript seam **does** exist and is a single already-tested function
   (`VoiceInputFlow.onFinal`), so no provider needs invasive modification;
-- async processor ownership **can** be integrated with the current session lifecycle by reusing
-  `VoiceInputSession.generation` (item 5), without touching accepted cancel/D035 semantics;
+- async processor ownership does **not** conflict with the current session lifecycle: the seam and
+  the accepted cancel/D035 semantics need no parallel session machine, and the open part is the
+  post-`complete()` ownership window (items 5 and 19) — an unresolved mechanism the PoC must
+  establish, i.e. ordinary work, not an architecture-level conflict. What this preflight no longer
+  claims is that `VoiceInputSession.generation` alone already solves it;
 - a Local runtime does **not** conflict with the current native architecture — the app already
   ships and leases a native inference runtime (sherpa-onnx AAR) from app-private storage, and the
   open items (JNI plumbing, packaging, model download, unverified acceleration) are explicitly
   ordinary work, not architecture conflicts.
 
-Authority check: the design adds no parallel state machine (uses the existing one), no per-vendor
-pipeline, and stays inside the `fcitx5-android` voice module boundary of REQUIREMENTS §12.
+Authority check: the design does not assume a parallel state machine; if the PoC needs an
+additional ownership marker for the post-`complete()` window, it must be the smallest one
+consistent with the existing Voice lifecycle (item 5). The work stays inside the
+`fcitx5-android` voice module boundary of REQUIREMENTS §12.
 
 ## 21. Final recommendation
 
 # PROCEED TO LOCAL/ARCHITECTURE POC
 
-Rationale in one paragraph: the seam is already correct and provider-neutral, so the architecture
-half of the question is answered by construction and needs only a small validation batch; the real
-unknown is whether a conservative ~0.6–1 B Apache-2.0 model can, on-device and co-resident with
+Rationale in one paragraph: the seam is already correct and provider-neutral, so *where* processing
+hangs off the pipeline is answered by construction and needs only a small validation batch; the two
+real unknowns are the smallest ownership mechanism for the post-`complete()` window (item 5) and
+whether a conservative ~0.6–1 B Apache-2.0 model can, on-device and co-resident with
 Local ASR, beat deterministic cleanup inside an IME-tolerable delay. That is exactly the bounded
 experiment in item 15, and its three-part decision rule can end the LLM line cleanly if it fails.
 A cloud-first PoC would answer a question the accepted architecture does not make contingent
