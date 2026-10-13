@@ -25,7 +25,7 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
         justifyContent = JustifyContent.SPACE_AROUND
     }
 
-    private var configuredActions = emptyList<ToolbarAction>()
+    private val renderState = ToolbarRenderState()
 
     private fun toolButton(@DrawableRes icon: Int) = ToolButton(ctx, icon, theme).also {
         val size = ctx.dp(40)
@@ -66,14 +66,14 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
     )
 
     fun render(actions: List<ToolbarAction>) {
-        configuredActions = ToolbarAction.normalize(actions)
+        renderState.request(actions)
         renderMeasured()
     }
 
     private fun renderMeasured() {
-        if (root.width <= 0) return
+        if (!renderState.renderForWidth(root.width)) return
         root.removeAllViews()
-        val result = ToolbarAction.presentationActions(configuredActions) { actions ->
+        val result = ToolbarAction.presentationActions(renderState.actions) { actions ->
             val availableWidth = root.width - root.paddingLeft - root.paddingRight
             val requiredWidth = actions.sumOf { action ->
                 val button = buttons[action] ?: return@sumOf 0
@@ -94,7 +94,11 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
 
     init {
         root.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
-            if (right - left != oldRight - oldLeft) renderMeasured()
+            if (renderState.needsRender(right - left, oldRight - oldLeft)) {
+                // Adding buttons inside this layout dispatch does not reliably get the measure
+                // pass they need; render after the traversal has finished instead.
+                root.post { renderMeasured() }
+            }
         }
     }
 
