@@ -19,7 +19,13 @@ internal enum class LocalAsrModel(
     /** Whether this model may be selected by the user-initiated recommendation. */
     val recommendationEligible: Boolean = true,
     /** D035 fallback maturity; deliberately separate from recommendation eligibility. */
-    val production: Boolean = false
+    val production: Boolean = false,
+    /**
+     * This model pin's capture bound (D081): the effective limit is
+     * `min(VoiceCapturePolicy.MAX_CAPTURE_MS, maxCaptureMillis)`. A lower value protects a
+     * known model-runtime limit of the current pinned artifact, not of the model family.
+     */
+    val maxCaptureMillis: Long = VoiceCapturePolicy.MAX_CAPTURE_MS
 ) {
     /**
      * FunASR Nano: sherpa-onnx OfflineRecognizer, whole-utterance decode on stop. The
@@ -37,7 +43,12 @@ internal enum class LocalAsrModel(
             "Qwen3-0.6B/vocab.json",
             "Qwen3-0.6B/merges.txt",
             "Qwen3-0.6B/tokenizer.json"
-        )
+        ),
+        // Dual-device evidence: this pinned export (max_total_len=512) produced empty finals
+        // at about 34-39 s of speech (local-asr-checkpoint.md). 30 s is a protective bound for
+        // the current pin only, placed below that failure point; it is not a permanent FunASR
+        // Nano property and revisiting it is a re-pin decision, not this policy.
+        maxCaptureMillis = 30_000L
     ),
 
     XAsrOffline(

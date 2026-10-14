@@ -145,7 +145,7 @@ internal class DoubaoAsrBackend(
             post { events.onStarted(token) }
             failure = opened.pump(stats, keepGoing = {
                 isActive && !closed && !stopRequested &&
-                        SystemClock.elapsedRealtime() - startedAt <= MAX_SESSION_MS
+                        SystemClock.elapsedRealtime() - startedAt <= VoiceCapturePolicy.MAX_CAPTURE_MS
             }, onLevel = { level -> post { events.onAudioLevel(token, level) } }) { buffer, count ->
                 // pcm_s16le
                 for (i in 0 until count) {
@@ -174,6 +174,12 @@ internal class DoubaoAsrBackend(
             // the microphone failed, not the service: no D035 fallback for this
             post { if (tracker.fail(detail) is DoubaoResultTracker.Outcome.Failed) failCapture(detail) }
             return
+        }
+        if (!stopRequested) {
+            // the pump ended with no user or auto stop: only the capture safety ceiling can do
+            // that, and it finalizes exactly like a user stop (D081)
+            Timber.w("Doubao ASR capture ceiling of ${VoiceCapturePolicy.MAX_CAPTURE_MS}ms " +
+                    "reached; finalizing like a user stop")
         }
         // end of input only: tail results keep arriving until the server's last package
         val tail = packet.toByteArray()
@@ -299,7 +305,6 @@ internal class DoubaoAsrBackend(
         // 200 ms of 16 kHz mono pcm_s16le, the packet size the API recommends
         private const val PACKET_BYTES = AudioCapture.SAMPLE_RATE * 2 / 5
         private const val FINAL_TIMEOUT_MS = 8_000L
-        private const val MAX_SESSION_MS = 60_000L
         private const val NORMAL_CLOSURE = 1000
 
         private val client by lazy {

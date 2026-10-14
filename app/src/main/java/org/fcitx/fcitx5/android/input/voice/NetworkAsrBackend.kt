@@ -29,6 +29,8 @@ internal class NetworkAsrBackend(
     private val finalTimeoutMs: Long = DEFAULT_FINAL_TIMEOUT_MS,
     /** Credential values that must never appear in a logged, shown or stored detail. */
     private val secrets: Collection<String> = emptyList(),
+    /** This path's capture safety bound (D081); a lower engine/protocol limit passes it here. */
+    private val maxCaptureMs: Long = VoiceCapturePolicy.MAX_CAPTURE_MS,
     private val newClient: (NetworkAsrClient.Listener) -> NetworkAsrClient
 ) : VoiceBackend {
 
@@ -105,7 +107,7 @@ internal class NetworkAsrBackend(
             post { events.onStarted(token) }
             failure = opened.pump(stats, keepGoing = {
                 isActive && !closed && !stopRequested &&
-                        SystemClock.elapsedRealtime() - startedAt <= MAX_SESSION_MS
+                        SystemClock.elapsedRealtime() - startedAt <= maxCaptureMs
             }, onLevel = { level -> post { events.onAudioLevel(token, level) } }) { buffer, count ->
                 session.send(buffer, count)
             }
@@ -122,6 +124,11 @@ internal class NetworkAsrBackend(
             // the microphone failed, not the service: no D035 fallback for this
             post { fail(it, capture = true) }
             return
+        }
+        if (!stopRequested) {
+            // the pump ended with no user or auto stop: only the capture safety ceiling can do
+            // that, and it finalizes exactly like a user stop (D081)
+            Timber.w("$label capture ceiling of ${maxCaptureMs}ms reached; finalizing like a user stop")
         }
         session.finishInput()
         post { if (!closed) mainHandler.postDelayed(finalTimeout, finalTimeoutMs) }
@@ -153,7 +160,6 @@ internal class NetworkAsrBackend(
 
         /** A self-hosted CPU server may need longer for its offline pass on long speech. */
         const val SELF_HOSTED_FINAL_TIMEOUT_MS = 20_000L
-        private const val MAX_SESSION_MS = 60_000L
 
         /** Shared by the network clients. */
         val http: OkHttpClient by lazy {

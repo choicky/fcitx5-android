@@ -45,7 +45,16 @@ internal data class TencentAsrConfig(
          * is still an internal trial offering (1093/135476) and not a default.
          */
         const val DEFAULT_ENGINE = "16k_zh_en"
-        val ENGINES = listOf(DEFAULT_ENGINE, "16k_zh", "Hy-ASR-3.0-preview")
+        const val HY_ASR_ENGINE = "Hy-ASR-3.0-preview"
+        val ENGINES = listOf(DEFAULT_ENGINE, "16k_zh", HY_ASR_ENGINE)
+
+        /** The engine's documented per-session audio limit (1093/135476), honored by D081. */
+        const val HY_ASR_MAX_CAPTURE_MS = 60_000L
+
+        /** Effective capture bound for the selected engine: min(ceiling, applicable lower limit). */
+        fun maxCaptureMs(engine: String) = if (engine == HY_ASR_ENGINE)
+            minOf(VoiceCapturePolicy.MAX_CAPTURE_MS, HY_ASR_MAX_CAPTURE_MS)
+        else VoiceCapturePolicy.MAX_CAPTURE_MS
 
         fun fromStore(fields: Map<String, String>?) = TencentAsrConfig(
             appId = fields?.get(APP_ID).orEmpty(),
