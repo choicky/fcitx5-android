@@ -30,7 +30,7 @@ internal object VoiceEndpointPolicy {
      * D035 "early timeout before a usable recognition session is established": a backend
      * that has not reported [VoiceBackend.Events.onSessionEstablished] within this window
      * failed to start, which routes into the normal fallback/error path instead of leaving
-     * the microphone open until the backends' own 60 s capture cap.
+     * the microphone open until the backends' [VoiceCapturePolicy] safety ceiling.
      */
     const val ESTABLISH_TIMEOUT_MS = 30_000L
 
@@ -54,6 +54,29 @@ internal object VoiceEndpointPolicy {
      * (−65..−20 dBFS), so 0.3 leaves margin on both sides.
      */
     const val SPEECH_LEVEL = 0.30f
+}
+
+/**
+ * The hard safety ceiling on Fcitx-owned Direct PCM capture (D081), deliberately separate
+ * from endpointing: [VoiceEndpointPolicy] decides when a session ends normally, while this
+ * only bounds sessions that never auto-stop (a held Space gesture, continuous speech).
+ * Reaching a ceiling finalizes the session like a user stop and releases the microphone;
+ * it is not a cancel, not an error, and never triggers D035 fallback. A ceiling is a safety
+ * bound, not a claim that recognition quality at that length is device-verified. Where a
+ * current model, provider engine or protocol has a documented lower limit, that lower limit
+ * applies: effective capture bound = min(common ceiling, applicable lower limit).
+ */
+internal object VoiceCapturePolicy {
+
+    /** Default ceiling for streaming Direct capture paths with no lower applicable limit. */
+    const val MAX_CAPTURE_MS = 180_000L
+
+    /**
+     * OpenAI-compatible whole-file self-hosted upload: its entire utterance is uploaded and
+     * transcribed only after stop, within a window (OPENAI_FINAL_TIMEOUT_MS) explicitly
+     * premised on at most 60 s of audio, so capture stays at that premise.
+     */
+    const val WHOLE_FILE_MAX_CAPTURE_MS = 60_000L
 }
 
 /** A microphone session ended without user action; for observability only. */

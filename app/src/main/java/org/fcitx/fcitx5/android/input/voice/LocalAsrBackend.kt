@@ -126,6 +126,8 @@ internal class LocalAsrBackend(
     ) {
         val stats = CaptureStats(AudioCapture.SAMPLE_RATE)
         val startedAt = SystemClock.elapsedRealtime()
+        // effective bound for this pin: common safety ceiling, lowered by any known model limit (D081)
+        val maxCaptureMs = minOf(VoiceCapturePolicy.MAX_CAPTURE_MS, model.maxCaptureMillis)
         val pending = mutableListOf<FloatArray>()
         var firstAudioAt = 0L
         var firstPartialMillis: Long? = null
@@ -171,7 +173,7 @@ internal class LocalAsrBackend(
             failure = opened.pump(stats, keepGoing = {
                 // a failed model load ends capture right away; it is reported below
                 isActive && !cancelled && !stopRequested && holder.failure() == null &&
-                        SystemClock.elapsedRealtime() - startedAt <= MAX_SESSION_MS
+                        SystemClock.elapsedRealtime() - startedAt <= maxCaptureMs
             }, onLevel = { level -> post { events.onAudioLevel(token, level) } }) { buffer, count ->
                 val samples = pcm16ToFloat(buffer, count)
                 if (firstAudioAt == 0L) firstAudioAt = SystemClock.elapsedRealtime()
@@ -195,6 +197,12 @@ internal class LocalAsrBackend(
             Timber.w("Local ASR capture failed: $safe")
             post { events.onError(token, VoiceError.Capture(safe)) }
             return
+        }
+        if (stopRequestedAt == 0L && holder.failure() == null) {
+            // the pump ended with no user or auto stop and no load failure: only the capture
+            // safety ceiling can do that, and it finalizes exactly like a user stop (D081)
+            Timber.w("Local ASR ${model.name} capture ceiling of ${maxCaptureMs}ms reached; " +
+                    "finalizing like a user stop")
         }
         // end of input: wait for the model if it is still loading, then finalize
         loader.join()
@@ -240,8 +248,6 @@ internal class LocalAsrBackend(
     }
 
     companion object {
-        private const val MAX_SESSION_MS = 60_000L
-
         fun modelDir(externalFilesDir: File?, model: LocalAsrModel): File? =
             externalFilesDir?.resolve(LocalAsrModel.ROOT_DIR)?.resolve(model.dirName)
     }

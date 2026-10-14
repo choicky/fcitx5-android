@@ -162,7 +162,9 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             val config = TencentAsrConfig.fromStore(credentials.read(TencentAsrConfig.PROVIDER))
             NetworkAsrBackend(
                 service.lifecycleScope, "Tencent ${config.engine}",
-                secrets = listOf(config.secretId, config.secretKey)
+                secrets = listOf(config.secretId, config.secretKey),
+                // a selectable engine with a documented lower hard limit keeps it (D081)
+                maxCaptureMs = TencentAsrConfig.maxCaptureMs(config.engine)
             ) { listener ->
                 TencentAsrClient(NetworkAsrBackend.http, config, listener)
             }
@@ -188,10 +190,12 @@ class VoiceInputComponent : UniqueComponent<VoiceInputComponent>(), Dependent,
             }
             SelfHostedProtocol.OpenAiCompatible -> {
                 val token = credentials.read(instance.credentialProvider)?.get(SelfHostedInstance.TOKEN)
-                // upload and transcription of up to 60 s of audio happen after stop
+                // upload and transcription of up to 60 s of audio happen after stop, so capture
+                // stays at that 60 s premise instead of the streaming ceiling (D081)
                 NetworkAsrBackend(
                     service.lifecycleScope, "Self-hosted OpenAI-compatible", OPENAI_FINAL_TIMEOUT_MS,
-                    listOfNotNull(token)
+                    secrets = listOfNotNull(token),
+                    maxCaptureMs = VoiceCapturePolicy.WHOLE_FILE_MAX_CAPTURE_MS
                 ) { listener ->
                     OpenAiTranscriptionClient(NetworkAsrBackend.http, instance.url, instance.model, token, listener)
                 }
