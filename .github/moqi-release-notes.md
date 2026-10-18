@@ -3,7 +3,7 @@
 这是 `fcitx5-android-fusion-enhanced` 的自构建发布线，包含 fcitx5-chinese-addons 的 **MoQi Auxiliary Filter**（墨奇辅助筛选）。与上游官方构建无隶属关系，请勿当作官方版本。
 
 - fcitx5-android：当前产品开发分支
-- fcitx5-chinese-addons：固定提交 `f18dbb9907891a4a5f69348666f2b1439e2b1b85`
+- fcitx5-chinese-addons：固定提交 `c42ab54e28e0152b07672e1b90a1ef1b021e1c89`
 - 墨奇码表：[`gaboolic/moqima-tables`](https://github.com/gaboolic/moqima-tables) @ `6d8ba8f1c57466f358e682baefe11bbd0fe389ab`（MIT），SHA256 `66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923`
 
 ## 安装与升级
@@ -18,7 +18,7 @@
 1. 拼音设置里把 `Auxiliary Filter` 设为 `MoQi`（另有 `Disabled` / `Stroke`）。
 2. 输入拼音 → 按反引号 **`** 触发筛选 → 输入墨奇码。
 3. 例：`xian` → **`** → `ak`（西 = `ak`）；安 = `bn`，你 = `rx`。
-4. Backspace 逐步退码并退出筛选；Escape 退出但保留已选前缀；筛选与部分选择后仍可继续输入并再次触发。
+4. 墨奇筛选在**整串拼音内持续生效**：部分选词（编码后选词、数字键、鼠标 / 触摸点选）之后**无需再按** **`**，可直接继续输入下一段的墨奇码；整串选完上屏后自动退出筛选。退出方式：Escape 退出筛选，已选前缀保留，之后可继续输入普通拼音；墨奇码缓冲为空时按 Backspace 退出筛选（再按一次 Backspace 是普通退格，反选上一个已选字）。
 
 ## Local ASR
 
