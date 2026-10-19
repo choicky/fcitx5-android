@@ -3,7 +3,7 @@
 这是 `fcitx5-android-fusion-enhanced` 的自构建发布线，包含 fcitx5-chinese-addons 的 **MoQi Auxiliary Filter**（墨奇辅助筛选）。与上游官方构建无隶属关系，请勿当作官方版本。
 
 - fcitx5-android：当前产品开发分支
-- fcitx5-chinese-addons：固定提交 `787d9066b236958b5caa579579c6bdfa01331442`
+- fcitx5-chinese-addons：固定提交 `a04bcd4673e5e9c3c630d59078eb0454b14d5541`
 - 墨奇码表：[`gaboolic/moqima-tables`](https://github.com/gaboolic/moqima-tables) @ `6d8ba8f1c57466f358e682baefe11bbd0fe389ab`（MIT），SHA256 `66deab4aaba1285e3c85eb3a364c21bc08db1911b61df8e934f0d006ca7e7923`
 
 ## 安装与升级
