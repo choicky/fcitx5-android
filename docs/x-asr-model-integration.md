@@ -166,25 +166,32 @@ against ground truth.
 | Final config | Mean CER vs offline | Terminal punctuation |
 |---|---:|---:|
 | Streaming greedy, 960 ms tail (baseline) | 0.0767 | 0/7 |
-| Streaming greedy, 1920 ms tail | 0.0726 | 0/7 |
 | Streaming beam-4, 960 ms tail | 0.0624 | 1/7 |
 | Streaming beam-4, 1920 ms tail (current) | 0.0584 | 1/7 |
 
+An intermediate greedy run (mean 0.0726) exists in the evidence as
+`x-960-greedy-tail2000-corpus.json`, but its recorded tail length conflicts
+between the result filename and an earlier summary and no per-run command log
+exists; it is therefore not used as a data point here.
+
 Offline X-ASR returned terminal punctuation on all six speech clips (the empty
 clip stayed empty). The streaming export
-does not: inspecting the final token sequence of a clip whose offline result
-ends in `。` shows the stream ending on `三` with no punctuation token. The
+rarely does (1/7): inspecting the final token sequence of a clip whose offline
+result ends in `。` shows the stream ending on `三` with no punctuation token. The
 missing mark is therefore model-export output, not loss in finalization or the
 editor commit; the app does not strip punctuation. This is why no rule appends
 a period or infers a question mark. Streaming remains the lower-punctuation
 choice; the offline model is the punctuation-capable one. Device latency and
-quality for the new decoder setting remain unverified.
+quality for the new decoder setting remain unverified. v0.1.3-fusion.14 was
+published on 2026-10-25 from this exact locally built, release-signed artifact
+(no rebuild, no CI); device acceptance is still pending and is not implied.
 
 FunASR Nano on the same six speech clips returned nonempty, punctuated finals
 and no truncation; all six installed files matched the catalog sizes and
 SHA-256 values. The earlier device baseline used the same model revision and
 adapter settings, so no model-identity or configuration regression was
-reproduced host-side. The accepted 30 s protective ceiling (D081) is unchanged;
+reproduced host-side; the owner's quality concern remains unresolved pending
+device experience. The accepted 30 s protective ceiling (D081) is unchanged;
 clips longer than 30 s are still finalized at the ceiling by policy.
 
 Both exact packages **loaded successfully** in sherpa-onnx 1.13.8 Linux aarch64
