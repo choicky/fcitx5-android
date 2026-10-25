@@ -26,7 +26,7 @@
   中由用户按需下载、启用、管理和使用；debug 与 release 均包含 Local ASR
   runtime 及其 JNI 库。
 - 旧 bilingual Zipformer 已移除，且本轮不做旧模型兼容迁移。
-- D035 本地回落顺序固定为：X-ASR 离线 → FunASR Nano → X-ASR 流式；每一步只
+- D035 本地回落顺序固定为：X-ASR 离线 → X-ASR 960 ms 流式 → FunASR Nano；每一步只
   选择已启用、完整安装且当前 runtime 可用的模型。
 - 本发布在 debug 构建与检查通过后产出，使用既定的 Fusion 发布签名身份；不以真机
   验收为发布前置条件，最终针对设备行为（含中英混输、Auxiliary Filter、Local ASR
@@ -35,3 +35,21 @@
 ## 许可
 
 基于 [fcitx5-android](https://github.com/fcitx5-android/fcitx5-android)（LGPL-2.1）构建，对应源代码见上方两个 fork 的相应提交/标签。墨奇码表来自 `gaboolic/moqima-tables`（MIT），许可证文本见 [moqima-tables.LICENSE](https://github.com/choicky/fcitx5-chinese-addons/blob/feature/moqi-filter/third_party/moqima-tables.LICENSE)。
+
+## 本次更新（v0.1.3-fusion.13 → v0.1.3-fusion.14）
+
+- 共享引擎固定到 `2145c4bf1cff8c62112b9c38db4e6032a190b280`（与 fusion-windows
+  使用的共享源一致）：混合输入中位于中文之后的规范英文词（自然码
+  `woxdmliphone` → 我想买iPhone）不再被排到候选列表后部；英文词库、MoQi 码表、
+  哈希与许可文件未改。
+- X-ASR 960 ms 流式：停止时补两个 960 ms 静音块（原为一个），修复较长双句
+  （约 16 s）末尾被截断的问题；流式解码改为 modified_beam_search（4 路径）。
+  固定语料上相对离线 X-ASR 的平均 CER 由 0.0767 降至 0.0584，7 段中 1 段恢复
+  句末标点。
+- 流式模型本身仍经常不输出句末标点；这是导出模型的行为，应用不补句号、不猜
+  问号。需要句末标点时请选用 X-ASR 离线。
+- FunASR Nano：模型文件、哈希与适配参数未改；30 s 保护上限（D081）保持不变。
+  本轮未复现质量回归；真机体验仍需验收。
+- versionCode 182 → 192（arm64-v8a），可在 v0.1.3-fusion.13 上直接覆盖升级。
+- 本 APK 为本地 Gradle 构建并使用既定发布身份签名；真机行为（含中英混输、
+  Auxiliary Filter、Local ASR）待所有者验收，未完成验收不代表已通过。
