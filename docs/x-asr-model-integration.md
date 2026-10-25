@@ -136,18 +136,56 @@ download source. No matching fixed per-file streaming source was established.
 Offline: OfflineRecognizer + OfflineTransducerModelConfig, INT8 encoder/joiner,
 FP32 decoder, tokens.txt, CPU, 16 kHz/80-dim defaults, modified_beam_search
 (default maxActivePaths=4), modelType empty for metadata detection. Streaming:
-OnlineRecognizer + OnlineTransducerModelConfig, greedy_search, same features,
-endpoint detection disabled (existing user Stop behavior). No hotwords/BPE vocab
-or LLM/transcript postprocessing is configured.
+OnlineRecognizer + OnlineTransducerModelConfig, modified_beam_search (default
+four paths), same features, endpoint detection disabled (existing user Stop
+behavior). No hotwords/BPE vocab or LLM/transcript postprocessing is configured.
 
-Only X-ASR streaming adds 15,360 zero samples (960 ms) before inputFinished(),
-then decodes all ready frames for one final result. Older streaming models still
-use zero extra padding. In real 1.13.8 inference, inputFinished alone produced
-2/6/4 fewer characters than padded finals on archive samples 0/1/2; sample 3
-matched. For all four samples, 960 ms padded final equals 1920 ms padded final
-and the trailing-pause control. New X-ASR partial logs contain only count/length,
-never transcript content; partials still do not reach preedit. Final logging
-remains existing aggregate metrics. Audio/transcripts are not newly persisted.
+Only X-ASR streaming adds 30,720 zero samples (1920 ms, two 960 ms chunks)
+before inputFinished(), then decodes all ready frames for one final result.
+Older streaming models still use zero extra padding. The earlier 960 ms
+(one-chunk) padding was measured on four 4.7–10.1 s clips, where it matched
+1920 ms; a 2026-10-25 recheck on a 16.2 s two-sentence clip showed the one-chunk
+tail left the last partial chunk undecoded and dropped the final two characters.
+Two chunks restore that tail. The padding is decoded faster than real time, so
+it does not add two seconds of stop-to-final latency. New X-ASR partial logs
+contain only count/length, never transcript content; partials still do not reach
+preedit. Final logging remains existing aggregate metrics. Audio/transcripts are
+not newly persisted.
+
+## Punctuation evidence (2026-10-25)
+
+Fixed corpus: the four Apache-2.0 `test_wavs` shipped in the pinned X-ASR
+archives (Mandarin and Chinese-English code switching), two 1 s-silence
+concatenations of those clips (14.5 s and 16.2 s), and 1 s of empty audio.
+Baseline and candidate ran through the real sherpa-onnx 1.13.8 adapter
+configuration (numThreads=2, 20 ms chunks), not a separate pipeline. Reference
+for lexical comparison is the offline X-ASR final; there is no independent
+human transcript, so the numbers are agreement with that reference, not CER
+against ground truth.
+
+| Final config | Mean CER vs offline | Terminal punctuation |
+|---|---:|---:|
+| Streaming greedy, 960 ms tail (baseline) | 0.0767 | 0/7 |
+| Streaming greedy, 1920 ms tail | 0.0726 | 0/7 |
+| Streaming beam-4, 960 ms tail | 0.0624 | 1/7 |
+| Streaming beam-4, 1920 ms tail (current) | 0.0584 | 1/7 |
+
+Offline X-ASR returned terminal punctuation on all six speech clips (the empty
+clip stayed empty). The streaming export
+does not: inspecting the final token sequence of a clip whose offline result
+ends in `。` shows the stream ending on `三` with no punctuation token. The
+missing mark is therefore model-export output, not loss in finalization or the
+editor commit; the app does not strip punctuation. This is why no rule appends
+a period or infers a question mark. Streaming remains the lower-punctuation
+choice; the offline model is the punctuation-capable one. Device latency and
+quality for the new decoder setting remain unverified.
+
+FunASR Nano on the same six speech clips returned nonempty, punctuated finals
+and no truncation; all six installed files matched the catalog sizes and
+SHA-256 values. The earlier device baseline used the same model revision and
+adapter settings, so no model-identity or configuration regression was
+reproduced host-side. The accepted 30 s protective ceiling (D081) is unchanged;
+clips longer than 30 s are still finalized at the ceiling by policy.
 
 Both exact packages **loaded successfully** in sherpa-onnx 1.13.8 Linux aarch64
 Python native runtime. Four 4.69–10.05s archive clips per model returned nonempty
@@ -168,11 +206,13 @@ Existing exact catalog-list expectations were expanded for the requested new
 entries; old model order and download assertions remain, with archive source and
 hash assertions for X-ASR. No failing test expectation was weakened.
 
-Local Gradle Android build cannot configure because no Android SDK is installed.
-Debug loader compilation against the real pinned 1.13.8 AAR classes passed
-(with isolated Android type stubs); this is a compile-risk check, not an APK build
-or Android native loading claim. CI and device state are recorded in the batch
-report/ROADMAP; never infer device PASS from compilation.
+The original 2026-10-02 batch could not configure a local Gradle Android build
+because no Android SDK was installed; its debug loader compilation against the
+real pinned 1.13.8 AAR classes was a compile-risk check, not an APK build or
+Android native loading claim. The current validation host has the SDK, so the
+2026-10-25 batch runs the real `:app:testDebugUnitTest` and Release build (see
+the release evidence below). CI and device state remain separate; never infer
+device PASS from compilation or a local APK.
 
 ## Physical-device comparison checklist (pending)
 
@@ -198,9 +238,11 @@ report/ROADMAP; never infer device PASS from compilation.
    use existing actions. Existing downloads must retain progress/pause/resume/cancel.
    Confirm no section/style/button/layout changes beyond the two added rows.
 
-Keep current approximately 60s capture cutoff. Do not test or implement 90/120s,
-5-minute accumulation, Nano segmentation or longer recording in this batch.
-Those are separate future decisions; strict full-session 60s is not claimed.
+The current capture bounds are D081: the common 180 s safety ceiling, lowered to
+30 s for the pinned FunASR Nano export. The earlier approximately 60 s cutoff
+statement belongs to the 2026-10-02 batch and is superseded by D081. Do not test
+or implement 90/120 s, 5-minute accumulation, Nano segmentation or longer
+recording in this batch; those are separate future decisions.
 
 ## Release evidence (2026-10-02)
 

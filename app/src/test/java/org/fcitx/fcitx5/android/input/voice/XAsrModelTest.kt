@@ -78,18 +78,25 @@ class XAsrModelTest {
     }
 
     @Test
+    fun xAsrStreamingUsesTwoChunkTailAndBeamSearch() {
+        assertEquals(1920, LocalAsrEngines.X_ASR_STREAMING_TAIL_MS)
+        assertEquals("modified_beam_search", LocalAsrEngines.X_ASR_STREAMING_DECODING)
+        assertEquals(30720, AudioCapture.SAMPLE_RATE * LocalAsrEngines.X_ASR_STREAMING_TAIL_MS / 1000)
+    }
+
+    @Test
     fun xAsrTailPaddingPrecedesInputFinishedAndFinalDecode() {
         val calls = mutableListOf<String>()
         val session = StreamingLocalAsrSession(object : StreamingDecoder {
             override fun acceptWaveform(samples: FloatArray) {
-                assertEquals(15360, samples.size)
+                assertEquals(30720, samples.size)
                 assertTrue(samples.all { it == 0f })
                 calls += "padding"
             }
             override fun inputFinished() { calls += "finished" }
             override fun decodeReady(): String { calls += "decode"; return "tail" }
             override fun release() { calls += "release" }
-        }, trailingSilenceSamples = 15360)
+        }, trailingSilenceSamples = 30720)
         assertEquals("tail", session.finish())
         assertEquals(listOf("padding", "finished", "decode"), calls)
         session.release()
@@ -105,7 +112,7 @@ class XAsrModelTest {
             override fun inputFinished() { finishes++ }
             override fun decodeReady(): String { fail("cancel must not decode"); return "" }
             override fun release() {}
-        }, trailingSilenceSamples = 15360)
+        }, trailingSilenceSamples = 30720)
         session.release()
         assertEquals(0, finishes)
     }

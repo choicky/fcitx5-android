@@ -21,13 +21,33 @@ internal object LocalAsrEngines {
 
     const val AVAILABLE = true
 
+    /**
+     * Two 960 ms chunks of zero padding at stop. The previous one-chunk (960 ms)
+     * padding left the last partial chunk undecoded on a 16.2 s two-sentence
+     * clip: the final text lost its last two characters. Two chunks restore the
+     * tail; the padding is decoded faster than real time, so it does not add two
+     * seconds of stop-to-final latency.
+     */
+    const val X_ASR_STREAMING_TAIL_MS = 1920
+
+    /**
+     * The streaming export rarely emits sentence-final punctuation. On the fixed
+     * corpus, modified_beam_search (default four paths) lowered mean CER against
+     * the offline X-ASR reference from 0.0767 to 0.0584 together with the
+     * two-chunk tail, and restored the final punctuation on one of seven clips.
+     * Most final punctuation is still absent from the model output itself; this
+     * decoder setting does not invent it.
+     */
+    const val X_ASR_STREAMING_DECODING = "modified_beam_search"
+
     fun load(model: LocalAsrModel, modelDir: File, threads: Int): LocalAsrRecognizer =
         when (model) {
             LocalAsrModel.FunAsrNano -> funAsrNano(modelDir, threads)
             LocalAsrModel.XAsrOffline -> xAsrOffline(modelDir, threads)
             LocalAsrModel.XAsrStreaming960 -> zipformer(
                 modelDir, threads, "encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "",
-                trailingSilenceSamples = AudioCapture.SAMPLE_RATE * 960 / 1000
+                trailingSilenceSamples = AudioCapture.SAMPLE_RATE * X_ASR_STREAMING_TAIL_MS / 1000,
+                decodingMethod = X_ASR_STREAMING_DECODING
             )
         }
 
@@ -38,7 +58,8 @@ internal object LocalAsrEngines {
         decoder: String,
         joiner: String,
         modelType: String,
-        trailingSilenceSamples: Int = 0
+        trailingSilenceSamples: Int = 0,
+        decodingMethod: String = "greedy_search"
     ): LocalAsrRecognizer {
         val recognizer = OnlineRecognizer(
             config = OnlineRecognizerConfig(
@@ -52,7 +73,8 @@ internal object LocalAsrEngines {
                     numThreads = threads,
                     modelType = modelType
                 ),
-                enableEndpoint = false
+                enableEndpoint = false,
+                decodingMethod = decodingMethod
             )
         )
         return object : LocalAsrRecognizer {
